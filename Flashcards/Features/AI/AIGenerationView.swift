@@ -136,11 +136,15 @@ struct AIGenerationView: View {
                     if !autoCount {
                         TextField("", text: $countText)
                             .multilineTextAlignment(.center)
-                            .frame(width: 52)
+                            .frame(width: 48)
                             .textFieldStyle(.roundedBorder)
                             #if os(iOS)
                             .keyboardType(.numberPad)
                             #endif
+                        #if os(macOS)
+                        Stepper("", value: $count, in: 1...100)
+                            .labelsHidden()
+                        #endif
                     }
                     Text("Auto").foregroundStyle(.secondary)
                     Toggle("Auto", isOn: $autoCount.animation())

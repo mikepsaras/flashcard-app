@@ -22,6 +22,16 @@ struct StudySessionView: View {
     private var accent: Color { plan.accent }
     private var fourButton: Bool { gradingModeRaw == GradingMode.fourButton.rawValue }
 
+    /// Extra leading space on macOS so the title clears the overlaid traffic lights
+    /// (the window uses a full-size-content title bar during study).
+    private var topBarLeadingInset: CGFloat {
+        #if os(macOS)
+        72
+        #else
+        Theme.Spacing.m
+        #endif
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let compact = proxy.size.width < 480
@@ -58,7 +68,8 @@ struct StudySessionView: View {
         }
         .font(.system(size: 16, weight: .semibold))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.leading, topBarLeadingInset)
+        .padding(.trailing, Theme.Spacing.m)
         .padding(.vertical, Theme.Spacing.s)
     }
 

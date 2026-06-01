@@ -48,6 +48,7 @@ struct RootView: View {
             }
         }
         .frame(minWidth: 900, minHeight: 680)
+        .background(WindowConfigurator(fullSizeContent: studyPlan != nil))
         #else
         splitView
             .fullScreenCover(item: $studyPlan) { plan in
