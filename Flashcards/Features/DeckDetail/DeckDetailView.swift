@@ -34,6 +34,9 @@ struct DeckDetailView: View {
             ToolbarItem(placement: .automatic) {
                 Menu {
                     Button { showingAI = true } label: { Label("Generate Cards (AI)…", systemImage: "sparkles") }
+                    if let fileURL = DeckStore.fileURL(for: deck) {
+                        ShareLink(item: fileURL) { Label("Share .deck File", systemImage: "square.and.arrow.up") }
+                    }
                     Divider()
                     Button { showingImporter = true } label: { Label("Import CSV…", systemImage: "square.and.arrow.down") }
                     Button { showingExporter = true } label: { Label("Export CSV…", systemImage: "square.and.arrow.up") }
@@ -79,6 +82,7 @@ struct DeckDetailView: View {
         }
         deck.modifiedAt = .now
         try? context.save()
+        DeckStore.persist(context)
     }
 
     // MARK: Header
@@ -159,6 +163,7 @@ struct DeckDetailView: View {
         for index in offsets { context.delete(cards[index]) }
         deck.modifiedAt = .now
         try? context.save()
+        DeckStore.persist(context)
     }
 }
 

@@ -11,7 +11,7 @@ import SwiftData
 struct SnapshotGalleryTests {
 
     private func makeContext() throws -> (ModelContainer, Deck, StudyPlan) {
-        let container = PersistenceController.previewContainer(seeded: true)
+        let container = DeckStore.previewContainer(seeded: true)
         let decks = try container.mainContext.fetch(
             FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)])
         )

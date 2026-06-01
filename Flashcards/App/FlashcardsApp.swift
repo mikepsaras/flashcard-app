@@ -6,11 +6,18 @@ struct FlashcardsApp: App {
     @State private var container: ModelContainer
 
     init() {
-        // The container is built once at launch from the persisted sync setting.
-        // Toggling sync requires a relaunch (see SettingsView).
-        let syncEnabled = UserDefaults.standard.bool(forKey: PersistenceController.syncEnabledKey)
-        let container = PersistenceController.makeContainer(syncEnabled: syncEnabled)
-        SeedData.seedIfNeeded(container.mainContext)
+        // No database on disk: an in-memory working copy is rebuilt from the
+        // `.deck` files in ~/Documents/Flashcards at every launch.
+        let container = DeckStore.makeContainer()
+        let context = container.mainContext
+        if DeckStore.loadAll(into: context) == 0 {
+            // Empty library: carry over a pre-file-storage database if present,
+            // otherwise seed the samples. Either way, write out the .deck files.
+            if !DeckStore.migrateLegacyStore(into: context) {
+                SeedData.seedIfNeeded(context)
+            }
+            DeckStore.persist(context)
+        }
         _container = State(initialValue: container)
     }
 

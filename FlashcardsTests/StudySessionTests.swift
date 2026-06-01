@@ -7,7 +7,7 @@ import SwiftData
 /// (a local container would be deallocated, invalidating the model instances).
 @MainActor
 final class StudySessionTests {
-    let container = PersistenceController.makeContainer(syncEnabled: false, inMemory: true)
+    let container = DeckStore.makeContainer()
 
     /// Inserts a deck of `n` cards into the suite's container and returns them in order.
     private func makeCards(_ n: Int) -> [Card] {

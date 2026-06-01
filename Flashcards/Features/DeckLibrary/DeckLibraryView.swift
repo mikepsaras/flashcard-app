@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// Sidebar: a Today entry (cross-deck review queue) above the deck list, with
 /// create / edit / delete.
@@ -11,6 +12,7 @@ struct DeckLibraryView: View {
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
     @State private var showingAI = false
+    @State private var showingDeckImporter = false
 
     private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }
 
@@ -47,6 +49,8 @@ struct DeckLibraryView: View {
                 Menu {
                     Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
                     Button { showingAI = true } label: { Label("New Deck from Notes (AI)…", systemImage: "sparkles") }
+                    Divider()
+                    Button { showingDeckImporter = true } label: { Label("Open .deck File…", systemImage: "folder") }
                 } label: {
                     Label("Add", systemImage: "plus")
                 }
@@ -58,6 +62,11 @@ struct DeckLibraryView: View {
         .sheet(isPresented: $showingAI) {
             AIGenerationView(target: .newDeck)
         }
+        .fileImporter(
+            isPresented: $showingDeckImporter,
+            allowedContentTypes: [UTType(filenameExtension: DeckStore.fileExtension) ?? .json],
+            allowsMultipleSelection: true
+        ) { result in openDeckFiles(result) }
         #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -81,10 +90,22 @@ struct DeckLibraryView: View {
         if selection == .deck(deck.persistentModelID) { selection = .today }
         context.delete(deck)
         try? context.save()
+        DeckStore.persist(context)
     }
 
     private func deleteOffsets(_ offsets: IndexSet) {
         for index in offsets { delete(decks[index]) }
+    }
+
+    private func openDeckFiles(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result else { return }
+        var imported: Deck?
+        for url in urls {
+            if let deck = DeckStore.importDeck(from: url, into: context) { imported = deck }
+        }
+        try? context.save()
+        DeckStore.persist(context)
+        if let imported { selection = .deck(imported.persistentModelID) }
     }
 }
 

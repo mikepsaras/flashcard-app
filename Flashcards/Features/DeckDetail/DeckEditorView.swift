@@ -108,6 +108,7 @@ struct DeckEditorView: View {
             deck.modifiedAt = .now
         }
         try? context.save()
+        DeckStore.persist(context)
         dismiss()
     }
 }

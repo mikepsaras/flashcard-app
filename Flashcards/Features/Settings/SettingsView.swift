@@ -1,18 +1,14 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage(PersistenceController.syncEnabledKey) private var syncEnabled = false
     @AppStorage(GradingMode.storageKey) private var gradingModeRaw = GradingMode.twoButton.rawValue
     @AppStorage(AIProvider.selectedProviderKey) private var aiProviderRaw = AIProvider.openAI.rawValue
-    /// Tracks the value at launch so we can tell the user when a relaunch is needed.
-    @State private var launchSyncValue = UserDefaults.standard.bool(forKey: PersistenceController.syncEnabledKey)
     @State private var apiKey = ""
     @State private var model = ""
     @State private var testStatus: TestStatus = .idle
 
     private enum TestStatus: Equatable { case idle, testing, ok, failed(String) }
     private var aiProvider: AIProvider { AIProvider(rawValue: aiProviderRaw) ?? .openAI }
-    private var needsRelaunch: Bool { syncEnabled != launchSyncValue }
 
     var body: some View {
         Form {
@@ -56,20 +52,12 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle(isOn: $syncEnabled) {
-                    Label("Sync with iCloud", systemImage: "icloud")
-                }
+                Label("Decks are saved as .deck files", systemImage: "folder")
+                    .foregroundStyle(.secondary)
             } header: {
-                Text("Sync")
+                Text("Storage")
             } footer: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Decks are always stored locally on each device. With a build signed for CloudKit (your Apple Team ID + the iCloud entitlement), turning this on also mirrors them to your private iCloud so they sync across your Mac and iPhone.")
-                    if needsRelaunch {
-                        Label("Quit and reopen Flashcards to apply this change.", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(Theme.danger)
-                            .font(Typography.caption)
-                    }
-                }
+                Text("Each deck is its own .deck file in your Documents/Flashcards folder. Share a deck from its ••• menu to send the file to another device.")
             }
         }
         .formStyle(.grouped)

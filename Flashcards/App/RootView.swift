@@ -11,6 +11,7 @@ enum SidebarItem: Hashable {
 /// stack on iPhone. Study is presented over everything via a `StudyPlan`.
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @State private var studyPlan: StudyPlan?
 
@@ -37,6 +38,9 @@ struct RootView: View {
         }
         .studyCover(item: $studyPlan) { plan in
             StudySessionView(plan: plan)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { DeckStore.persist(context) }
         }
         #if os(macOS)
         .frame(minWidth: 900, minHeight: 680)

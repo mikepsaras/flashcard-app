@@ -1,8 +1,8 @@
 # Flashcards
 
 An ultra-clean native flashcard app for **macOS and iPhone**, built as a single
-SwiftUI multiplatform codebase with SwiftData persistence, SM-2 spaced repetition,
-and user-configurable iCloud sync.
+SwiftUI multiplatform codebase. SM-2 spaced repetition, AI card generation, and
+**file-based local storage** — each deck is its own `.deck` file.
 
 ## Toolchain notes (important)
 
@@ -63,10 +63,11 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   with an inverse, no `@Attribute(.unique)`, `.cascade` delete.
 - `Flashcards/Scheduling` — pure, unit-tested SM-2 (`SM2.swift`, `Grade.swift`) +
   `Card+Scheduling` bridge.
-- `Flashcards/Persistence` — `PersistenceController.makeContainer(syncEnabled:)`
-  builds the `ModelContainer`; sync flips `cloudKitDatabase` between `.automatic` and
-  `.none`, falling back to local if a sync store can't be created. `SeedData` seeds
-  sample decks on first launch.
+- `Flashcards/Persistence` — **file-based storage**: each deck is a `.deck` JSON file in
+  `~/Documents/Flashcards` (the source of truth). `DeckStore` builds an *in-memory*
+  `ModelContainer`, loads `.deck` files at launch, and rewrites them after every change
+  (and on scene-background); `DeckCodec` maps `@Model` ⇄ Codable DTOs. `SeedData` seeds
+  samples on first run; `migrateLegacyStore` imports any pre-existing on-disk store once.
 - `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review
   queue), `DeckDetail` (CRUD editors + **CSV import/export** via `CSVCodec`), `Study`
   (`StudySession` `@Observable @MainActor` state machine, full-screen UI driven by a
@@ -82,10 +83,11 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   (the icon is drawn in SwiftUI and rendered into the asset catalog).
 - Everything touching SwiftData runs on `@MainActor` (Swift 6 strict concurrency).
 
-## Configurable iCloud sync
+## Storage (no database, no iCloud sync)
 
-Off by default (local-only), toggled in Settings (`@AppStorage("iCloudSyncEnabled")`).
-Changing it requires an app relaunch. To enable real CloudKit: set a
-`DEVELOPMENT_TEAM` in `project.yml`, switch `CODE_SIGN_STYLE` to `Automatic`, and
-uncomment `CODE_SIGN_ENTITLEMENTS` (the entitlements file is already in the repo). The
-data models are already CloudKit-compatible.
+Each deck is a human-readable `.deck` JSON file in `~/Documents/Flashcards` (Mac, visible in
+Finder) / the app's Files-visible Documents folder (iOS, via `UIFileSharingEnabled` +
+`LSSupportsOpeningDocumentsInPlace` in a generated `Info.plist`). There is **no on-disk
+database and no iCloud sync**. The app keeps an in-memory SwiftData working copy and persists
+to the files after each change. Open `.deck` files via the library **+** menu; share a deck's
+file from its **•••** menu. (Models keep a CloudKit-safe shape, but CloudKit isn't wired.)

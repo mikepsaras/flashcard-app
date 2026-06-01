@@ -32,9 +32,9 @@ renew (a paid account removes this).
 ### Good to know (free-account limits)
 - **7-day expiry** — when it stops opening, repeat steps 5–7 to reinstall a fresh
   7 days. Your decks/cards stay on the phone.
-- **iCloud sync needs the paid program** (CloudKit isn't available to free Apple IDs).
-  The app is local-only by default, so leave the **Track learning / iCloud sync**
-  setting off and everything else works normally.
+- **Decks are stored as `.deck` files** in the app's Documents folder (visible under
+  Files → On My iPhone → Flashcards). To move a deck between devices, Share its `.deck`
+  file and Open it on the other device.
 - The first iOS device build may prompt Xcode to download iOS device-support
   components — let it.
 

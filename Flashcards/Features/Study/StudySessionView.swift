@@ -36,7 +36,7 @@ struct StudySessionView: View {
             .background(Theme.windowBackground)
         }
         .onChange(of: trackLearning) { _, newValue in session.trackLearning = newValue }
-        .onDisappear { try? context.save() }
+        .onDisappear { try? context.save(); DeckStore.persist(context) }
     }
 
     // MARK: Top bar
@@ -159,6 +159,7 @@ struct StudySessionView: View {
 
     private func finish() {
         try? context.save()
+        DeckStore.persist(context)
         dismiss()
     }
 
