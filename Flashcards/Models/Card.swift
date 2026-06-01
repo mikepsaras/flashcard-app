@@ -14,12 +14,21 @@ final class Card {
     var createdAt: Date = Date.now
     var modifiedAt: Date = Date.now
 
-    // MARK: SM-2 scheduling state
+    // MARK: SM-2 scheduling state (forward: term → definition)
     var easeFactor: Double = 2.5     // "EF"; starts at 2.5, never below 1.3
     var interval: Int = 0            // days until the next review
     var repetitions: Int = 0         // consecutive correct reviews (q >= 3)
     var dueDate: Date = Date.now     // <= now ⇒ due
     var lastReviewedAt: Date?        // nil ⇒ never reviewed
+
+    // MARK: Reverse-direction SM-2 state (definition → term)
+    // Independent schedule, used only when the deck has reverse study enabled.
+    // CloudKit-safe: every scalar defaulted.
+    var reverseEaseFactor: Double = 2.5
+    var reverseInterval: Int = 0
+    var reverseRepetitions: Int = 0
+    var reverseDueDate: Date = Date.now
+    var reverseLastReviewedAt: Date?
 
     // Inverse of Deck.cards (optional, per CloudKit rules).
     var deck: Deck?
@@ -46,5 +55,6 @@ final class Card {
 
 extension Card {
     var isDue: Bool { dueDate <= .now }
-    var hasBeenReviewed: Bool { lastReviewedAt != nil }
+    /// Reviewed in either direction.
+    var hasBeenReviewed: Bool { lastReviewedAt != nil || reverseLastReviewedAt != nil }
 }

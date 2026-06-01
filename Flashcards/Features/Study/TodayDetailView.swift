@@ -104,12 +104,10 @@ struct TodayDetailView: View {
 
     private func todayPlan() -> StudyPlan {
         StudyPlan(id: "today", title: "Today", accent: Theme.accent, exportText: nil) {
-            let now = Date.now
-            let descriptor = FetchDescriptor<Card>(
-                predicate: #Predicate { $0.dueDate <= now },
-                sortBy: [SortDescriptor(\.dueDate)]
-            )
-            return (try? context.fetch(descriptor)) ?? []
+            // Cross-deck due units, including reverse where enabled. Built in memory so
+            // reverse due dates (a #Predicate can't reach through the relationship) count.
+            let decks = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+            return decks.flatMap { $0.dueReviewItems }.sorted { $0.dueDate < $1.dueDate }
         }
     }
 }

@@ -16,7 +16,7 @@ struct SnapshotGalleryTests {
             FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)])
         )
         let deck = decks.first { $0.name.contains("Project") } ?? decks.first!
-        let due = deck.dueCards.sorted { $0.dueDate < $1.dueDate }
+        let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
         let plan = StudyPlan(id: "test", title: deck.name, accent: Color(hex: deck.colorHex), exportText: nil) { due }
         return (container, deck, plan)
     }

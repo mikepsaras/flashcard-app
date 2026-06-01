@@ -19,7 +19,7 @@ struct StudySessionView: View {
         self.plan = plan
         self.onClose = onClose
         let track = UserDefaults.standard.object(forKey: "trackLearning") as? Bool ?? true
-        _session = State(initialValue: StudySession(cards: plan.makeCards(), trackLearning: track))
+        _session = State(initialValue: StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: track))
     }
 
     private var accent: Color { plan.accent }
@@ -94,12 +94,12 @@ struct StudySessionView: View {
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.top, Theme.Spacing.s)
 
-            if let card = session.current {
+            if let item = session.current {
                 FlashcardView(
-                    term: card.term,
-                    definition: card.definition,
+                    term: item.front,
+                    definition: item.back,
                     isShowingDefinition: session.isShowingDefinition,
-                    definitionLabel: card.deck?.backLabel ?? "Definition",
+                    definitionLabel: item.backLabel ?? "",
                     accent: accent,
                     onShuffle: { session.shuffleRemaining() },
                     onTap: { session.flip() }
@@ -199,7 +199,13 @@ struct StudySessionView: View {
     }
 
     private func restart() {
-        session = StudySession(cards: plan.makeCards(), trackLearning: trackLearning)
+        session = StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: trackLearning)
+    }
+
+    /// Applies the "cards per session" setting (0 ⇒ unlimited).
+    private static func cappedItems(_ items: [ReviewItem]) -> [ReviewItem] {
+        let limit = UserDefaults.standard.integer(forKey: "studySessionLimit")
+        return limit > 0 ? Array(items.prefix(limit)) : items
     }
 
     // MARK: Keyboard

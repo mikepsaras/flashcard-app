@@ -77,6 +77,49 @@ import SwiftData
         #expect(text.contains("\"name\""))
         #expect(text.contains("\"cards\""))
     }
+
+    @Test func studyReversedAndReverseStateRoundTrip() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Two-way", studyReversed: true)
+        container.mainContext.insert(deck)
+        let card = Card(term: "hola", definition: "hello", deck: deck)
+        card.reverseEaseFactor = 2.1
+        card.reverseInterval = 4
+        card.reverseRepetitions = 2
+        container.mainContext.insert(card)
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 2)
+        #expect(dto.studyReversed == true)
+        #expect(dto.cards[0].reverseInterval == 4)
+
+        let other = DeckStore.makeContainer()
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        #expect(rebuilt.studyReversed == true)
+        #expect(rebuilt.cardArray.first?.reverseEaseFactor == 2.1)
+        #expect(rebuilt.cardArray.first?.reverseRepetitions == 2)
+    }
+
+    @Test func v1FileDecodesWithReverseDefaults() throws {
+        // A pre-reverse (v1) file has no studyReversed / reverse* keys; it must still load.
+        let json = """
+        {"formatVersion":1,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
+        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
+        "cards":[{"id":"\(UUID().uuidString)","term":"a","definition":"b",\
+        "createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
+        "easeFactor":2.5,"interval":0,"repetitions":0,"dueDate":"2024-01-01T00:00:00Z"}]}
+        """
+        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
+        #expect(dto.studyReversed == nil)
+        #expect(dto.cards[0].reverseEaseFactor == nil)
+
+        let container = DeckStore.makeContainer()
+        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
+        #expect(deck.studyReversed == false)
+        #expect(deck.cardArray.first?.reverseEaseFactor == 2.5)
+        #expect(deck.cardArray.first?.reverseRepetitions == 0)
+    }
 }
 
 @MainActor

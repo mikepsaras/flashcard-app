@@ -24,6 +24,7 @@ struct DeckEditorView: View {
     @State private var colorHex: String
     @State private var backLabel: String
     @State private var showLabel: Bool
+    @State private var studyReversed: Bool
 
     init(mode: DeckEditorMode) {
         self.mode = mode
@@ -34,6 +35,7 @@ struct DeckEditorView: View {
             _colorHex = State(initialValue: DeckPalette.default)
             _backLabel = State(initialValue: "Definition")
             _showLabel = State(initialValue: true)
+            _studyReversed = State(initialValue: false)
         case .edit(let deck):
             _name = State(initialValue: deck.name)
             _deckDescription = State(initialValue: deck.deckDescription)
@@ -42,6 +44,7 @@ struct DeckEditorView: View {
             // to show if the user flips the toggle back on.
             _backLabel = State(initialValue: deck.backLabel.isEmpty ? "Definition" : deck.backLabel)
             _showLabel = State(initialValue: !deck.backLabel.isEmpty)
+            _studyReversed = State(initialValue: deck.studyReversed)
         }
     }
 
@@ -74,6 +77,11 @@ struct DeckEditorView: View {
                     Text(showLabel
                          ? "The small label above the answer side of each card — e.g. Definition, Capital, Translation."
                          : "No label is shown above the answer side.")
+                }
+                Section {
+                    Toggle("Study both directions", isOn: $studyReversed)
+                } footer: {
+                    Text("Also quiz the answer back to the term, scheduled separately. A card then counts as two reviews — one each way.")
                 }
                 Section("Color") {
                     colorGrid
@@ -123,13 +131,14 @@ struct DeckEditorView: View {
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         switch mode {
         case .new:
-            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label)
+            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed)
             context.insert(deck)
         case .edit(let deck):
             deck.name = trimmed
             deck.deckDescription = deckDescription
             deck.colorHex = colorHex
             deck.backLabel = label
+            deck.studyReversed = studyReversed
             deck.modifiedAt = .now
         }
         try? context.save()

@@ -3,9 +3,24 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage(GradingMode.storageKey) private var gradingModeRaw = GradingMode.twoButton.rawValue
     @AppStorage(AIProvider.selectedProviderKey) private var aiProviderRaw = AIProvider.openAI.rawValue
+    @AppStorage("studySessionLimit") private var sessionLimit = 0
+    @AppStorage("remindersEnabled") private var remindersEnabled = false
+    @AppStorage("reminderHour") private var reminderHour = 19
+    @AppStorage("reminderMinute") private var reminderMinute = 0
     @State private var apiKey = ""
     @State private var model = ""
     @State private var testStatus: TestStatus = .idle
+
+    private var reminderTime: Binding<Date> {
+        Binding(
+            get: { Calendar.current.date(from: DateComponents(hour: reminderHour, minute: reminderMinute)) ?? Date() },
+            set: {
+                let c = Calendar.current.dateComponents([.hour, .minute], from: $0)
+                reminderHour = c.hour ?? 19
+                reminderMinute = c.minute ?? 0
+            }
+        )
+    }
 
     private enum TestStatus: Equatable { case idle, testing, ok, failed(String) }
     private var aiProvider: AIProvider { AIProvider(rawValue: aiProviderRaw) ?? .openAI }
@@ -20,10 +35,30 @@ struct SettingsView: View {
                 } label: {
                     Label("Grading buttons", systemImage: "square.grid.2x2")
                 }
+                Picker(selection: $sessionLimit) {
+                    Text("Unlimited").tag(0)
+                    Text("10").tag(10)
+                    Text("20").tag(20)
+                    Text("30").tag(30)
+                    Text("50").tag(50)
+                } label: {
+                    Label("Cards per session", systemImage: "rectangle.stack")
+                }
             } header: {
                 Text("Studying")
             } footer: {
-                Text("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler finer signal.")
+                Text("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler finer signal. A session cap studies the most-due cards in batches.")
+            }
+
+            Section {
+                Toggle("Daily reminder", isOn: $remindersEnabled)
+                if remindersEnabled {
+                    DatePicker("Time", selection: reminderTime, displayedComponents: .hourAndMinute)
+                }
+            } header: {
+                Text("Reminders")
+            } footer: {
+                Text("A daily nudge to review. Notifications stay on this device.")
             }
 
             Section {
@@ -62,8 +97,27 @@ struct SettingsView: View {
         .onChange(of: model) { _, newValue in
             UserDefaults.standard.set(newValue, forKey: aiProvider.modelDefaultsKey)
         }
+        .onChange(of: remindersEnabled) { _, on in
+            if on {
+                Task {
+                    if await StudyReminders.requestAuthorization() {
+                        StudyReminders.schedule(hour: reminderHour, minute: reminderMinute)
+                    } else {
+                        remindersEnabled = false   // permission denied → revert the toggle
+                    }
+                }
+            } else {
+                StudyReminders.cancel()
+            }
+        }
+        .onChange(of: reminderHour) { _, _ in
+            if remindersEnabled { StudyReminders.schedule(hour: reminderHour, minute: reminderMinute) }
+        }
+        .onChange(of: reminderMinute) { _, _ in
+            if remindersEnabled { StudyReminders.schedule(hour: reminderHour, minute: reminderMinute) }
+        }
         #if os(macOS)
-        .frame(minWidth: 480, minHeight: 460)
+        .frame(minWidth: 480, minHeight: 480)
         #endif
     }
 

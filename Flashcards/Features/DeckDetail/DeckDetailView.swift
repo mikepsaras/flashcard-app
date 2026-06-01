@@ -209,6 +209,17 @@ struct DeckDetailView: View {
 private struct CardRowView: View {
     let card: Card
 
+    /// Soonest due date across the directions this card's deck actually studies.
+    private var nextDue: Date {
+        (card.deck?.studyReversed ?? false) ? min(card.dueDate, card.reverseDueDate) : card.dueDate
+    }
+    private var isDueNow: Bool { nextDue <= .now }
+    private var daysUntilDue: Int {
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: .now), to: cal.startOfDay(for: nextDue)).day ?? 0
+        return max(days, 0)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
@@ -221,14 +232,34 @@ private struct CardRowView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            if !card.isDue {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Theme.success)
-                    .font(.system(size: 15))
-                    .help("Scheduled — not due yet")
-            }
+            scheduleBadge
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
+    }
+
+    @ViewBuilder private var scheduleBadge: some View {
+        if !card.hasBeenReviewed {
+            pill("New", color: Theme.accent)
+        } else if isDueNow {
+            pill("Due", color: .orange)
+        } else {
+            HStack(spacing: 3) {
+                Image(systemName: "clock")
+                Text("\(daysUntilDue)d")
+            }
+            .font(.system(.caption2, design: .rounded, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .help("Next review \(nextDue.formatted(date: .abbreviated, time: .omitted))")
+        }
+    }
+
+    private func pill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(.caption2, design: .rounded, weight: .bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15), in: Capsule())
     }
 }

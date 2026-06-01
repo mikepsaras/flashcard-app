@@ -126,8 +126,8 @@ struct RootView: View {
             accent: Color(hex: deck.colorHex),
             exportText: deck.cardArray.map { "\($0.term) — \($0.definition)" }.joined(separator: "\n")
         ) {
-            let due = deck.dueCards.sorted { $0.dueDate < $1.dueDate }
-            return due.isEmpty ? deck.cardArray : due
+            let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
+            return due.isEmpty ? deck.allReviewItems : due
         }
     }
 }

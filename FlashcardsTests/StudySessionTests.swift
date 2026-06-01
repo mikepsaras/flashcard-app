@@ -119,10 +119,27 @@ final class StudySessionTests {
     @Test func shuffleKeepsSameCardSet() {
         let cards = makeCards(8)
         let session = StudySession(cards: cards, trackLearning: true)
-        let idsBefore = Set(session.cards.map(\.id))
+        let idsBefore = Set(session.items.map(\.id))
         session.shuffleRemaining()
-        #expect(Set(session.cards.map(\.id)) == idsBefore)
-        #expect(session.cards.count == 8)
+        #expect(Set(session.items.map(\.id)) == idsBefore)
+        #expect(session.items.count == 8)
+    }
+
+    @Test func reverseDirectionSchedulesIndependently() {
+        let card = makeCards(1)[0]
+        let forwardDueBefore = card.dueDate
+
+        let session = StudySession(items: [ReviewItem(card: card, direction: .reverse)], trackLearning: true)
+        session.grade(known: true)
+
+        // Reverse direction advanced...
+        #expect(card.reverseRepetitions == 1)
+        #expect(card.reverseLastReviewedAt != nil)
+        #expect(card.reverseDueDate > forwardDueBefore)
+        // ...forward direction untouched.
+        #expect(card.repetitions == 0)
+        #expect(card.lastReviewedAt == nil)
+        #expect(card.dueDate == forwardDueBefore)
     }
 
     /// Exercises the SwiftData #Predicate used by the Today queue at runtime
