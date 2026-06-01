@@ -50,15 +50,6 @@ struct SettingsView: View {
             } footer: {
                 Text("Your key is stored in this device's Keychain and used only to call \(aiProvider.displayName) directly. Get one at \(aiProvider.keyConsoleURL).")
             }
-
-            Section {
-                Label("Decks are saved as .deck files", systemImage: "folder")
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("Storage")
-            } footer: {
-                Text("Each deck is its own .deck file in your Documents/Flashcards folder. Share a deck from its ••• menu to send the file to another device.")
-            }
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
