@@ -126,17 +126,14 @@ struct DeckLibraryView: View {
 /// The "Today" sidebar row with a live due count.
 struct TodayRow: View {
     let dueCount: Int
+    /// `.increased` when this row is the selected sidebar row, so the accent-colored
+    /// chip/badge don't vanish into the (also accent-colored) selection highlight.
+    @Environment(\.backgroundProminence) private var prominence
+    private var selected: Bool { prominence == .increased }
 
     var body: some View {
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Theme.accent)
-                .frame(width: 34, height: 34)
-                .overlay(
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                )
+            SidebarIconChip(systemName: "bolt.fill", color: Theme.accent, selected: selected)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Today").font(Typography.headline)
                 Text(dueCount == 0 ? "All caught up" : "\(dueCount) due")
@@ -145,13 +142,7 @@ struct TodayRow: View {
             }
             Spacer(minLength: 6)
             if dueCount > 0 {
-                Text("\(dueCount)")
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Theme.accent, in: Capsule())
+                SidebarCountBadge(count: dueCount, selected: selected)
             }
         }
         .padding(.vertical, 4)
