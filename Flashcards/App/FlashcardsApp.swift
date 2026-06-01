@@ -20,7 +20,7 @@ struct FlashcardsApp: App {
         }
         .modelContainer(container)
         #if os(macOS)
-        .defaultSize(width: 1100, height: 760)
+        .defaultSize(width: 1100, height: 820)
         .windowResizability(.contentMinSize)
         #endif
 

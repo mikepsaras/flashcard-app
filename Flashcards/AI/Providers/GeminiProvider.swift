@@ -2,7 +2,7 @@ import Foundation
 
 /// Google Gemini generateContent with JSON response MIME type.
 enum GeminiProvider {
-    static func makeRequest(prompt: String, count: Int, model: String, apiKey: String) -> URLRequest {
+    static func makeRequest(prompt: String, count: Int?, model: String, apiKey: String) -> URLRequest {
         let encodedKey = apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? apiKey
         let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(encodedKey)")!
         var request = URLRequest(url: url)

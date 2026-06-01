@@ -50,11 +50,10 @@ struct DeckEditorView: View {
         NavigationStack {
             Form {
                 Section("Name") {
-                    TextField("Deck name", text: $name)
+                    ClearableTextField(placeholder: "Deck name", text: $name)
                 }
                 Section("Description") {
-                    TextField("Optional", text: $deckDescription, axis: .vertical)
-                        .lineLimit(1...4)
+                    ClearableTextField(placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
                 }
                 Section("Color") {
                     colorGrid

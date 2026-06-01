@@ -49,14 +49,12 @@ struct CardEditorView: View {
         NavigationStack {
             Form {
                 Section("Term") {
-                    TextField("Front of the card", text: $term, axis: .vertical)
+                    ClearableTextField(placeholder: "Front of the card", text: $term, axis: .vertical, lines: 1...4)
                         .font(Typography.body)
-                        .lineLimit(1...4)
                 }
                 Section("Definition") {
-                    TextField("Back of the card", text: $definition, axis: .vertical)
+                    ClearableTextField(placeholder: "Back of the card", text: $definition, axis: .vertical, lines: 3...10)
                         .font(Typography.body)
-                        .lineLimit(3...10)
                 }
             }
             .formStyle(.grouped)

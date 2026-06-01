@@ -6,26 +6,30 @@ enum CardJSON {
 
     // MARK: Prompt
 
-    static func system(count: Int) -> String {
-        """
-        You are a flashcard generator. From the user's notes or topic, produce \(count) \
-        high-quality study flashcards. Respond with ONLY a JSON object of the form \
+    /// `count == nil` lets the model choose how many cards to create ("auto").
+    static func system(count: Int?) -> String {
+        let instruction = count.map { "Produce exactly \($0) flashcards." }
+            ?? "Produce as many flashcards as the material warrants (typically 8–20)."
+        return """
+        You are a flashcard generator. \(instruction) From the user's notes or topic, \
+        create high-quality study cards. Respond with ONLY a JSON object of the form \
         {"cards":[{"term":"...","definition":"..."}]}. Each "term" is a concise prompt \
         (a word, concept, or question); each "definition" is a clear, accurate answer. \
         Do not include markdown, code fences, or commentary.
         """
     }
 
-    static func user(_ prompt: String, count: Int) -> String {
-        """
-        Create \(count) flashcards from the following. If it is a topic, cover the most \
+    static func user(_ prompt: String, count: Int?) -> String {
+        let amount = count.map { "\($0)" } ?? "an appropriate number of"
+        return """
+        Create \(amount) flashcards from the following. If it is a topic, cover the most \
         important points; if it is notes, extract the key facts.
 
         \(prompt)
         """
     }
 
-    static func combined(_ prompt: String, count: Int) -> String {
+    static func combined(_ prompt: String, count: Int?) -> String {
         system(count: count) + "\n\n" + user(prompt, count: count)
     }
 

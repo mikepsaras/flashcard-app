@@ -2,7 +2,7 @@ import Foundation
 
 /// Anthropic Messages API. No JSON mode — relies on the prompt + tolerant parser.
 enum AnthropicProvider {
-    static func makeRequest(prompt: String, count: Int, model: String, apiKey: String) -> URLRequest {
+    static func makeRequest(prompt: String, count: Int?, model: String, apiKey: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -11,7 +11,7 @@ enum AnthropicProvider {
 
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 2048,
+            "max_tokens": 4096,
             "system": CardJSON.system(count: count),
             "messages": [["role": "user", "content": CardJSON.user(prompt, count: count)]],
         ]

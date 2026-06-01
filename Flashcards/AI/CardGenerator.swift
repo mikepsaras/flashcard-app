@@ -7,7 +7,7 @@ struct CardGenerator: Sendable {
 
     func generate(
         prompt: String,
-        count: Int,
+        count: Int?,
         provider: AIProvider,
         model: String,
         apiKey: String
@@ -33,7 +33,7 @@ struct CardGenerator: Sendable {
         return cards
     }
 
-    static func request(for provider: AIProvider, prompt: String, count: Int, model: String, apiKey: String) -> URLRequest {
+    static func request(for provider: AIProvider, prompt: String, count: Int?, model: String, apiKey: String) -> URLRequest {
         switch provider {
         case .openAI:    OpenAIProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey)
         case .google:    GeminiProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey)

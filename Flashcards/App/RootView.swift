@@ -39,7 +39,7 @@ struct RootView: View {
             StudySessionView(plan: plan)
         }
         #if os(macOS)
-        .frame(minWidth: 900, minHeight: 640)
+        .frame(minWidth: 900, minHeight: 680)
         #endif
     }
 

@@ -19,7 +19,7 @@ enum PersistenceController {
         do {
             return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
-            // Sync requested but unavailable — degrade gracefully to a local store.
+            // Sync requested but the store couldn't be created — fall back to local.
             let local = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: inMemory,

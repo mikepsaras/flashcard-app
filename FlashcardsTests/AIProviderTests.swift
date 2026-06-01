@@ -24,6 +24,15 @@ import Foundation
         #expect(url.contains("key=AIza-test"))
     }
 
+    @Test func autoCountUsesFlexiblePhrasing() throws {
+        let req = OpenAIProvider.makeRequest(prompt: "x", count: nil, model: "gpt-4o-mini", apiKey: "k")
+        let body = try JSONSerialization.jsonObject(with: req.httpBody ?? Data()) as? [String: Any]
+        let messages = body?["messages"] as? [[String: Any]]
+        let system = messages?.first?["content"] as? String ?? ""
+        #expect(system.contains("as many"))
+        #expect(!system.contains("exactly"))
+    }
+
     @Test func anthropicRequestHasVersionAndKeyHeaders() {
         let req = AnthropicProvider.makeRequest(prompt: "x", count: 5, model: "claude-3-5-haiku-latest", apiKey: "ak-test")
         #expect(req.url?.absoluteString == "https://api.anthropic.com/v1/messages")

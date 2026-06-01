@@ -63,7 +63,7 @@ struct SettingsView: View {
                 Text("Sync")
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Keep your decks up to date across your Mac and iPhone using your private iCloud account.")
+                    Text("Decks are always stored locally on each device. With a build signed for CloudKit (your Apple Team ID + the iCloud entitlement), turning this on also mirrors them to your private iCloud so they sync across your Mac and iPhone.")
                     if needsRelaunch {
                         Label("Quit and reopen Flashcards to apply this change.", systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(Theme.danger)

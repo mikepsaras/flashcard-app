@@ -2,7 +2,7 @@ import Foundation
 
 /// OpenAI Chat Completions with JSON response format.
 enum OpenAIProvider {
-    static func makeRequest(prompt: String, count: Int, model: String, apiKey: String) -> URLRequest {
+    static func makeRequest(prompt: String, count: Int?, model: String, apiKey: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -18,6 +18,7 @@ struct AIGenerationView: View {
     @State private var deckName = ""
     @State private var prompt = ""
     @State private var count = 10
+    @State private var autoCount = false
     @State private var phase: Phase = .input
     @State private var cards: [GeneratedCard] = []
     @State private var included: Set<UUID> = []
@@ -48,7 +49,7 @@ struct AIGenerationView: View {
                 }
         }
         #if os(macOS)
-        .frame(width: 540, height: 600)
+        .frame(width: 540, height: 520)
         #endif
     }
 
@@ -91,19 +92,35 @@ struct AIGenerationView: View {
         Form {
             if case .newDeck = target {
                 Section("Deck name") {
-                    TextField("e.g. Spanish Basics", text: $deckName)
+                    ClearableTextField(placeholder: "e.g. Spanish Basics", text: $deckName)
                 }
             }
             Section("Notes or topic") {
                 TextEditor(text: $prompt)
                     .font(Typography.body)
-                    .frame(minHeight: 150)
+                    .frame(minHeight: 130)
             }
             Section {
-                Stepper("Number of cards: \(count)", value: $count, in: 3...30)
+                Toggle("Let AI choose the count", isOn: $autoCount.animation())
+                if !autoCount {
+                    HStack {
+                        Text("Number of cards")
+                        Spacer()
+                        TextField("10", value: $count, format: .number)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 64)
+                            #if os(iOS)
+                            .keyboardType(.numberPad)
+                            #endif
+                        Stepper("", value: $count, in: 1...100).labelsHidden()
+                    }
+                }
             } footer: {
-                Text("Generated with \(provider.displayName). Review and edit before adding.")
+                Text(autoCount
+                     ? "The AI decides how many cards to create. Generated with \(provider.displayName)."
+                     : "Generated with \(provider.displayName). Review and edit before adding.")
             }
+            .onChange(of: count) { _, newValue in count = min(max(newValue, 1), 100) }
             if let errorText {
                 Section {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
@@ -167,13 +184,14 @@ struct AIGenerationView: View {
     private func generate() {
         let key = apiKey
         let model = UserDefaults.standard.string(forKey: provider.modelDefaultsKey) ?? provider.defaultModel
-        let prompt = prompt, count = count, provider = provider
+        let prompt = prompt, provider = provider
+        let requestedCount: Int? = autoCount ? nil : count
         errorText = nil
         phase = .generating
         Task {
             do {
                 let result = try await CardGenerator().generate(
-                    prompt: prompt, count: count, provider: provider, model: model, apiKey: key
+                    prompt: prompt, count: requestedCount, provider: provider, model: model, apiKey: key
                 )
                 cards = result
                 included = Set(result.map(\.id))
