@@ -1,0 +1,69 @@
+name: Flashcards
+options:
+  bundleIdPrefix: com.mike
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"                 # Swift 6 language mode
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: YES
+
+targets:
+  Flashcards:
+    type: application
+    supportedDestinations: [macOS, iOS]
+    sources:
+      - path: Flashcards
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mike.Flashcards
+        INFOPLIST_KEY_CFBundleDisplayName: Flashcards
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.education"
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Ad-hoc sign locally (no Team ID needed). Set at target level to override
+        # xcodegen's "iPhone Developer" preset. macOS signs ad-hoc; iOS simulator
+        # needs no signing. To enable real CloudKit, set a DEVELOPMENT_TEAM,
+        # switch CODE_SIGN_STYLE to Automatic, and wire CODE_SIGN_ENTITLEMENTS below.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        # CODE_SIGN_ENTITLEMENTS: Flashcards/Resources/Flashcards.entitlements
+
+  FlashcardsTests:
+    type: bundle.unit-test
+    supportedDestinations: [macOS]
+    sources:
+      - path: FlashcardsTests
+    dependencies:
+      - target: Flashcards
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mike.FlashcardsTests
+        GENERATE_INFOPLIST_FILE: YES
+        # xcodegen emits the iOS-layout TEST_HOST; tests run on macOS, so point
+        # at the macOS executable inside the .app bundle.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Flashcards.app/Contents/MacOS/Flashcards"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+
+schemes:
+  Flashcards:
+    build:
+      targets:
+        Flashcards: all
+        FlashcardsTests: [test]
+    test:
+      targets: [FlashcardsTests]
