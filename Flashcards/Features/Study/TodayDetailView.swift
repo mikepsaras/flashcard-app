@@ -19,10 +19,13 @@ struct TodayDetailView: View {
     var body: some View {
         Group {
             if totalDue == 0 {
+                let streak = StudyStats.currentStreak()
                 ContentUnavailableView(
                     "All Caught Up",
                     systemImage: "checkmark.circle",
-                    description: Text("No cards are due right now. Check back later.")
+                    description: Text(streak > 0
+                        ? "No cards are due right now. You’re on a \(streak)-day streak — check back later."
+                        : "No cards are due right now. Check back later.")
                 )
             } else {
                 VStack(spacing: 0) {
@@ -43,7 +46,8 @@ struct TodayDetailView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+        let streak = StudyStats.currentStreak()
+        return VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("\(totalDue)")
                     .font(.system(size: 44, weight: .bold, design: .rounded))
@@ -52,6 +56,14 @@ struct TodayDetailView: View {
                 Text(totalDue == 1 ? "card due" : "cards due")
                     .font(Typography.title)
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                if streak > 0 {
+                    Label("\(streak)", systemImage: "flame.fill")
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                        .foregroundStyle(.orange)
+                        .monospacedDigit()
+                        .help("\(streak)-day study streak")
+                }
             }
 
             PrimaryButton(title: "Study \(totalDue) Due", systemImage: "play.fill") {

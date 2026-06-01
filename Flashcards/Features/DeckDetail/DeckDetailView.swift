@@ -12,9 +12,19 @@ struct DeckDetailView: View {
     @State private var showingImporter = false
     @State private var showingExporter = false
     @State private var showingAI = false
+    @State private var showingResetConfirm = false
+    @State private var cardSearch = ""
 
     private var sortedCards: [Card] {
         deck.cardArray.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var visibleCards: [Card] {
+        guard !cardSearch.isEmpty else { return sortedCards }
+        return sortedCards.filter {
+            $0.term.localizedCaseInsensitiveContains(cardSearch)
+            || $0.definition.localizedCaseInsensitiveContains(cardSearch)
+        }
     }
 
     var body: some View {
@@ -30,6 +40,7 @@ struct DeckDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .searchable(text: $cardSearch, prompt: "Search cards")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { cardEditor = .new } label: { Label("Add Card", systemImage: "plus") }
@@ -46,6 +57,10 @@ struct DeckDetailView: View {
                         .disabled(sortedCards.isEmpty)
                     Divider()
                     Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
+                    Button(role: .destructive) { showingResetConfirm = true } label: {
+                        Label("Reset Progress", systemImage: "arrow.counterclockwise")
+                    }
+                    .disabled(!deck.cardArray.contains { $0.hasBeenReviewed })
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }
@@ -73,6 +88,23 @@ struct DeckDetailView: View {
         ) { result in
             handleImport(result)
         }
+        .confirmationDialog(
+            "Reset progress for this deck?",
+            isPresented: $showingResetConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Reset Progress", role: .destructive) { resetProgress() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every card becomes due again and its spaced-repetition history is cleared. This can’t be undone.")
+        }
+    }
+
+    private func resetProgress() {
+        for card in deck.cardArray { card.resetSchedule() }
+        deck.modifiedAt = .now
+        try? context.save()
+        DeckStore.persist(context)
     }
 
     private func handleImport(_ result: Result<[URL], Error>) {
@@ -139,7 +171,7 @@ struct DeckDetailView: View {
     private var cardList: some View {
         List {
             Section("Cards") {
-                ForEach(sortedCards) { card in
+                ForEach(visibleCards) { card in
                     Button { cardEditor = .edit(card) } label: {
                         CardRowView(card: card)
                     }
@@ -149,6 +181,10 @@ struct DeckDetailView: View {
 
                 if sortedCards.isEmpty {
                     Text("No cards yet. Tap + to add one.")
+                        .font(Typography.callout)
+                        .foregroundStyle(.secondary)
+                } else if visibleCards.isEmpty {
+                    Text("No cards match “\(cardSearch)”.")
                         .font(Typography.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -162,7 +198,7 @@ struct DeckDetailView: View {
     }
 
     private func deleteCards(_ offsets: IndexSet) {
-        let cards = sortedCards
+        let cards = visibleCards
         for index in offsets { context.delete(cards[index]) }
         deck.modifiedAt = .now
         try? context.save()

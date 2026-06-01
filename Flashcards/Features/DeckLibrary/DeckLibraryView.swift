@@ -16,8 +16,18 @@ struct DeckLibraryView: View {
     @State private var showingSettings = false
     @State private var showingAI = false
     @State private var showingDeckImporter = false
+    @State private var search = ""
+    @State private var deckPendingDeletion: Deck?
 
     private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }
+
+    private var filteredDecks: [Deck] {
+        guard !search.isEmpty else { return decks }
+        return decks.filter {
+            $0.name.localizedCaseInsensitiveContains(search)
+            || $0.deckDescription.localizedCaseInsensitiveContains(search)
+        }
+    }
 
     var body: some View {
         List(selection: $selection) {
@@ -27,7 +37,7 @@ struct DeckLibraryView: View {
             }
 
             Section("Decks") {
-                ForEach(decks) { deck in
+                ForEach(filteredDecks) { deck in
                     DeckRowView(deck: deck)
                         .tag(SidebarItem.deck(deck.persistentModelID))
                         .contextMenu {
@@ -35,7 +45,7 @@ struct DeckLibraryView: View {
                             #if os(macOS)
                             Button { revealInFinder(deck) } label: { Label("Reveal in Finder", systemImage: "folder") }
                             #endif
-                            Button(role: .destructive) { delete(deck) } label: { Label("Delete", systemImage: "trash") }
+                            Button(role: .destructive) { deckPendingDeletion = deck } label: { Label("Delete", systemImage: "trash") }
                         }
                 }
                 .onDelete(perform: deleteOffsets)
@@ -50,6 +60,7 @@ struct DeckLibraryView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Flashcards")
+        .searchable(text: $search, prompt: "Search decks")
         #if os(macOS)
         // Leave the sidebar toggle at the system default position (inside the sidebar);
         // a custom .navigation toggle lands *outside* the panel. "+ New Deck" goes at the
@@ -82,6 +93,22 @@ struct DeckLibraryView: View {
             allowedContentTypes: [UTType(filenameExtension: DeckStore.fileExtension) ?? .json],
             allowsMultipleSelection: true
         ) { result in openDeckFiles(result) }
+        .confirmationDialog(
+            "Delete this deck?",
+            isPresented: Binding(
+                get: { deckPendingDeletion != nil },
+                set: { if !$0 { deckPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: deckPendingDeletion
+        ) { deck in
+            Button("Delete “\(deck.name.isEmpty ? "Untitled Deck" : deck.name)”", role: .destructive) {
+                delete(deck)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { deck in
+            Text("\(deck.cardCount) card\(deck.cardCount == 1 ? "" : "s") will be permanently deleted. This can’t be undone.")
+        }
         #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -120,7 +147,7 @@ struct DeckLibraryView: View {
     }
 
     private func deleteOffsets(_ offsets: IndexSet) {
-        for index in offsets { delete(decks[index]) }
+        if let index = offsets.first { deckPendingDeletion = filteredDecks[index] }
     }
 
     private func openDeckFiles(_ result: Result<[URL], Error>) {

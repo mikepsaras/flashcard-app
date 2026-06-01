@@ -24,6 +24,7 @@ struct FlashcardsApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(PersistenceMonitor.shared)
         }
         .modelContainer(container)
         #if os(macOS)

@@ -152,4 +152,73 @@ import SwiftData
         DeckStore.persist(container.mainContext, to: dir)
         #expect(try deckFilenames(dir) == ["Dup 2.deck", "Dup.deck"])
     }
+
+    // MARK: Reconcile (external edits)
+
+    @Test func reconcileIsNoOpForOwnWrites() throws {
+        // Reconciling against the files we just wrote must change nothing — this is what
+        // keeps the file watcher from reload-looping on the app's own saves.
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Mine"); container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: dir)
+
+        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == false)
+    }
+
+    @Test func reconcileAddsExternallyCreatedDeck() throws {
+        let dir = try tempDir()
+        // A separate "process" writes a deck file into the folder.
+        let source = DeckStore.makeContainer()
+        let deck = Deck(name: "External"); source.mainContext.insert(deck)
+        source.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try source.mainContext.save()
+        DeckStore.persist(source.mainContext, to: dir)
+
+        let container = DeckStore.makeContainer()   // starts empty
+        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == true)
+        let decks = try container.mainContext.fetch(FetchDescriptor<Deck>())
+        #expect(decks.count == 1)
+        #expect(decks.first?.name == "External")
+        #expect(decks.first?.cardArray.count == 1)
+    }
+
+    @Test func reconcileRemovesExternallyDeletedDeck() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        container.mainContext.insert(Deck(name: "A"))
+        container.mainContext.insert(Deck(name: "B"))
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: dir)
+
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("B.deck"))
+        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == true)
+        let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
+        #expect(names == ["A"])
+    }
+
+    @Test func reconcileUpdatesEditedDeckInPlace() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Orig"); container.mainContext.insert(deck)
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: dir)
+        let idBefore = deck.persistentModelID
+
+        // External edit: load the file elsewhere, rename + add a card, write it back.
+        let ext = DeckStore.makeContainer()
+        DeckStore.loadAll(into: ext.mainContext, from: dir)
+        let extDeck = try #require(try ext.mainContext.fetch(FetchDescriptor<Deck>()).first)
+        extDeck.name = "Edited"
+        ext.mainContext.insert(Card(term: "new", definition: "card", deck: extDeck))
+        try ext.mainContext.save()
+        DeckStore.persist(ext.mainContext, to: dir)
+
+        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == true)
+        #expect(deck.name == "Edited")
+        #expect(deck.persistentModelID == idBefore)   // same object, updated in place
+        #expect(deck.cardArray.count == 1)
+    }
 }

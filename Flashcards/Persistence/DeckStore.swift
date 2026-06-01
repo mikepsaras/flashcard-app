@@ -1,5 +1,34 @@
 import Foundation
+import Observation
 import SwiftData
+
+/// Outcome of a `persist` pass — which decks (if any) failed to write to disk.
+struct PersistResult: Equatable {
+    var failedDeckNames: [String] = []
+    var isSuccess: Bool { failedDeckNames.isEmpty }
+}
+
+/// App-global sink for surfacing persistence failures to the UI. A failed write
+/// otherwise vanishes silently — unacceptable for an app whose files are the source
+/// of truth. `RootView` presents `failure` as an alert.
+@Observable
+@MainActor
+final class PersistenceMonitor {
+    static let shared = PersistenceMonitor()
+    private init() {}
+
+    /// Non-nil ⇒ a user-facing "couldn't save" message to present.
+    var failure: String?
+
+    func note(_ result: PersistResult) {
+        guard !result.isSuccess else { return }
+        let which = result.failedDeckNames.count == 1
+            ? "the deck “\(result.failedDeckNames[0])”"
+            : "\(result.failedDeckNames.count) decks"
+        failure = "Couldn't save \(which) to disk. Your changes are still here in the app, "
+            + "but check that your Flashcards folder is writable and has free space, then try again."
+    }
+}
 
 /// Persists decks as individual `.deck` JSON files in a visible folder
 /// (`Documents/Flashcards`). The on-disk files are the source of truth; the app
@@ -8,6 +37,11 @@ import SwiftData
 enum DeckStore {
     static let fileExtension = "deck"
     static let schema = Schema([Deck.self, Card.self])
+
+    /// Cache of deck id → on-disk file URL, kept warm by `loadAll`/`persist` so the
+    /// share / reveal-in-Finder lookups don't rescan and re-decode every `.deck` file
+    /// on the main thread each time a menu is built.
+    private static var urlByDeckID: [UUID: URL] = [:]
 
     // MARK: Container (no database on disk)
 
@@ -58,32 +92,95 @@ enum DeckStore {
                   !seen.contains(dto.id)
             else { continue }
             seen.insert(dto.id)
+            urlByDeckID[dto.id] = url
             DeckCodec.makeDeck(from: dto, in: context)
             loaded += 1
         }
         return loaded
     }
 
+    // MARK: Reconcile (external edits)
+
+    /// Merges on-disk `.deck` files into an already-loaded context: inserts decks that
+    /// appeared, removes decks whose file vanished, and updates decks whose file changed
+    /// — all in place. A deck whose on-disk content already equals its in-memory state is
+    /// skipped, which transparently ignores the app's *own* writes (no reload loop).
+    /// Returns whether anything actually changed. Does **not** call `persist` (disk is
+    /// already the source of truth here).
+    @discardableResult
+    static func reconcile(into context: ModelContext, from directory: URL = libraryURL()) -> Bool {
+        var diskDTOs: [UUID: DeckCodec.DeckDTO] = [:]
+        var order: [UUID] = []
+        for url in deckFiles(in: directory) {
+            guard let data = try? Data(contentsOf: url),
+                  let dto = try? DeckCodec.decodeDTO(data),
+                  diskDTOs[dto.id] == nil
+            else { continue }
+            diskDTOs[dto.id] = dto
+            order.append(dto.id)
+            urlByDeckID[dto.id] = url
+        }
+
+        let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+        var byID: [UUID: Deck] = [:]
+        for deck in existing { byID[deck.id] = deck }
+
+        var changed = false
+
+        // Decks whose file disappeared externally.
+        for deck in existing where diskDTOs[deck.id] == nil {
+            context.delete(deck)
+            urlByDeckID[deck.id] = nil
+            changed = true
+        }
+
+        // New + modified decks (in original on-disk order for stable inserts).
+        for id in order {
+            guard let dto = diskDTOs[id] else { continue }
+            if let deck = byID[id] {
+                // Compare via the same lossy encode path both sides take, so identical
+                // content (including our own just-written files) compares equal.
+                let current = (try? DeckCodec.encode(deck)).flatMap { try? DeckCodec.decodeDTO($0) }
+                if current != dto {
+                    DeckCodec.update(deck, from: dto, in: context)
+                    changed = true
+                }
+            } else {
+                DeckCodec.makeDeck(from: dto, in: context)
+                changed = true
+            }
+        }
+
+        if changed { try? context.save() }
+        return changed
+    }
+
     // MARK: Persist
 
     /// Writes every current deck to its file and removes `.deck` files for decks
-    /// that no longer exist (covers deletes and renames).
-    static func persist(_ context: ModelContext, to directory: URL = libraryURL()) {
+    /// that no longer exist (covers deletes and renames). Returns which decks, if any,
+    /// failed to write and notifies `PersistenceMonitor` so the failure is surfaced.
+    @discardableResult
+    static func persist(_ context: ModelContext, to directory: URL = libraryURL()) -> PersistResult {
         let decks = (try? context.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
         var usedNames = Set<String>()
         var written = Set<String>()
         var failedIDs = Set<UUID>()
+        var failedNames: [String] = []
 
         for deck in decks {
             let filename = uniqueFilename(for: deck, used: &usedNames)
+            let fileURL = directory.appendingPathComponent(filename)
             // Only count a file as "written" after the encode AND atomic write both
             // succeed — otherwise the prune step below could delete a deck's last good
             // file on a transient failure and silently lose data.
             if let data = try? DeckCodec.encode(deck),
-               (try? data.write(to: directory.appendingPathComponent(filename), options: .atomic)) != nil {
+               (try? data.write(to: fileURL, options: .atomic)) != nil {
                 written.insert(filename)
+                urlByDeckID[deck.id] = fileURL
             } else {
                 failedIDs.insert(deck.id)
+                failedNames.append(deck.name.isEmpty ? "Untitled Deck" : deck.name)
             }
         }
         for url in deckFiles(in: directory) where !written.contains(url.lastPathComponent) {
@@ -95,6 +192,10 @@ enum DeckStore {
                failedIDs.contains(dto.id) { continue }
             try? FileManager.default.removeItem(at: url)
         }
+
+        let result = PersistResult(failedDeckNames: failedNames)
+        PersistenceMonitor.shared.note(result)
+        return result
     }
 
     // MARK: Import / share
@@ -112,11 +213,17 @@ enum DeckStore {
         return DeckCodec.makeDeck(from: dto, in: context)
     }
 
-    /// The on-disk file URL for a deck (for sharing). Located by the id inside each file.
+    /// The on-disk file URL for a deck (for sharing / reveal). Served from the warm
+    /// id→URL cache; only falls back to scanning + decoding files on a cache miss
+    /// (and rewarms the cache as it goes).
     static func fileURL(for deck: Deck, in directory: URL = libraryURL()) -> URL? {
+        if let cached = urlByDeckID[deck.id], FileManager.default.fileExists(atPath: cached.path) {
+            return cached
+        }
         for url in deckFiles(in: directory) {
-            if let data = try? Data(contentsOf: url), let dto = try? DeckCodec.decodeDTO(data), dto.id == deck.id {
-                return url
+            if let data = try? Data(contentsOf: url), let dto = try? DeckCodec.decodeDTO(data) {
+                urlByDeckID[dto.id] = url
+                if dto.id == deck.id { return url }
             }
         }
         return nil
@@ -148,6 +255,9 @@ enum DeckStore {
             guard let data = try? DeckCodec.encode(deck), let dto = try? DeckCodec.decodeDTO(data) else { continue }
             DeckCodec.makeDeck(from: dto, in: context)
         }
+        // Persist the imports into the context explicitly (don't rely on the caller's
+        // fetch seeing unsaved inserts) so a later `persist` always writes them out.
+        try? context.save()
         UserDefaults.standard.set(true, forKey: migratedKey)
         return true
     }

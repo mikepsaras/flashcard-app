@@ -17,11 +17,12 @@ import Foundation
         #expect(format?["type"] as? String == "json_object")
     }
 
-    @Test func geminiRequestPutsModelAndKeyInURL() {
+    @Test func geminiRequestPutsModelInURLAndKeyInHeader() {
         let req = GeminiProvider.makeRequest(prompt: "x", count: 5, model: "gemini-2.0-flash", apiKey: "AIza-test")
         let url = req.url?.absoluteString ?? ""
         #expect(url.contains("/models/gemini-2.0-flash:generateContent"))
-        #expect(url.contains("key=AIza-test"))
+        #expect(!url.contains("AIza-test"))   // key must NOT leak into the URL
+        #expect(req.value(forHTTPHeaderField: "x-goog-api-key") == "AIza-test")
     }
 
     @Test func autoCountUsesFlexiblePhrasing() throws {

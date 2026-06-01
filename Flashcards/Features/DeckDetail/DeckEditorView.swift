@@ -109,7 +109,8 @@ struct DeckEditorView: View {
                     )
                     .contentShape(Circle())
                     .onTapGesture { colorHex = hex }
-                    .accessibilityLabel(Text(hex))
+                    .accessibilityLabel(Text(DeckPalette.name(for: hex)))
+                    .accessibilityAddTraits(colorHex == hex ? [.isSelected] : [])
             }
         }
         .padding(.vertical, 4)

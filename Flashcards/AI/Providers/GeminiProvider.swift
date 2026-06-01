@@ -3,11 +3,13 @@ import Foundation
 /// Google Gemini generateContent with JSON response MIME type.
 enum GeminiProvider {
     static func makeRequest(prompt: String, count: Int?, model: String, apiKey: String) -> URLRequest {
-        let encodedKey = apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? apiKey
-        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(encodedKey)")!
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Pass the key as a header rather than a URL query param: query strings leak
+        // into logs/proxies/crash reports far more readily than headers do.
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
 
         let body: [String: Any] = [
             "contents": [["parts": [["text": CardJSON.combined(prompt, count: count)]]]],
@@ -30,13 +32,4 @@ enum GeminiProvider {
         else { throw AIError.decoding }
         return try CardJSON.parseCards(from: text)
     }
-}
-
-extension CharacterSet {
-    /// Query-value safe set (excludes `&`, `=`, `+`, etc.).
-    static let urlQueryValueAllowed: CharacterSet = {
-        var set = CharacterSet.urlQueryAllowed
-        set.remove(charactersIn: "&=+?/")
-        return set
-    }()
 }

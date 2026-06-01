@@ -12,8 +12,10 @@ enum SidebarItem: Hashable {
 struct RootView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(PersistenceMonitor.self) private var persistenceMonitor
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @State private var studyPlan: StudyPlan?
+    @State private var watcher = DeckFolderWatcher()
 
     // Auto-select Today on macOS; start at the list on iPhone.
     #if os(macOS)
@@ -30,9 +32,35 @@ struct RootView: View {
     }
 
     var body: some View {
+        // Body-time read so changes to `failure` re-run body and present the alert.
+        let failure = persistenceMonitor.failure
         content
+            .task {
+                // Reflect external edits to the .deck files live; pause while studying.
+                watcher.isPaused = studyPlan != nil
+                watcher.start { DeckStore.reconcile(into: context) }
+            }
+            .onChange(of: studyPlan != nil) { _, studying in
+                watcher.isPaused = studying
+                if !studying { DeckStore.reconcile(into: context) }
+            }
             .onChange(of: scenePhase) { _, phase in
-                if phase != .active { DeckStore.persist(context) }
+                if phase == .active {
+                    DeckStore.reconcile(into: context)   // catch edits made while backgrounded
+                } else {
+                    DeckStore.persist(context)
+                }
+            }
+            .alert(
+                "Couldn’t Save",
+                isPresented: Binding(
+                    get: { failure != nil },
+                    set: { if !$0 { persistenceMonitor.failure = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(failure ?? "")
             }
     }
 

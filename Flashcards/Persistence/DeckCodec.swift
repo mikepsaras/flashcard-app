@@ -74,6 +74,52 @@ enum DeckCodec {
         try decoder.decode(DeckDTO.self, from: data)
     }
 
+    /// Reconciles an existing `Deck` in place to match a DTO (used when an external
+    /// edit to the `.deck` file is detected). Mutates scalars and merges cards by id —
+    /// updating matches, inserting new, deleting removed — so the deck keeps its
+    /// `persistentModelID` (and the user's current selection/editor) intact.
+    @MainActor
+    static func update(_ deck: Deck, from dto: DeckDTO, in context: ModelContext) {
+        deck.name = dto.name
+        deck.deckDescription = dto.deckDescription
+        deck.colorHex = dto.colorHex
+        deck.backLabel = dto.backLabel ?? "Definition"
+        deck.createdAt = dto.createdAt
+        deck.modifiedAt = dto.modifiedAt
+
+        var existing: [UUID: Card] = [:]
+        for card in deck.cardArray { existing[card.id] = card }
+
+        var keep = Set<UUID>()
+        for dtoCard in dto.cards {
+            keep.insert(dtoCard.id)
+            if let card = existing[dtoCard.id] {
+                card.term = dtoCard.term
+                card.definition = dtoCard.definition
+                card.createdAt = dtoCard.createdAt
+                card.modifiedAt = dtoCard.modifiedAt
+                card.easeFactor = dtoCard.easeFactor
+                card.interval = dtoCard.interval
+                card.repetitions = dtoCard.repetitions
+                card.dueDate = dtoCard.dueDate
+                card.lastReviewedAt = dtoCard.lastReviewedAt
+            } else {
+                let card = Card(term: dtoCard.term, definition: dtoCard.definition, deck: deck, dueDate: dtoCard.dueDate)
+                card.id = dtoCard.id
+                card.createdAt = dtoCard.createdAt
+                card.modifiedAt = dtoCard.modifiedAt
+                card.easeFactor = dtoCard.easeFactor
+                card.interval = dtoCard.interval
+                card.repetitions = dtoCard.repetitions
+                card.lastReviewedAt = dtoCard.lastReviewedAt
+                context.insert(card)
+            }
+        }
+        for card in deck.cardArray where !keep.contains(card.id) {
+            context.delete(card)
+        }
+    }
+
     /// Builds a `Deck` (with its cards) from a DTO and inserts it into the context.
     @MainActor
     @discardableResult

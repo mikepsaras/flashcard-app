@@ -33,13 +33,32 @@ final class StudySessionTests {
         #expect(session.correctCount == 1)
         #expect(session.answered == 1)
 
-        session.grade(known: false)
+        session.grade(known: false)        // lapse ⇒ comes back later this session
         #expect(session.wrongCount == 1)
+        #expect(session.total == 4)        // requeued
 
         session.grade(known: true)
-        #expect(session.isFinished)
+        #expect(!session.isFinished)       // the requeued card still remains
         #expect(session.correctCount == 2)
+
+        session.grade(known: true)         // clear the requeued card
+        #expect(session.isFinished)
+        #expect(session.correctCount == 3)
         #expect(session.wrongCount == 1)
+    }
+
+    @Test func lapsedCardIsRequeuedAndUndoPopsIt() {
+        let session = StudySession(cards: makeCards(2), trackLearning: false)
+        #expect(session.total == 2)
+
+        session.grade(known: false)        // miss the first card
+        #expect(session.total == 3)        // appended to the end
+        #expect(session.wrongCount == 1)
+
+        session.undo()
+        #expect(session.total == 2)        // requeued copy removed again
+        #expect(session.wrongCount == 0)
+        #expect(session.answered == 0)
     }
 
     @Test func trackingPersistsScheduleChange() {

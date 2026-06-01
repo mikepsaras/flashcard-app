@@ -23,6 +23,9 @@ final class StudySession {
         let previousIndex: Int
         let previousCorrect: Int
         let previousWrong: Int
+        /// Whether this grade appended the card back onto the queue (a lapse), so undo
+        /// can pop it off again.
+        let requeued: Bool
     }
     private var history: [Move] = []
 
@@ -56,6 +59,10 @@ final class StudySession {
     func grade(_ grade: Grade, now: Date = .now) {
         guard let card = current else { return }
 
+        // A missed card comes back later this session (the expected SRS behavior) rather
+        // than vanishing until its next due date.
+        let requeue = !grade.isCorrect
+
         history.append(Move(
             card: card,
             wasShowingDefinition: isShowingDefinition,
@@ -64,7 +71,8 @@ final class StudySession {
             previousModifiedAt: card.modifiedAt,
             previousIndex: index,
             previousCorrect: correctCount,
-            previousWrong: wrongCount
+            previousWrong: wrongCount,
+            requeued: requeue
         ))
 
         if trackLearning {
@@ -73,11 +81,15 @@ final class StudySession {
         }
 
         if grade.isCorrect { correctCount += 1 } else { wrongCount += 1 }
+        if requeue { cards.append(card) }
         advance()
     }
 
     func undo() {
         guard let move = history.popLast() else { return }
+
+        // Pop the requeued copy this move appended (LIFO ⇒ it's the last card).
+        if move.requeued, cards.last === move.card { cards.removeLast() }
 
         if trackLearning {
             let card = move.card

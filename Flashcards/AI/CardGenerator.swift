@@ -14,7 +14,9 @@ struct CardGenerator: Sendable {
     ) async throws -> [GeneratedCard] {
         guard !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else { throw AIError.missingKey }
 
-        let request = Self.request(for: provider, prompt: prompt, count: count, model: model, apiKey: apiKey)
+        var request = Self.request(for: provider, prompt: prompt, count: count, model: model, apiKey: apiKey)
+        // Don't let a hung connection spin the "Generating…" UI for the default 60s.
+        request.timeoutInterval = 30
 
         let data: Data
         let response: URLResponse

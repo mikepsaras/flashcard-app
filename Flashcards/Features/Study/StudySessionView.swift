@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if os(iOS)
+import UIKit
+#endif
 
 /// Full-screen study experience: progress, the flip card, and grading controls.
 /// Driven by a `StudyPlan`, so it serves both single decks and the Today queue.
@@ -45,6 +48,7 @@ struct StudySessionView: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .background(Theme.windowBackground)
+            .background(keyboardControls)
         }
         .onChange(of: trackLearning) { _, newValue in session.trackLearning = newValue }
         .onDisappear { try? context.save(); DeckStore.persist(context) }
@@ -111,7 +115,7 @@ struct StudySessionView: View {
                 fourButton: fourButton,
                 trackLearning: $trackLearning,
                 onUndo: { session.undo() },
-                onGrade: { session.grade($0) }
+                onGrade: { performGrade($0) }
             )
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.bottom, Theme.Spacing.m)
@@ -121,7 +125,8 @@ struct StudySessionView: View {
     // MARK: Summary
 
     private var summary: some View {
-        VStack(spacing: Theme.Spacing.l) {
+        let streak = StudyStats.currentStreak()
+        return VStack(spacing: Theme.Spacing.l) {
             Spacer()
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 66))
@@ -129,7 +134,7 @@ struct StudySessionView: View {
             VStack(spacing: 6) {
                 Text("Session Complete")
                     .font(Typography.title)
-                Text(session.total == 0 ? "Nothing due — you're all caught up." : "Great work — keep the streak going.")
+                Text(session.total == 0 ? "Nothing due — you're all caught up." : "Great work — keep it up.")
                     .font(Typography.callout)
                     .foregroundStyle(.secondary)
             }
@@ -140,9 +145,18 @@ struct StudySessionView: View {
                 }
                 .padding(.top, Theme.Spacing.s)
             }
+            if streak > 0 {
+                Label("\(streak)-day streak", systemImage: "flame.fill")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(.orange.opacity(0.14), in: Capsule())
+            }
             Spacer()
             VStack(spacing: 12) {
                 PrimaryButton(title: "Done", systemImage: "checkmark", tint: accent) { finish() }
+                    .keyboardShortcut(.defaultAction)
                 if session.total > 0 {
                     Button("Study Again") { restart() }
                         .buttonStyle(.plain)
@@ -170,6 +184,14 @@ struct StudySessionView: View {
 
     // MARK: Actions
 
+    private func performGrade(_ grade: Grade) {
+        session.grade(grade)
+        StudyStats.recordReview()
+        #if os(iOS)
+        UINotificationFeedbackGenerator().notificationOccurred(grade.isCorrect ? .success : .warning)
+        #endif
+    }
+
     private func finish() {
         try? context.save()
         DeckStore.persist(context)
@@ -178,5 +200,38 @@ struct StudySessionView: View {
 
     private func restart() {
         session = StudySession(cards: plan.makeCards(), trackLearning: trackLearning)
+    }
+
+    // MARK: Keyboard
+
+    /// Hardware-keyboard shortcuts for the study loop (chiefly macOS): Space flips,
+    /// ←/→ or 1/2 grade in two-button mode, 1–4 grade in four-button mode, S shuffles,
+    /// ⌘Z undoes. Rendered as zero-size hidden buttons so the shortcuts register without
+    /// affecting layout.
+    @ViewBuilder private var keyboardControls: some View {
+        if !session.isFinished {
+            Group {
+                Button("Flip") { session.flip() }
+                    .keyboardShortcut(.space, modifiers: [])
+                Button("Shuffle") { session.shuffleRemaining() }
+                    .keyboardShortcut("s", modifiers: [])
+                Button("Undo") { session.undo() }
+                    .keyboardShortcut("z", modifiers: .command)
+                if fourButton {
+                    Button("Again") { performGrade(.again) }.keyboardShortcut("1", modifiers: [])
+                    Button("Hard")  { performGrade(.hard) }.keyboardShortcut("2", modifiers: [])
+                    Button("Good")  { performGrade(.good) }.keyboardShortcut("3", modifiers: [])
+                    Button("Easy")  { performGrade(.easy) }.keyboardShortcut("4", modifiers: [])
+                } else {
+                    Button("Wrong") { performGrade(.again) }.keyboardShortcut(.leftArrow, modifiers: [])
+                    Button("Right") { performGrade(.good) }.keyboardShortcut(.rightArrow, modifiers: [])
+                    Button("Wrong 1") { performGrade(.again) }.keyboardShortcut("1", modifiers: [])
+                    Button("Right 2") { performGrade(.good) }.keyboardShortcut("2", modifiers: [])
+                }
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
     }
 }
