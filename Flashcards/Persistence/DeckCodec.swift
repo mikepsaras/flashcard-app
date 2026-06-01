@@ -12,6 +12,8 @@ enum DeckCodec {
         var name: String
         var deckDescription: String
         var colorHex: String
+        // Optional so `.deck` files written before this field still decode (→ nil).
+        var backLabel: String?
         var createdAt: Date
         var modifiedAt: Date
         var cards: [CardDTO]
@@ -50,6 +52,7 @@ enum DeckCodec {
             name: deck.name,
             deckDescription: deck.deckDescription,
             colorHex: deck.colorHex,
+            backLabel: deck.backLabel,
             createdAt: deck.createdAt,
             modifiedAt: deck.modifiedAt,
             cards: deck.cardArray
@@ -77,6 +80,7 @@ enum DeckCodec {
     static func makeDeck(from dto: DeckDTO, in context: ModelContext) -> Deck {
         let deck = Deck(name: dto.name, deckDescription: dto.deckDescription, colorHex: dto.colorHex)
         deck.id = dto.id
+        deck.backLabel = dto.backLabel ?? "Definition"
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
         context.insert(deck)

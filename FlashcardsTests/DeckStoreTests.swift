@@ -32,6 +32,30 @@ import SwiftData
         #expect(rebuilt.cardArray.first?.repetitions == 2)
     }
 
+    @Test func backLabelRoundTrips() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Capitals", backLabel: "Capital")
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.backLabel == "Capital")
+        let other = DeckStore.makeContainer()   // retain the container, or its context dangles
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        #expect(rebuilt.backLabel == "Capital")
+    }
+
+    @Test func missingBackLabelDefaultsToDefinition() throws {
+        // A .deck file written before backLabel existed must still load.
+        let json = """
+        {"formatVersion":1,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
+        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
+        """
+        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
+        #expect(dto.backLabel == nil)
+        let container = DeckStore.makeContainer()
+        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
+        #expect(deck.backLabel == "Definition")
+    }
+
     @Test func fileIsHumanReadableJSON() throws {
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "X")

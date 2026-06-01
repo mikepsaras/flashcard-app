@@ -9,7 +9,7 @@ enum SeedData {
         guard existing == 0 else { return }
 
         for spec in specs {
-            let deck = Deck(name: spec.name, deckDescription: spec.description, colorHex: spec.colorHex)
+            let deck = Deck(name: spec.name, deckDescription: spec.description, colorHex: spec.colorHex, backLabel: spec.backLabel)
             context.insert(deck)
             for pair in spec.cards {
                 context.insert(Card(term: pair.0, definition: pair.1, deck: deck))
@@ -22,6 +22,7 @@ enum SeedData {
         let name: String
         let description: String
         let colorHex: String
+        var backLabel: String = "Definition"
         let cards: [(String, String)]
     }
 
@@ -49,6 +50,7 @@ enum SeedData {
             name: "Capital Cities",
             description: "World capitals to memorize",
             colorHex: "#34C759",
+            backLabel: "Capital",
             cards: [
                 ("Japan", "Tokyo"),
                 ("Australia", "Canberra"),

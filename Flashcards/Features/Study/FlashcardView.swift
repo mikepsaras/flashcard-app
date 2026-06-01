@@ -5,6 +5,7 @@ struct FlashcardView: View {
     let term: String
     let definition: String
     let isShowingDefinition: Bool
+    var definitionLabel: String = "Definition"
     var accent: Color = Theme.accent
     var onShuffle: (() -> Void)?
     var onTap: () -> Void
@@ -14,7 +15,7 @@ struct FlashcardView: View {
             face(text: term, label: nil)
                 .opacity(isShowingDefinition ? 0 : 1)
 
-            face(text: definition, label: "Definition")
+            face(text: definition, label: definitionLabel.isEmpty ? nil : definitionLabel)
                 .opacity(isShowingDefinition ? 1 : 0)
                 .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
         }

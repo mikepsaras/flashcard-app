@@ -95,6 +95,7 @@ struct StudySessionView: View {
                     term: card.term,
                     definition: card.definition,
                     isShowingDefinition: session.isShowingDefinition,
+                    definitionLabel: card.deck?.backLabel ?? "Definition",
                     accent: accent,
                     onShuffle: { session.shuffleRemaining() },
                     onTap: { session.flip() }

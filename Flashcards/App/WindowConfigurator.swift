@@ -49,6 +49,11 @@ struct WindowConfigurator: NSViewRepresentable {
                 window.styleMask.remove(.fullSizeContentView)
             }
         }
+
+        // Hide the traffic lights for a fully immersive study view; restore on exit.
+        for type: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(type)?.isHidden = fullSizeContent
+        }
     }
 }
 #endif
