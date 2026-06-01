@@ -39,11 +39,11 @@ struct SnapshotGalleryTests {
             size: CGSize(width: 620, height: 600), name: "02_card_back")
 
         try Snapshot.write(
-            StudySessionView(plan: plan).modelContainer(container),
+            StudySessionView(plan: plan, onClose: {}).modelContainer(container),
             size: CGSize(width: 960, height: 720), name: "03_study_screen_mac")
 
         try Snapshot.write(
-            StudySessionView(plan: plan).modelContainer(container),
+            StudySessionView(plan: plan, onClose: {}).modelContainer(container),
             size: CGSize(width: 402, height: 850), name: "04_study_screen_phone")
 
         // Two-button controls
@@ -71,7 +71,7 @@ struct SnapshotGalleryTests {
         defer { UserDefaults.standard.removeObject(forKey: GradingMode.storageKey) }
         let (container, _, plan) = try makeContext()
         try Snapshot.write(
-            StudySessionView(plan: plan).modelContainer(container),
+            StudySessionView(plan: plan, onClose: {}).modelContainer(container),
             size: CGSize(width: 960, height: 720), name: "10_study_four_button_mac")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/10_study_four_button_mac.png"))
     }

@@ -30,21 +30,39 @@ struct RootView: View {
     }
 
     var body: some View {
+        content
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { DeckStore.persist(context) }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        // Study fills the whole window (replaces the split view) rather than a sheet.
+        Group {
+            if let plan = studyPlan {
+                StudySessionView(plan: plan, onClose: { studyPlan = nil })
+            } else {
+                splitView
+            }
+        }
+        .frame(minWidth: 900, minHeight: 680)
+        #else
+        splitView
+            .fullScreenCover(item: $studyPlan) { plan in
+                StudySessionView(plan: plan, onClose: { studyPlan = nil })
+            }
+        #endif
+    }
+
+    private var splitView: some View {
         NavigationSplitView {
             DeckLibraryView(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 250, ideal: 290, max: 360)
         } detail: {
             detail
         }
-        .studyCover(item: $studyPlan) { plan in
-            StudySessionView(plan: plan)
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase != .active { DeckStore.persist(context) }
-        }
-        #if os(macOS)
-        .frame(minWidth: 900, minHeight: 680)
-        #endif
     }
 
     @ViewBuilder

@@ -5,15 +5,16 @@ import SwiftData
 /// Driven by a `StudyPlan`, so it serves both single decks and the Today queue.
 struct StudySessionView: View {
     let plan: StudyPlan
+    let onClose: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @AppStorage("trackLearning") private var trackLearning = true
     @AppStorage(GradingMode.storageKey) private var gradingModeRaw = GradingMode.twoButton.rawValue
     @State private var session: StudySession
 
-    init(plan: StudyPlan) {
+    init(plan: StudyPlan, onClose: @escaping () -> Void) {
         self.plan = plan
+        self.onClose = onClose
         let track = UserDefaults.standard.object(forKey: "trackLearning") as? Bool ?? true
         _session = State(initialValue: StudySession(cards: plan.makeCards(), trackLearning: track))
     }
@@ -160,27 +161,10 @@ struct StudySessionView: View {
     private func finish() {
         try? context.save()
         DeckStore.persist(context)
-        dismiss()
+        onClose()
     }
 
     private func restart() {
         session = StudySession(cards: plan.makeCards(), trackLearning: trackLearning)
-    }
-}
-
-extension View {
-    /// Presents study full-screen on iOS, as a sized sheet on macOS.
-    @ViewBuilder
-    func studyCover<Item: Identifiable, Content: View>(
-        item: Binding<Item?>,
-        @ViewBuilder content: @escaping (Item) -> Content
-    ) -> some View {
-        #if os(iOS)
-        fullScreenCover(item: item, content: content)
-        #else
-        sheet(item: item) { value in
-            content(value).frame(minWidth: 560, idealWidth: 760, minHeight: 600, idealHeight: 720)
-        }
-        #endif
     }
 }
