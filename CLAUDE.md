@@ -59,19 +59,28 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
 ## Architecture
 
 - `Flashcards/Models` — `Deck`, `Card` (`@Model`). SM-2 state is stored inline on
-  `Card`. Models are **CloudKit-safe**: every scalar defaulted, relationship optional
-  with an inverse, no `@Attribute(.unique)`, `.cascade` delete.
+  `Card`, **per direction** (forward + reverse fields) so a deck can be studied both
+  ways with independent schedules (`Deck.studyReversed`). Models are **CloudKit-safe**:
+  every scalar defaulted, relationship optional with an inverse, no `@Attribute(.unique)`,
+  `.cascade` delete.
 - `Flashcards/Scheduling` — pure, unit-tested SM-2 (`SM2.swift`, `Grade.swift`) +
-  `Card+Scheduling` bridge.
+  `Card+Scheduling` bridge (direction-aware), and `ReviewDirection`.
 - `Flashcards/Persistence` — **file-based storage**: each deck is a `.deck` JSON file in
-  `~/Documents/Flashcards` (the source of truth). `DeckStore` builds an *in-memory*
-  `ModelContainer`, loads `.deck` files at launch, and rewrites them after every change
-  (and on scene-background); `DeckCodec` maps `@Model` ⇄ Codable DTOs. `SeedData` seeds
-  samples on first run; `migrateLegacyStore` imports any pre-existing on-disk store once.
-- `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review
-  queue), `DeckDetail` (CRUD editors + **CSV import/export** via `CSVCodec`), `Study`
-  (`StudySession` `@Observable @MainActor` state machine, full-screen UI driven by a
-  `StudyPlan`, 2- or 4-button grading), `AI` (`AIGenerationView`), `Settings`.
+  `~/Documents/Flashcards` (the source of truth, **format v2**). `DeckStore` builds an
+  *in-memory* `ModelContainer`, loads `.deck` files at launch, and rewrites them after
+  every change (and on scene-background); `DeckCodec` maps `@Model` ⇄ Codable DTOs.
+  `persist` returns a `PersistResult` and reports failures via `PersistenceMonitor`
+  (surfaced as an alert) — writes are never silently lost. `DeckFolderWatcher` +
+  `DeckStore.reconcile` reflect **external edits** to the `.deck` files live (content
+  comparison suppresses the app's own writes). `SeedData` seeds samples on first run;
+  `migrateLegacyStore` imports any pre-existing on-disk store once.
+- `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review queue,
+  search, sort, duplicate, drag-drop import), `DeckDetail` (CRUD editors + **CSV
+  import/export** via `CSVCodec` + move-card + Reset Progress), `Study` (`StudySession`
+  `@Observable @MainActor` state machine over `ReviewItem`s — cards in a direction —
+  full-screen UI driven by a `StudyPlan`, 2- or 4-button grading, keyboard shortcuts,
+  lapse-requeue, session-size cap; `StudyStats` tracks the daily streak), `AI`
+  (`AIGenerationView`), `Settings` (grading, session cap, opt-in `StudyReminders`).
 - `Flashcards/AI` — `CardGenerator` calls **OpenAI / Gemini / Anthropic** (per-provider
   `makeRequest` + `parse` in `Providers/`, tolerant JSON via `CardJSON`). API keys live in
   the **Keychain** (`KeychainStore`); provider/model in `@AppStorage`. `AIGenerationView`
@@ -89,5 +98,8 @@ Each deck is a human-readable `.deck` JSON file in `~/Documents/Flashcards` (Mac
 Finder) / the app's Files-visible Documents folder (iOS, via `UIFileSharingEnabled` +
 `LSSupportsOpeningDocumentsInPlace` in a generated `Info.plist`). There is **no on-disk
 database and no iCloud sync**. The app keeps an in-memory SwiftData working copy and persists
-to the files after each change. Open `.deck` files via the library **+** menu; share a deck's
-file from its **•••** menu. (Models keep a CloudKit-safe shape, but CloudKit isn't wired.)
+to the files after each change. External edits to the files (Finder, an editor, a sync service)
+are picked up live by `DeckFolderWatcher` and merged via `DeckStore.reconcile`. Open `.deck`
+files via the library **+** menu or by dropping them on the window; share a deck's file from its
+**•••** menu. The file format is **v2** (adds reverse-direction scheduling + `studyReversed`);
+v1 files still load. (Models keep a CloudKit-safe shape, but CloudKit isn't wired.)
