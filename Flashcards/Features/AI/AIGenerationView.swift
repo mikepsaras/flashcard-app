@@ -128,32 +128,24 @@ struct AIGenerationView: View {
             }
 
             Section {
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     Text("Number of cards")
                         .lineLimit(1)
                         .foregroundStyle(autoCount ? .secondary : .primary)
                     Spacer(minLength: 8)
                     if !autoCount {
-                        HStack(spacing: 4) {
-                            TextField("", text: $countText)
-                                .multilineTextAlignment(.center)
-                                .frame(width: 46)
-                                .textFieldStyle(.roundedBorder)
-                                #if os(iOS)
-                                .keyboardType(.numberPad)
-                                #endif
-                            #if os(macOS)
-                            Stepper("", value: $count, in: 1...100)
-                                .labelsHidden()
+                        TextField("", text: $countText)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 52)
+                            .textFieldStyle(.roundedBorder)
+                            #if os(iOS)
+                            .keyboardType(.numberPad)
                             #endif
-                        }
                     }
-                    HStack(spacing: 8) {
-                        Text("Auto").foregroundStyle(.secondary)
-                        Toggle("Auto", isOn: $autoCount.animation())
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                    }
+                    Text("Auto").foregroundStyle(.secondary)
+                    Toggle("Auto", isOn: $autoCount.animation())
+                        .labelsHidden()
+                        .toggleStyle(.switch)
                 }
                 .onChange(of: countText) { _, newValue in
                     let filtered = String(newValue.filter(\.isNumber).prefix(3))
