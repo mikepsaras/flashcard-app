@@ -11,6 +11,7 @@ struct DeckLibraryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @Binding var selection: SidebarItem?
+    @Binding var columnVisibility: NavigationSplitViewVisibility
 
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
@@ -50,7 +51,23 @@ struct DeckLibraryView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Flashcards")
+        #if os(macOS)
+        // Replace the auto sidebar toggle (which SwiftUI shoves to the right, next to
+        // our + menu) with our own at the leading edge, where macOS expects it.
+        .toolbar(removing: .sidebarToggle)
+        #endif
         .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    withAnimation {
+                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                    }
+                } label: {
+                    Label("Toggle Sidebar", systemImage: "sidebar.left")
+                }
+            }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
