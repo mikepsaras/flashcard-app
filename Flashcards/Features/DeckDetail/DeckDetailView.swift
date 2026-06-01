@@ -5,7 +5,10 @@ import UniformTypeIdentifiers
 struct DeckDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var deck: Deck
+    @Query private var allDecks: [Deck]
     var onStudy: () -> Void
+
+    private var otherDecks: [Deck] { allDecks.filter { $0.id != deck.id } }
 
     @State private var cardEditor: CardEditorMode?
     @State private var showingDeckEditor = false
@@ -176,6 +179,16 @@ struct DeckDetailView: View {
                         CardRowView(card: card)
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        if !otherDecks.isEmpty {
+                            Menu("Move to") {
+                                ForEach(otherDecks) { target in
+                                    Button(target.name.isEmpty ? "Untitled Deck" : target.name) { move(card, to: target) }
+                                }
+                            }
+                        }
+                        Button(role: .destructive) { deleteCard(card) } label: { Label("Delete", systemImage: "trash") }
+                    }
                 }
                 .onDelete(perform: deleteCards)
 
@@ -201,6 +214,22 @@ struct DeckDetailView: View {
         let cards = visibleCards
         for index in offsets { context.delete(cards[index]) }
         deck.modifiedAt = .now
+        try? context.save()
+        DeckStore.persist(context)
+    }
+
+    private func deleteCard(_ card: Card) {
+        context.delete(card)
+        deck.modifiedAt = .now
+        try? context.save()
+        DeckStore.persist(context)
+    }
+
+    private func move(_ card: Card, to target: Deck) {
+        card.deck = target
+        card.modifiedAt = .now
+        deck.modifiedAt = .now
+        target.modifiedAt = .now
         try? context.save()
         DeckStore.persist(context)
     }

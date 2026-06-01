@@ -94,11 +94,12 @@ enum CSVCodec {
                     inQuotes = true; fieldQuoted = true; i += 1
                 case ",":
                     endField(); i += 1
-                case "\n":
+                case "\n", "\r", "\r\n":
+                    // Swift coalesces a CRLF pair into a single Character, so "\r\n"
+                    // (Windows / Excel exports) must be matched explicitly — it equals
+                    // neither "\r" nor "\n". Lone \n (Unix) and \r (classic Mac) are
+                    // their own Characters. All three end the record, consuming one.
                     endRecord(); i += 1
-                case "\r":
-                    endRecord()
-                    i += (i + 1 < chars.count && chars[i + 1] == "\n") ? 2 : 1
                 default:
                     field.append(ch); i += 1
                 }

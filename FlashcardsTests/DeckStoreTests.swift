@@ -264,4 +264,73 @@ import SwiftData
         #expect(deck.persistentModelID == idBefore)   // same object, updated in place
         #expect(deck.cardArray.count == 1)
     }
+
+    // MARK: Failure handling / import / migration
+
+    @Test func failedWriteKeepsPreviousFileAndReports() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Keep"); container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+        #expect(DeckStore.persist(container.mainContext, to: dir).isSuccess)
+        let originalData = try Data(contentsOf: dir.appendingPathComponent("Keep.deck"))
+
+        // Make the folder unwritable so the next atomic write fails.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path) }
+
+        deck.name = "Changed"
+        deck.cardArray.first?.term = "changed"
+        try? container.mainContext.save()
+        let result = DeckStore.persist(container.mainContext, to: dir)
+
+        #expect(!result.isSuccess)
+        #expect(result.failedDeckNames == ["Changed"])
+        // The previous good file is neither pruned nor corrupted.
+        #expect(try deckFilenames(dir) == ["Keep.deck"])
+        #expect(try Data(contentsOf: dir.appendingPathComponent("Keep.deck")) == originalData)
+    }
+
+    @Test func importDeckReassignsCollidingID() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Orig"); container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: dir)
+        let originalID = deck.id
+
+        // Re-importing the same file into the same context must clone it under a new id.
+        let imported = try #require(DeckStore.importDeck(from: dir.appendingPathComponent("Orig.deck"), into: container.mainContext))
+        #expect(imported.id != originalID)
+        #expect(imported.name == "Orig")
+        #expect(imported.cardArray.count == 1)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 2)
+    }
+
+    @Test func migrateLegacyStoreImportsOnceThenGuards() throws {
+        let storeURL = try tempDir().appendingPathComponent("legacy.store")
+
+        // Seed a legacy on-disk store, then let the container deallocate (closing it)
+        // before migration opens it fresh.
+        func seedLegacy() throws {
+            let config = ModelConfiguration(schema: DeckStore.schema, url: storeURL)
+            let legacy = try ModelContainer(for: DeckStore.schema, configurations: [config])
+            let deck = Deck(name: "Legacy"); legacy.mainContext.insert(deck)
+            legacy.mainContext.insert(Card(term: "x", definition: "y", deck: deck))
+            try legacy.mainContext.save()
+        }
+        try seedLegacy()
+
+        UserDefaults.standard.removeObject(forKey: "didMigrateLegacyStore")
+        defer { UserDefaults.standard.removeObject(forKey: "didMigrateLegacyStore") }
+
+        let target = DeckStore.makeContainer()
+        #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL))
+        #expect(try target.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)
+
+        // A second call is blocked by the UserDefaults flag — no duplicate import.
+        #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL) == false)
+    }
 }

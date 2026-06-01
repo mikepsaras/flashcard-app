@@ -5,6 +5,19 @@ import UniformTypeIdentifiers
 import AppKit
 #endif
 
+/// Ordering options for the deck list.
+enum DeckSort: String, CaseIterable, Identifiable {
+    case recent, name, due
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .recent: "Date Added"
+        case .name: "Name"
+        case .due: "Most Due"
+        }
+    }
+}
+
 /// Sidebar: a Today entry (cross-deck review queue) above the deck list, with
 /// create / edit / delete.
 struct DeckLibraryView: View {
@@ -18,12 +31,20 @@ struct DeckLibraryView: View {
     @State private var showingDeckImporter = false
     @State private var search = ""
     @State private var deckPendingDeletion: Deck?
+    @AppStorage("deckSort") private var deckSortRaw = DeckSort.recent.rawValue
 
+    private var deckSort: DeckSort { DeckSort(rawValue: deckSortRaw) ?? .recent }
     private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }
 
     private var filteredDecks: [Deck] {
-        guard !search.isEmpty else { return decks }
-        return decks.filter {
+        let sorted: [Deck]
+        switch deckSort {
+        case .recent: sorted = decks   // @Query is already ordered by createdAt
+        case .name: sorted = decks.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .due: sorted = decks.sorted { $0.dueCount > $1.dueCount }
+        }
+        guard !search.isEmpty else { return sorted }
+        return sorted.filter {
             $0.name.localizedCaseInsensitiveContains(search)
             || $0.deckDescription.localizedCaseInsensitiveContains(search)
         }
@@ -42,6 +63,7 @@ struct DeckLibraryView: View {
                         .tag(SidebarItem.deck(deck.persistentModelID))
                         .contextMenu {
                             Button { editorMode = .edit(deck) } label: { Label("Edit", systemImage: "pencil") }
+                            Button { duplicate(deck) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
                             #if os(macOS)
                             Button { revealInFinder(deck) } label: { Label("Reveal in Finder", systemImage: "folder") }
                             #endif
@@ -61,6 +83,8 @@ struct DeckLibraryView: View {
         .listStyle(.sidebar)
         .navigationTitle("Flashcards")
         .searchable(text: $search, prompt: "Search decks")
+        .onChange(of: AppActions.shared.newDeckTick) { _, _ in editorMode = .new }
+        .dropDestination(for: URL.self) { urls, _ in importDroppedDecks(urls) }
         #if os(macOS)
         // Leave the sidebar toggle at the system default position (inside the sidebar);
         // a custom .navigation toggle lands *outside* the panel. "+ New Deck" goes at the
@@ -72,6 +96,10 @@ struct DeckLibraryView: View {
                     .menuIndicator(.hidden)
                     .fixedSize()
                 Spacer()
+                sortMenu
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
             }
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.vertical, 8)
@@ -114,6 +142,7 @@ struct DeckLibraryView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Button { showingSettings = true } label: { Image(systemName: "gearshape") }
             }
+            ToolbarItem(placement: .topBarLeading) { sortMenu }
         }
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
@@ -139,6 +168,16 @@ struct DeckLibraryView: View {
         }
     }
 
+    @ViewBuilder private var sortMenu: some View {
+        Menu {
+            Picker("Sort by", selection: $deckSortRaw) {
+                ForEach(DeckSort.allCases) { Text($0.title).tag($0.rawValue) }
+            }
+        } label: {
+            Label("Sort", systemImage: "arrow.up.arrow.down")
+        }
+    }
+
     private func delete(_ deck: Deck) {
         if selection == .deck(deck.persistentModelID) { selection = .today }
         context.delete(deck)
@@ -159,6 +198,37 @@ struct DeckLibraryView: View {
         try? context.save()
         DeckStore.persist(context)
         if let imported { selection = .deck(imported.persistentModelID) }
+    }
+
+    @discardableResult
+    private func importDroppedDecks(_ urls: [URL]) -> Bool {
+        let deckURLs = urls.filter { $0.pathExtension == DeckStore.fileExtension }
+        guard !deckURLs.isEmpty else { return false }
+        var imported: Deck?
+        for url in deckURLs {
+            if let deck = DeckStore.importDeck(from: url, into: context) { imported = deck }
+        }
+        try? context.save()
+        DeckStore.persist(context)
+        if let imported { selection = .deck(imported.persistentModelID) }
+        return imported != nil
+    }
+
+    private func duplicate(_ deck: Deck) {
+        let copy = Deck(
+            name: deck.name.isEmpty ? "Untitled Deck Copy" : "\(deck.name) Copy",
+            deckDescription: deck.deckDescription,
+            colorHex: deck.colorHex,
+            backLabel: deck.backLabel,
+            studyReversed: deck.studyReversed
+        )
+        context.insert(copy)
+        for card in deck.cardArray.sorted(by: { $0.createdAt < $1.createdAt }) {
+            context.insert(Card(term: card.term, definition: card.definition, deck: copy))
+        }
+        try? context.save()
+        DeckStore.persist(context)
+        selection = .deck(copy.persistentModelID)
     }
 
     #if os(macOS)

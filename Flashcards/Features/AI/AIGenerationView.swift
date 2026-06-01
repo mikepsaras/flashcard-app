@@ -94,6 +94,10 @@ struct AIGenerationView: View {
                 Label("Connect an API Key", systemImage: "sparkles")
             } description: {
                 Text("Add an OpenAI, Google, or Anthropic key in Settings → AI to generate cards.")
+            } actions: {
+                #if os(macOS)
+                SettingsLink { Text("Open Settings…") }
+                #endif
             }
         } else {
             switch phase {

@@ -30,6 +30,12 @@ struct FlashcardsApp: App {
         #if os(macOS)
         .defaultSize(width: 1100, height: 820)
         .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Deck") { AppActions.shared.newDeckTick += 1 }
+                    .keyboardShortcut("n", modifiers: .command)
+            }
+        }
         #endif
 
         #if os(macOS)

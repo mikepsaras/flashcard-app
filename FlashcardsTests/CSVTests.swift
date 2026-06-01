@@ -35,6 +35,16 @@ import Testing
         #expect(rows.count == 2)
     }
 
+    @Test func handlesCRLFLineEndings() {
+        // Windows / Excel exports use CRLF. Compare the whole array (no indexing) so a
+        // regression fails cleanly instead of trapping on an out-of-bounds subscript.
+        let rows = CSVCodec.parse("Term,Definition\r\nSprint,A time-box\r\nScrum,A framework\r\n")
+        #expect(rows == [
+            CSVCodec.Row(term: "Sprint", definition: "A time-box"),
+            CSVCodec.Row(term: "Scrum", definition: "A framework"),
+        ])
+    }
+
     @Test func exportEscapesSpecialCharacters() {
         let csv = CSVCodec.export([Card(term: "a,b", definition: "quote\"x")])
         #expect(csv.contains("\"a,b\""))

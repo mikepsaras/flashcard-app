@@ -234,19 +234,24 @@ enum DeckStore {
     /// One-time import of the pre-file-storage on-disk SwiftData store, if present,
     /// so existing decks survive the switch. Best-effort; returns whether anything migrated.
     @discardableResult
-    static func migrateLegacyStore(into context: ModelContext) -> Bool {
+    static func migrateLegacyStore(into context: ModelContext, storeURL: URL? = nil) -> Bool {
         // Guard against re-importing the old store on a later launch (e.g. if the user
         // empties the .deck folder), which would silently duplicate every legacy deck.
         let migratedKey = "didMigrateLegacyStore"
         guard !UserDefaults.standard.bool(forKey: migratedKey) else { return false }
 
-        guard let appSupport = try? FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false
-        ) else { return false }
-        let storeURL = appSupport.appendingPathComponent("default.store")
-        guard FileManager.default.fileExists(atPath: storeURL.path) else { return false }
+        let resolvedURL: URL
+        if let storeURL {
+            resolvedURL = storeURL
+        } else {
+            guard let appSupport = try? FileManager.default.url(
+                for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false
+            ) else { return false }
+            resolvedURL = appSupport.appendingPathComponent("default.store")
+        }
+        guard FileManager.default.fileExists(atPath: resolvedURL.path) else { return false }
 
-        let configuration = ModelConfiguration(schema: schema, url: storeURL)
+        let configuration = ModelConfiguration(schema: schema, url: resolvedURL)
         guard let legacy = try? ModelContainer(for: schema, configurations: [configuration]) else { return false }
         let decks = (try? legacy.mainContext.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
         guard !decks.isEmpty else { return false }
