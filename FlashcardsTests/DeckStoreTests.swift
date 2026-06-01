@@ -43,6 +43,19 @@ import SwiftData
         #expect(rebuilt.backLabel == "Capital")
     }
 
+    @Test func emptyBackLabelMeansLabelOff() throws {
+        // "Label off" is stored as an empty string and must survive round-trips
+        // (not be coerced back to "Definition", which only happens for old files).
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "NoLabel", backLabel: "")
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.backLabel == "")
+        let other = DeckStore.makeContainer()
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        #expect(rebuilt.backLabel == "")
+    }
+
     @Test func missingBackLabelDefaultsToDefinition() throws {
         // A .deck file written before backLabel existed must still load.
         let json = """

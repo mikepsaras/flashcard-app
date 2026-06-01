@@ -23,6 +23,7 @@ struct DeckEditorView: View {
     @State private var deckDescription: String
     @State private var colorHex: String
     @State private var backLabel: String
+    @State private var showLabel: Bool
 
     init(mode: DeckEditorMode) {
         self.mode = mode
@@ -32,11 +33,15 @@ struct DeckEditorView: View {
             _deckDescription = State(initialValue: "")
             _colorHex = State(initialValue: DeckPalette.default)
             _backLabel = State(initialValue: "Definition")
+            _showLabel = State(initialValue: true)
         case .edit(let deck):
             _name = State(initialValue: deck.name)
             _deckDescription = State(initialValue: deck.deckDescription)
             _colorHex = State(initialValue: deck.colorHex)
-            _backLabel = State(initialValue: deck.backLabel)
+            // An empty stored label means "no label"; keep a sensible default text
+            // to show if the user flips the toggle back on.
+            _backLabel = State(initialValue: deck.backLabel.isEmpty ? "Definition" : deck.backLabel)
+            _showLabel = State(initialValue: !deck.backLabel.isEmpty)
         }
     }
 
@@ -59,11 +64,16 @@ struct DeckEditorView: View {
                     ClearableTextField(placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
                 }
                 Section {
-                    ClearableTextField(placeholder: "Definition", text: $backLabel)
+                    Toggle("Show answer label", isOn: $showLabel.animation())
+                    if showLabel {
+                        ClearableTextField(placeholder: "Definition", text: $backLabel)
+                    }
                 } header: {
                     Text("Answer label")
                 } footer: {
-                    Text("The small label above the answer side of each card — e.g. Definition, Capital, Translation.")
+                    Text(showLabel
+                         ? "The small label above the answer side of each card — e.g. Definition, Capital, Translation."
+                         : "No label is shown above the answer side.")
                 }
                 Section("Color") {
                     colorGrid
@@ -108,7 +118,8 @@ struct DeckEditorView: View {
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        let label = trimmedLabel.isEmpty ? "Definition" : trimmedLabel
+        // Toggle off ⇒ store an empty label (no label shown on the card back).
+        let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         switch mode {
         case .new:
             let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label)
