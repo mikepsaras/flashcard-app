@@ -73,6 +73,7 @@ final class StudySessionTests {
         let cards = makeCards(2)
         let card0 = cards[0]
         let dueBefore = card0.dueDate
+        let modifiedBefore = card0.modifiedAt
 
         let session = StudySession(cards: cards, trackLearning: true)
         session.grade(known: true)
@@ -85,6 +86,7 @@ final class StudySessionTests {
         #expect(card0.dueDate == dueBefore)      // schedule restored exactly
         #expect(card0.repetitions == 0)
         #expect(card0.lastReviewedAt == nil)
+        #expect(card0.modifiedAt == modifiedBefore)   // and modifiedAt isn't left bumped
         #expect(session.canUndo == false)
     }
 

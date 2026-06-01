@@ -20,6 +20,9 @@ struct DeckDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            #if os(macOS)
+            Divider()   // separates the header band from the list (same bg color on macOS)
+            #endif
             cardList
         }
         .background(Theme.groupedBackground)

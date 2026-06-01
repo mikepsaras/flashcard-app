@@ -19,6 +19,7 @@ final class StudySession {
         let wasShowingDefinition: Bool
         let previousState: SchedulingState
         let previousReviewedAt: Date?
+        let previousModifiedAt: Date
         let previousIndex: Int
         let previousCorrect: Int
         let previousWrong: Int
@@ -60,6 +61,7 @@ final class StudySession {
             wasShowingDefinition: isShowingDefinition,
             previousState: card.schedulingState,
             previousReviewedAt: card.lastReviewedAt,
+            previousModifiedAt: card.modifiedAt,
             previousIndex: index,
             previousCorrect: correctCount,
             previousWrong: wrongCount
@@ -84,6 +86,7 @@ final class StudySession {
             card.repetitions = move.previousState.repetitions
             card.dueDate = move.previousState.dueDate
             card.lastReviewedAt = move.previousReviewedAt
+            card.modifiedAt = move.previousModifiedAt
         }
 
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {

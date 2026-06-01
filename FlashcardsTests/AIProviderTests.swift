@@ -81,6 +81,30 @@ import Foundation
         #expect(cards.count == 1)
     }
 
+    @Test func ignoresProseWithStrayBraces() throws {
+        // Prose containing its own braces must not break extraction.
+        let messy = "Sure, I'll make {3} cards:\n{\"cards\":[{\"term\":\"A\",\"definition\":\"B\"}]}\nEnjoy!"
+        let cards = try CardJSON.parseCards(from: messy)
+        #expect(cards.count == 1)
+        #expect(cards[0].term == "A")
+    }
+
+    @Test func parsesBareTopLevelArray() throws {
+        // A provider that answers with a bare array (no {"cards":…} wrapper).
+        let bare = "[{\"term\":\"A\",\"definition\":\"B\"},{\"term\":\"C\",\"definition\":\"D\"}]"
+        let cards = try CardJSON.parseCards(from: bare)
+        #expect(cards.count == 2)
+        #expect(cards[1].term == "C")
+    }
+
+    @Test func ignoresBracesInsideStringValues() throws {
+        // A definition that literally contains braces shouldn't confuse the scanner.
+        let json = "{\"cards\":[{\"term\":\"Set\",\"definition\":\"Written as {1, 2, 3}\"}]}"
+        let cards = try CardJSON.parseCards(from: json)
+        #expect(cards.count == 1)
+        #expect(cards[0].definition == "Written as {1, 2, 3}")
+    }
+
     @Test func dropsEmptyTerms() throws {
         let json = #"{"cards":[{"term":"","definition":"x"},{"term":"Keep","definition":"y"}]}"#
         let cards = try CardJSON.parseCards(from: json)

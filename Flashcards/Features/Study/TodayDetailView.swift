@@ -27,6 +27,9 @@ struct TodayDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     header
+                    #if os(macOS)
+                    Divider()   // separates the header band from the list (same bg color on macOS)
+                    #endif
                     breakdown
                 }
             }

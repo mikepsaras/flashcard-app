@@ -72,15 +72,27 @@ enum DeckStore {
         let decks = (try? context.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
         var usedNames = Set<String>()
         var written = Set<String>()
+        var failedIDs = Set<UUID>()
 
         for deck in decks {
             let filename = uniqueFilename(for: deck, used: &usedNames)
-            written.insert(filename)
-            if let data = try? DeckCodec.encode(deck) {
-                try? data.write(to: directory.appendingPathComponent(filename), options: .atomic)
+            // Only count a file as "written" after the encode AND atomic write both
+            // succeed — otherwise the prune step below could delete a deck's last good
+            // file on a transient failure and silently lose data.
+            if let data = try? DeckCodec.encode(deck),
+               (try? data.write(to: directory.appendingPathComponent(filename), options: .atomic)) != nil {
+                written.insert(filename)
+            } else {
+                failedIDs.insert(deck.id)
             }
         }
         for url in deckFiles(in: directory) where !written.contains(url.lastPathComponent) {
+            // Don't prune a file belonging to a deck whose write just failed: keep its
+            // previous on-disk copy rather than losing it.
+            if !failedIDs.isEmpty,
+               let data = try? Data(contentsOf: url),
+               let dto = try? DeckCodec.decodeDTO(data),
+               failedIDs.contains(dto.id) { continue }
             try? FileManager.default.removeItem(at: url)
         }
     }
@@ -116,6 +128,11 @@ enum DeckStore {
     /// so existing decks survive the switch. Best-effort; returns whether anything migrated.
     @discardableResult
     static func migrateLegacyStore(into context: ModelContext) -> Bool {
+        // Guard against re-importing the old store on a later launch (e.g. if the user
+        // empties the .deck folder), which would silently duplicate every legacy deck.
+        let migratedKey = "didMigrateLegacyStore"
+        guard !UserDefaults.standard.bool(forKey: migratedKey) else { return false }
+
         guard let appSupport = try? FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false
         ) else { return false }
@@ -131,6 +148,7 @@ enum DeckStore {
             guard let data = try? DeckCodec.encode(deck), let dto = try? DeckCodec.decodeDTO(data) else { continue }
             DeckCodec.makeDeck(from: dto, in: context)
         }
+        UserDefaults.standard.set(true, forKey: migratedKey)
         return true
     }
 

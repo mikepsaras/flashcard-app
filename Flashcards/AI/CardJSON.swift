@@ -41,14 +41,30 @@ enum CardJSON {
     }
 
     static func parseCards(from text: String) throws -> [GeneratedCard] {
-        guard let json = firstJSONObject(in: stripFences(text)),
-              let data = json.data(using: .utf8)
-        else { throw AIError.decoding }
+        let cleaned = stripFences(text)
 
-        guard let list = try? JSONDecoder().decode(CardList.self, from: data) else {
-            throw AIError.decoding
+        // Try each balanced { … } as a {"cards":[ … ]} envelope. Scanning every
+        // top-level object (not just first-brace-to-last-brace) means stray prose
+        // braces like "I'll make {3} cards: { …json… }" no longer break parsing.
+        for object in balancedSpans(in: cleaned, open: "{", close: "}") {
+            if let data = object.data(using: .utf8),
+               let list = try? JSONDecoder().decode(CardList.self, from: data) {
+                return mapped(list.cards)
+            }
         }
-        return list.cards
+        // Fallback: a bare top-level array [ {term,definition}, … ] (some providers,
+        // e.g. Anthropic with no JSON mode, may answer without the "cards" wrapper).
+        for array in balancedSpans(in: cleaned, open: "[", close: "]") {
+            if let data = array.data(using: .utf8),
+               let items = try? JSONDecoder().decode([CardList.Item].self, from: data) {
+                return mapped(items)
+            }
+        }
+        throw AIError.decoding
+    }
+
+    private static func mapped(_ items: [CardList.Item]) -> [GeneratedCard] {
+        items
             .map {
                 GeneratedCard(
                     term: $0.term.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -60,21 +76,58 @@ enum CardJSON {
 
     /// Removes a surrounding ```json … ``` fence if present.
     static func stripFences(_ text: String) -> String {
-        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard t.hasPrefix("```") else { return t }
-        t = t.replacingOccurrences(of: "```json", with: "```")
-            .replacingOccurrences(of: "```JSON", with: "```")
         let parts = t.components(separatedBy: "```")
-        // ["", "<content>", ""] for a well-formed fence
-        return parts.count >= 2 ? parts[1] : t
+        // ["", "json\n<content>", ""] (or ["", "<content>", ""]). Take the body and
+        // drop a leading language tag like "json".
+        guard parts.count >= 2 else { return t }
+        var body = parts[1]
+        if let newline = body.firstIndex(of: "\n") {
+            let firstLine = body[..<newline].trimmingCharacters(in: .whitespaces).lowercased()
+            if firstLine == "json" || firstLine.isEmpty {
+                body = String(body[body.index(after: newline)...])
+            }
+        }
+        return body.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Extracts the outermost `{ … }` so leading/trailing prose is ignored.
-    static func firstJSONObject(in text: String) -> String? {
-        guard let start = text.firstIndex(of: "{"),
-              let end = text.lastIndex(of: "}"),
-              start < end
-        else { return nil }
-        return String(text[start...end])
+    /// All top-level balanced `open … close` substrings, in order. String-literal and
+    /// escape aware, so braces/brackets inside JSON string values aren't miscounted.
+    static func balancedSpans(in text: String, open: Character, close: Character) -> [String] {
+        let chars = Array(text)
+        var spans: [String] = []
+        var i = 0
+        while i < chars.count {
+            guard chars[i] == open else { i += 1; continue }
+            var depth = 0
+            var inString = false
+            var escaped = false
+            var j = i
+            var closed = false
+            while j < chars.count {
+                let c = chars[j]
+                if inString {
+                    if escaped { escaped = false }
+                    else if c == "\\" { escaped = true }
+                    else if c == "\"" { inString = false }
+                } else if c == "\"" {
+                    inString = true
+                } else if c == open {
+                    depth += 1
+                } else if c == close {
+                    depth -= 1
+                    if depth == 0 { closed = true; break }
+                }
+                j += 1
+            }
+            if closed {
+                spans.append(String(chars[i...j]))
+                i = j + 1
+            } else {
+                i += 1
+            }
+        }
+        return spans
     }
 }

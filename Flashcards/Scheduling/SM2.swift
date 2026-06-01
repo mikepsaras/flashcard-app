@@ -39,7 +39,15 @@ enum SM2 {
             switch repetitions {
             case 0:  interval = 1
             case 1:  interval = 6
-            default: interval = Int((Double(interval) * ease).rounded())
+            default:
+                // "Hard" (q=3) advances only modestly (~1.2×) so it's a genuinely
+                // shorter step than "Good"/"Easy" (which use the full ease factor),
+                // instead of scheduling the identical interval.
+                if grade == .hard {
+                    interval = max(interval + 1, Int((Double(interval) * 1.2).rounded()))
+                } else {
+                    interval = Int((Double(interval) * ease).rounded())
+                }
             }
             repetitions += 1
         } else {
@@ -52,7 +60,12 @@ enum SM2 {
         ease = max(ease, minimumEaseFactor)
 
         let days = max(interval, 1)
-        let due = calendar.date(byAdding: .day, value: days, to: now) ?? now
+        // Snap the due date to the START OF the target day. Without this, a card
+        // reviewed at 2pm becomes due "tomorrow at 2pm", so it's missing from the
+        // morning's Today queue and every lapse drifts the time later. Start-of-day
+        // means it's due first thing and stays due all day.
+        let target = calendar.date(byAdding: .day, value: days, to: now) ?? now
+        let due = calendar.startOfDay(for: target)
 
         return SchedulingState(
             easeFactor: ease,

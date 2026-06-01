@@ -21,7 +21,12 @@ enum CSVCodec {
     }
 
     private static func escape(_ s: String) -> String {
-        if s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r") {
+        // Quote when the field contains a delimiter/quote/newline, OR has leading or
+        // trailing whitespace — otherwise import would trim that whitespace away and
+        // the export→import round-trip wouldn't be lossless.
+        let needsQuoting = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")
+            || s.first?.isWhitespace == true || s.last?.isWhitespace == true
+        if needsQuoting {
             return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }
         return s
@@ -29,28 +34,49 @@ enum CSVCodec {
 
     // MARK: Import
 
+    /// One parsed CSV field, tagged with whether it was quoted in the source.
+    private struct Field { let text: String; let quoted: Bool }
+
     static func parse(_ text: String) -> [Row] {
         let records = parseRecords(text)
         var rows: [Row] = []
         for (index, record) in records.enumerated() {
             guard !record.isEmpty else { continue }
-            let term = record[0].trimmingCharacters(in: .whitespacesAndNewlines)
-            let definition = (record.count > 1 ? record[1] : "").trimmingCharacters(in: .whitespacesAndNewlines)
-            // Skip an optional header row.
-            if index == 0, term.lowercased() == "term", definition.lowercased() == "definition" { continue }
-            if term.isEmpty && definition.isEmpty { continue }
+            // Quoted fields are preserved verbatim; only unquoted fields are trimmed
+            // (so a quoted "  spaced  " survives import intact).
+            let term = value(record, 0)
+            let definition = value(record, 1)
+            // Trim only for header/blank detection — never mutate quoted content.
+            let termKey = term.trimmingCharacters(in: .whitespacesAndNewlines)
+            let defKey = definition.trimmingCharacters(in: .whitespacesAndNewlines)
+            if index == 0, termKey.lowercased() == "term", defKey.lowercased() == "definition" { continue }
+            if termKey.isEmpty && defKey.isEmpty { continue }
             rows.append(Row(term: term, definition: definition))
         }
         return rows
     }
 
-    private static func parseRecords(_ text: String) -> [[String]] {
-        var records: [[String]] = []
-        var record: [String] = []
+    private static func value(_ record: [Field], _ i: Int) -> String {
+        guard i < record.count else { return "" }
+        let field = record[i]
+        return field.quoted ? field.text : field.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func parseRecords(_ text: String) -> [[Field]] {
+        var records: [[Field]] = []
+        var record: [Field] = []
         var field = ""
+        var fieldQuoted = false
         var inQuotes = false
         let chars = Array(text)
         var i = 0
+
+        func endField() {
+            record.append(Field(text: field, quoted: fieldQuoted))
+            field = ""; fieldQuoted = false
+        }
+        func endRecord() { endField(); records.append(record); record = [] }
+
         while i < chars.count {
             let ch = chars[i]
             if inQuotes {
@@ -65,13 +91,13 @@ enum CSVCodec {
             } else {
                 switch ch {
                 case "\"":
-                    inQuotes = true; i += 1
+                    inQuotes = true; fieldQuoted = true; i += 1
                 case ",":
-                    record.append(field); field = ""; i += 1
+                    endField(); i += 1
                 case "\n":
-                    record.append(field); records.append(record); record = []; field = ""; i += 1
+                    endRecord(); i += 1
                 case "\r":
-                    record.append(field); records.append(record); record = []; field = ""
+                    endRecord()
                     i += (i + 1 < chars.count && chars[i + 1] == "\n") ? 2 : 1
                 default:
                     field.append(ch); i += 1
@@ -79,7 +105,7 @@ enum CSVCodec {
             }
         }
         if !field.isEmpty || !record.isEmpty {
-            record.append(field)
+            endField()
             records.append(record)
         }
         return records

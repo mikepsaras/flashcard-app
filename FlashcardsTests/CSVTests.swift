@@ -41,6 +41,21 @@ import Testing
         #expect(csv.contains("\"quote\"\"x\""))
     }
 
+    @Test func preservesLeadingAndTrailingWhitespace() {
+        // Whitespace-significant content must survive export→import losslessly.
+        let cards = [Card(term: "  spaced  ", definition: "trailing ")]
+        let rows = CSVCodec.parse(CSVCodec.export(cards))
+        #expect(rows.count == 1)
+        #expect(rows[0].term == "  spaced  ")
+        #expect(rows[0].definition == "trailing ")
+    }
+
+    @Test func trimsUnquotedFields() {
+        // Hand-written CSV with spaces after the comma should still be trimmed.
+        let rows = CSVCodec.parse("Term,Definition\nSprint, A time-box \n")
+        #expect(rows[0] == CSVCodec.Row(term: "Sprint", definition: "A time-box"))
+    }
+
     @Test func roundTrips() {
         let cards = [
             Card(term: "Sprint", definition: "A, time-box"),

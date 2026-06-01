@@ -11,7 +11,29 @@ import Foundation
         let s = SM2.schedule(current: .initial(now: now), grade: .good, now: now, calendar: cal)
         #expect(s.interval == 1)
         #expect(s.repetitions == 1)
-        #expect(s.dueDate == cal.date(byAdding: .day, value: 1, to: now))
+        // Due one day out, snapped to the start of that day.
+        #expect(s.dueDate == cal.startOfDay(for: cal.date(byAdding: .day, value: 1, to: now)!))
+    }
+
+    @Test func dueDateSnapsToStartOfDay() {
+        let s = SM2.schedule(current: .initial(now: now), grade: .good, now: now, calendar: cal)
+        #expect(s.dueDate == cal.startOfDay(for: s.dueDate))   // exactly midnight
+        #expect(s.dueDate > now)                               // and in the future
+    }
+
+    @Test func hardAdvancesLessThanGoodOnMatureCards() {
+        // Mature card: two "good" reviews ⇒ interval 6, repetitions 2, EF 2.5.
+        var mature = SM2.schedule(current: .initial(now: now), grade: .good, now: now, calendar: cal)
+        mature = SM2.schedule(current: mature, grade: .good, now: now, calendar: cal)
+        #expect(mature.interval == 6)
+
+        let good = SM2.schedule(current: mature, grade: .good, now: now, calendar: cal)
+        let hard = SM2.schedule(current: mature, grade: .hard, now: now, calendar: cal)
+        #expect(good.interval == 15)          // 6 × 2.5 (full ease)
+        #expect(hard.interval == 7)           // max(7, round(6 × 1.2))
+        #expect(hard.interval < good.interval)
+        #expect(hard.interval > mature.interval)  // Hard still advances, just less
+        #expect(Grade.hard.isCorrect)             // Hard is a passing grade
     }
 
     @Test func secondCorrectReviewGivesIntervalSix() {
