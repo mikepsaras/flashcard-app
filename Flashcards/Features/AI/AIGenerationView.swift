@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// Generate flashcards from notes/topic with AI, review them, and add to a deck.
 /// Reused for both a brand-new deck and an existing one.
@@ -18,11 +19,13 @@ struct AIGenerationView: View {
     @State private var deckName = ""
     @State private var prompt = ""
     @State private var count = 10
+    @State private var countText = "10"
     @State private var autoCount = false
     @State private var phase: Phase = .input
     @State private var cards: [GeneratedCard] = []
     @State private var included: Set<UUID> = []
     @State private var errorText: String?
+    @State private var showingFileImporter = false
 
     enum Phase { case input, generating, review }
 
@@ -31,6 +34,14 @@ struct AIGenerationView: View {
     private var hasKey: Bool { !apiKey.trimmingCharacters(in: .whitespaces).isEmpty }
     private var selectedCount: Int { cards.filter { included.contains($0.id) }.count }
     private var canGenerate: Bool { !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    private var importTypes: [UTType] {
+        var types: [UTType] = [.plainText, .text]
+        for ext in ["md", "markdown"] {
+            if let type = UTType(filenameExtension: ext) { types.append(type) }
+        }
+        return types
+    }
 
     var body: some View {
         NavigationStack {
@@ -47,9 +58,14 @@ struct AIGenerationView: View {
                         ToolbarItem(placement: .confirmationAction) { confirmButton }
                     }
                 }
+                .fileImporter(
+                    isPresented: $showingFileImporter,
+                    allowedContentTypes: importTypes,
+                    allowsMultipleSelection: false
+                ) { result in importFile(result) }
         }
         #if os(macOS)
-        .frame(width: 540, height: 520)
+        .frame(width: 560, height: 540)
         #endif
     }
 
@@ -95,32 +111,61 @@ struct AIGenerationView: View {
                     ClearableTextField(placeholder: "e.g. Spanish Basics", text: $deckName)
                 }
             }
-            Section("Notes or topic") {
+
+            Section {
                 TextEditor(text: $prompt)
                     .font(Typography.body)
                     .frame(minHeight: 130)
+                Button {
+                    showingFileImporter = true
+                } label: {
+                    Label("Import from file…", systemImage: "doc.badge.plus")
+                }
+            } header: {
+                Text("Notes or topic")
+            } footer: {
+                Text("Type or paste text, or import a .txt / .md file to use as the source.")
             }
+
             Section {
-                Toggle("Let AI choose the count", isOn: $autoCount.animation())
-                if !autoCount {
-                    HStack {
-                        Text("Number of cards")
-                        Spacer()
-                        TextField("10", value: $count, format: .number)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 64)
+                HStack(spacing: 10) {
+                    Text("Number of cards")
+                        .lineLimit(1)
+                        .foregroundStyle(autoCount ? .secondary : .primary)
+                    Spacer(minLength: 8)
+                    if !autoCount {
+                        TextField("", text: $countText)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 46)
+                            .textFieldStyle(.roundedBorder)
                             #if os(iOS)
                             .keyboardType(.numberPad)
                             #endif
-                        Stepper("", value: $count, in: 1...100).labelsHidden()
+                        #if os(macOS)
+                        Stepper("", value: $count, in: 1...100)
+                            .labelsHidden()
+                        #endif
                     }
+                    Toggle("Auto", isOn: $autoCount.animation())
+                        #if os(macOS)
+                        .toggleStyle(.switch)
+                        #endif
+                        .fixedSize()
+                }
+                .onChange(of: countText) { _, newValue in
+                    let filtered = String(newValue.filter(\.isNumber).prefix(3))
+                    if filtered != newValue { countText = filtered; return }
+                    if let value = Int(filtered) { count = min(max(value, 1), 100) }
+                }
+                .onChange(of: count) { _, newValue in
+                    if countText != String(newValue) { countText = String(newValue) }
                 }
             } footer: {
                 Text(autoCount
                      ? "The AI decides how many cards to create. Generated with \(provider.displayName)."
                      : "Generated with \(provider.displayName). Review and edit before adding.")
             }
-            .onChange(of: count) { _, newValue in count = min(max(newValue, 1), 100) }
+
             if let errorText {
                 Section {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
@@ -135,7 +180,9 @@ struct AIGenerationView: View {
     private var generatingState: some View {
         VStack(spacing: 16) {
             ProgressView().controlSize(.large)
-            Text("Generating \(count) cards with \(provider.displayName)…")
+            Text(autoCount
+                 ? "Generating cards with \(provider.displayName)…"
+                 : "Generating \(count) cards with \(provider.displayName)…")
                 .font(Typography.callout)
                 .foregroundStyle(.secondary)
         }
@@ -179,6 +226,19 @@ struct AIGenerationView: View {
 
     private func toggle(_ id: UUID) {
         if included.contains(id) { included.remove(id) } else { included.insert(id) }
+    }
+
+    private func importFile(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+
+        let capped = String(text.prefix(20_000))   // keep request sizes sane
+        prompt = prompt.isEmpty ? capped : prompt + "\n\n" + capped
+        if case .newDeck = target, deckName.trimmingCharacters(in: .whitespaces).isEmpty {
+            deckName = url.deletingPathExtension().lastPathComponent
+        }
     }
 
     private func generate() {
