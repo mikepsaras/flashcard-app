@@ -17,8 +17,7 @@ struct TodayDetailView: View {
     private var totalDue: Int { dueDecks.reduce(0) { $0 + $1.count } }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        Group {
             if totalDue == 0 {
                 ContentUnavailableView(
                     "All Caught Up",
@@ -26,9 +25,13 @@ struct TodayDetailView: View {
                     description: Text("No cards are due right now. Check back later.")
                 )
             } else {
-                breakdown
+                VStack(spacing: 0) {
+                    header
+                    breakdown
+                }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.groupedBackground)
         .navigationTitle("Today")
         #if os(iOS)
@@ -41,18 +44,16 @@ struct TodayDetailView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("\(totalDue)")
                     .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .foregroundStyle(totalDue > 0 ? Theme.accent : .secondary)
+                    .foregroundStyle(Theme.accent)
                     .monospacedDigit()
                 Text(totalDue == 1 ? "card due" : "cards due")
                     .font(Typography.title)
                     .foregroundStyle(.secondary)
             }
 
-            PrimaryButton(title: totalDue > 0 ? "Study \(totalDue) Due" : "Nothing Due", systemImage: "play.fill") {
+            PrimaryButton(title: "Study \(totalDue) Due", systemImage: "play.fill") {
                 onStudy(todayPlan())
             }
-            .disabled(totalDue == 0)
-            .opacity(totalDue == 0 ? 0.5 : 1)
         }
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
