@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage(PersistenceController.syncEnabledKey) private var syncEnabled = false
+    @AppStorage(GradingMode.storageKey) private var gradingModeRaw = GradingMode.twoButton.rawValue
     /// Tracks the value at launch so we can tell the user when a relaunch is needed.
     @State private var launchSyncValue = UserDefaults.standard.bool(forKey: PersistenceController.syncEnabledKey)
 
@@ -9,6 +10,20 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker(selection: $gradingModeRaw) {
+                    ForEach(GradingMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                } label: {
+                    Label("Grading buttons", systemImage: "square.grid.2x2")
+                }
+            } header: {
+                Text("Studying")
+            } footer: {
+                Text("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler finer signal.")
+            }
+
             Section {
                 Toggle(isOn: $syncEnabled) {
                     Label("Sync with iCloud", systemImage: "icloud")

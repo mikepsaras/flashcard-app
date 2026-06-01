@@ -71,7 +71,9 @@ struct DeckEditorView: View {
                 }
             }
         }
-        .frame(minWidth: 400, minHeight: 460)
+        #if os(macOS)
+        .frame(width: 460, height: 440)
+        #endif
     }
 
     private var colorGrid: some View {

@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 import SwiftData
 @testable import Flashcards
 
@@ -101,5 +102,15 @@ final class StudySessionTests {
         session.shuffleRemaining()
         #expect(Set(session.cards.map(\.id)) == idsBefore)
         #expect(session.cards.count == 8)
+    }
+
+    /// Exercises the SwiftData #Predicate used by the Today queue at runtime
+    /// (predicates compile fine but can throw when fetched if unsupported).
+    @Test func todayDuePredicateFetchesDueCards() throws {
+        _ = makeCards(5)   // seeded cards default to dueDate == .now (due)
+        let now = Date.now
+        let descriptor = FetchDescriptor<Card>(predicate: #Predicate { $0.dueDate <= now })
+        let due = try container.mainContext.fetch(descriptor)
+        #expect(due.count == 5)
     }
 }

@@ -70,7 +70,9 @@ struct CardEditorView: View {
                 }
             }
         }
-        .frame(minWidth: 440, minHeight: 420)
+        #if os(macOS)
+        .frame(width: 480, height: 460)
+        #endif
     }
 
     private func save() {

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct DeckDetailView: View {
     @Environment(\.modelContext) private var context
@@ -8,6 +9,8 @@ struct DeckDetailView: View {
 
     @State private var cardEditor: CardEditorMode?
     @State private var showingDeckEditor = false
+    @State private var showingImporter = false
+    @State private var showingExporter = false
 
     private var sortedCards: [Card] {
         deck.cardArray.sorted { $0.createdAt < $1.createdAt }
@@ -28,7 +31,15 @@ struct DeckDetailView: View {
                 Button { cardEditor = .new } label: { Label("Add Card", systemImage: "plus") }
             }
             ToolbarItem(placement: .automatic) {
-                Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
+                Menu {
+                    Button { showingImporter = true } label: { Label("Import CSV…", systemImage: "square.and.arrow.down") }
+                    Button { showingExporter = true } label: { Label("Export CSV…", systemImage: "square.and.arrow.up") }
+                        .disabled(sortedCards.isEmpty)
+                    Divider()
+                    Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
             }
         }
         .sheet(item: $cardEditor) { mode in
@@ -37,6 +48,31 @@ struct DeckDetailView: View {
         .sheet(isPresented: $showingDeckEditor) {
             DeckEditorView(mode: .edit(deck))
         }
+        .fileExporter(
+            isPresented: $showingExporter,
+            document: CSVDocument(text: CSVCodec.export(sortedCards)),
+            contentType: .commaSeparatedText,
+            defaultFilename: deck.name.isEmpty ? "Flashcards" : deck.name
+        ) { _ in }
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: [.commaSeparatedText, .plainText, .text],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+    }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        for row in CSVCodec.parse(text) where !row.term.isEmpty {
+            context.insert(Card(term: row.term, definition: row.definition, deck: deck))
+        }
+        deck.modifiedAt = .now
+        try? context.save()
     }
 
     // MARK: Header

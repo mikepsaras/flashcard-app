@@ -1,40 +1,46 @@
 import SwiftUI
 import SwiftData
 
-/// Sidebar list of decks with create / edit / delete.
+/// Sidebar: a Today entry (cross-deck review queue) above the deck list, with
+/// create / edit / delete.
 struct DeckLibraryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
-    @Binding var selectedDeckID: PersistentIdentifier?
+    @Binding var selection: SidebarItem?
 
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
 
+    private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }
+
     var body: some View {
-        List(selection: $selectedDeckID) {
-            ForEach(decks) { deck in
-                DeckRowView(deck: deck)
-                    .tag(deck.persistentModelID)
-                    .contextMenu {
-                        Button { editorMode = .edit(deck) } label: { Label("Edit", systemImage: "pencil") }
-                        Button(role: .destructive) { delete(deck) } label: { Label("Delete", systemImage: "trash") }
-                    }
+        List(selection: $selection) {
+            Section {
+                TodayRow(dueCount: totalDue)
+                    .tag(SidebarItem.today)
             }
-            .onDelete(perform: deleteOffsets)
-        }
-        .listStyle(.sidebar)
-        .navigationTitle("Decks")
-        .overlay {
-            if decks.isEmpty {
-                ContentUnavailableView {
-                    Label("No Decks", systemImage: "rectangle.stack.badge.plus")
-                } description: {
-                    Text("Create your first deck to get started.")
-                } actions: {
-                    Button("New Deck") { editorMode = .new }
+
+            Section("Decks") {
+                ForEach(decks) { deck in
+                    DeckRowView(deck: deck)
+                        .tag(SidebarItem.deck(deck.persistentModelID))
+                        .contextMenu {
+                            Button { editorMode = .edit(deck) } label: { Label("Edit", systemImage: "pencil") }
+                            Button(role: .destructive) { delete(deck) } label: { Label("Delete", systemImage: "trash") }
+                        }
+                }
+                .onDelete(perform: deleteOffsets)
+
+                if decks.isEmpty {
+                    Button { editorMode = .new } label: {
+                        Label("Create your first deck", systemImage: "plus")
+                    }
+                    .foregroundStyle(.secondary)
                 }
             }
         }
+        .listStyle(.sidebar)
+        .navigationTitle("Flashcards")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
@@ -63,12 +69,47 @@ struct DeckLibraryView: View {
     }
 
     private func delete(_ deck: Deck) {
-        if selectedDeckID == deck.persistentModelID { selectedDeckID = nil }
+        if selection == .deck(deck.persistentModelID) { selection = .today }
         context.delete(deck)
         try? context.save()
     }
 
     private func deleteOffsets(_ offsets: IndexSet) {
         for index in offsets { delete(decks[index]) }
+    }
+}
+
+/// The "Today" sidebar row with a live due count.
+struct TodayRow: View {
+    let dueCount: Int
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Theme.accent)
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Today").font(Typography.headline)
+                Text(dueCount == 0 ? "All caught up" : "\(dueCount) due")
+                    .font(Typography.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 6)
+            if dueCount > 0 {
+                Text("\(dueCount)")
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Theme.accent, in: Capsule())
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

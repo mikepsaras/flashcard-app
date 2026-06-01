@@ -58,9 +58,10 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   builds the `ModelContainer`; sync flips `cloudKitDatabase` between `.automatic` and
   `.none`, falling back to local if a sync store can't be created. `SeedData` seeds
   sample decks on first launch.
-- `Flashcards/Features` — `DeckLibrary`, `DeckDetail` (CRUD editors), `Study`
-  (`StudySession` `@Observable @MainActor` state machine + the full-screen UI),
-  `Settings`.
+- `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review
+  queue), `DeckDetail` (CRUD editors + **CSV import/export** via `CSVCodec`), `Study`
+  (`StudySession` `@Observable @MainActor` state machine, full-screen UI driven by a
+  `StudyPlan`, 2- or 4-button grading), `Settings`.
 - `Flashcards/DesignSystem` — `Theme`, `Typography`, components, and `AppIconArtwork`
   (the icon is drawn in SwiftUI and rendered into the asset catalog).
 - Everything touching SwiftData runs on `@MainActor` (Swift 6 strict concurrency).

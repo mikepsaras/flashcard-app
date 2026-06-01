@@ -46,8 +46,13 @@ final class StudySession {
         }
     }
 
-    /// Grade the current card. `known` true ⇒ ✓ (good), false ⇒ ✕ (again).
+    /// Two-button convenience: ✓ ⇒ good, ✕ ⇒ again.
     func grade(known: Bool, now: Date = .now) {
+        grade(.from(known: known), now: now)
+    }
+
+    /// Grade the current card with an explicit SM-2 grade (used by 4-button mode).
+    func grade(_ grade: Grade, now: Date = .now) {
         guard let card = current else { return }
 
         history.append(Move(
@@ -61,11 +66,11 @@ final class StudySession {
         ))
 
         if trackLearning {
-            let updated = SM2.schedule(current: card.schedulingState, grade: .from(known: known), now: now)
+            let updated = SM2.schedule(current: card.schedulingState, grade: grade, now: now)
             card.apply(updated, reviewedAt: now)
         }
 
-        if known { correctCount += 1 } else { wrongCount += 1 }
+        if grade.isCorrect { correctCount += 1 } else { wrongCount += 1 }
         advance()
     }
 

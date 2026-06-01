@@ -1,36 +1,82 @@
 import SwiftUI
 import SwiftData
 
-/// Adaptive root: sidebar deck list + detail on macOS/iPad, collapsing to a stack
-/// on iPhone. Study is presented over everything (full-screen on iOS, sheet on mac).
+/// Sidebar selection: the cross-deck Today queue, or a specific deck.
+enum SidebarItem: Hashable {
+    case today
+    case deck(PersistentIdentifier)
+}
+
+/// Adaptive root: sidebar (Today + decks) + detail on macOS/iPad, collapsing to a
+/// stack on iPhone. Study is presented over everything via a `StudyPlan`.
 struct RootView: View {
+    @Environment(\.modelContext) private var context
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
-    @State private var selectedDeckID: PersistentIdentifier?
-    @State private var studyDeck: Deck?
+    @State private var studyPlan: StudyPlan?
+
+    // Auto-select Today on macOS; start at the list on iPhone.
+    #if os(macOS)
+    @State private var selection: SidebarItem? = .today
+    #else
+    @State private var selection: SidebarItem?
+    #endif
 
     private var selectedDeck: Deck? {
-        guard let id = selectedDeckID else { return nil }
-        return decks.first { $0.persistentModelID == id }
+        if case .deck(let id) = selection {
+            return decks.first { $0.persistentModelID == id }
+        }
+        return nil
     }
 
     var body: some View {
         NavigationSplitView {
-            DeckLibraryView(selectedDeckID: $selectedDeckID)
+            DeckLibraryView(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 250, ideal: 290, max: 360)
         } detail: {
+            detail
+        }
+        .studyCover(item: $studyPlan) { plan in
+            StudySessionView(plan: plan)
+        }
+        #if os(macOS)
+        .frame(minWidth: 900, minHeight: 640)
+        #endif
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch selection {
+        case .today:
+            TodayDetailView { studyPlan = $0 }
+        case .deck:
             if let deck = selectedDeck {
-                DeckDetailView(deck: deck) { studyDeck = deck }
+                DeckDetailView(deck: deck) { studyPlan = deckPlan(deck) }
                     .id(deck.persistentModelID)
             } else {
-                ContentUnavailableView(
-                    "Select a Deck",
-                    systemImage: "rectangle.on.rectangle.angled",
-                    description: Text("Choose a deck to see its cards and start studying.")
-                )
+                placeholder
             }
+        case nil:
+            placeholder
         }
-        .studyCover(item: $studyDeck) { deck in
-            StudySessionView(deck: deck)
+    }
+
+    private var placeholder: some View {
+        ContentUnavailableView(
+            "Select a Deck",
+            systemImage: "rectangle.on.rectangle.angled",
+            description: Text("Choose Today or a deck to start studying.")
+        )
+    }
+
+    private func deckPlan(_ deck: Deck) -> StudyPlan {
+        StudyPlan(
+            id: "deck-\(deck.id.uuidString)",
+            title: deck.name.isEmpty ? "Study" : deck.name,
+            accent: Color(hex: deck.colorHex),
+            exportText: deck.cardArray.map { "\($0.term) — \($0.definition)" }.joined(separator: "\n")
+        ) {
+            let due = deck.dueCards.sorted { $0.dueDate < $1.dueDate }
+            return due.isEmpty ? deck.cardArray : due
         }
     }
 }

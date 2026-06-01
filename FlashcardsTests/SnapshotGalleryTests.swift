@@ -10,17 +10,24 @@ import SwiftData
 @MainActor
 struct SnapshotGalleryTests {
 
-    @Test func renderGallery() throws {
+    private func makeContext() throws -> (ModelContainer, Deck, StudyPlan) {
         let container = PersistenceController.previewContainer(seeded: true)
         let decks = try container.mainContext.fetch(
             FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)])
         )
-        let pmDeck = decks.first { $0.name.contains("Project") } ?? decks.first!
+        let deck = decks.first { $0.name.contains("Project") } ?? decks.first!
+        let due = deck.dueCards.sorted { $0.dueDate < $1.dueDate }
+        let plan = StudyPlan(id: "test", title: deck.name, accent: Color(hex: deck.colorHex), exportText: nil) { due }
+        return (container, deck, plan)
+    }
+
+    @Test func renderGallery() throws {
+        UserDefaults.standard.removeObject(forKey: GradingMode.storageKey) // default = two-button
+        let (container, _, plan) = try makeContext()
 
         let term = "User Stories"
         let def = "Short, simple descriptions of a feature told from the perspective of the user who desires it."
 
-        // Card faces
         try Snapshot.write(
             FlashcardView(term: term, definition: def, isShowingDefinition: false, onShuffle: {}, onTap: {})
                 .padding(28).background(Theme.windowBackground),
@@ -31,31 +38,42 @@ struct SnapshotGalleryTests {
                 .padding(28).background(Theme.windowBackground),
             size: CGSize(width: 620, height: 600), name: "02_card_back")
 
-        // Full study screen — mac proportions (closest to the reference screenshot)
         try Snapshot.write(
-            StudySessionView(deck: pmDeck).modelContainer(container),
+            StudySessionView(plan: plan).modelContainer(container),
             size: CGSize(width: 960, height: 720), name: "03_study_screen_mac")
 
-        // Full study screen — iPhone proportions. The view derives `compact` from
-        // its own width via GeometryReader, so 402pt renders the real phone layout.
         try Snapshot.write(
-            StudySessionView(deck: pmDeck).modelContainer(container),
+            StudySessionView(plan: plan).modelContainer(container),
             size: CGSize(width: 402, height: 850), name: "04_study_screen_phone")
 
-        // Deck list rows
+        // Two-button controls
         try Snapshot.write(
-            VStack(spacing: 6) { ForEach(decks) { DeckRowView(deck: $0) } }
-                .padding(20)
-                .background(Theme.windowBackground),
-            size: CGSize(width: 380, height: 170), name: "05_deck_rows")
-
-        // Controls bar
-        try Snapshot.write(
-            StudyControlsBar(canUndo: true, trackLearning: .constant(true), onUndo: {}, onWrong: {}, onCorrect: {})
+            StudyControlsBar(canUndo: true, trackLearning: .constant(true), onUndo: {}, onGrade: { _ in })
                 .padding(28).background(Theme.windowBackground),
-            size: CGSize(width: 620, height: 140), name: "06_controls")
+            size: CGSize(width: 620, height: 140), name: "06_controls_two_button")
 
-        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/03_study_screen_mac.png"))
+        // Four-button controls
+        try Snapshot.write(
+            StudyControlsBar(canUndo: true, fourButton: true, trackLearning: .constant(true), onUndo: {}, onGrade: { _ in })
+                .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 620, height: 200), name: "07_controls_four_button")
+
+        // Today detail
+        try Snapshot.write(
+            TodayDetailView { _ in }.modelContainer(container),
+            size: CGSize(width: 900, height: 620), name: "08_today_detail")
+
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/07_controls_four_button.png"))
+    }
+
+    @Test func renderFourButtonStudyScreen() throws {
+        UserDefaults.standard.set(GradingMode.fourButton.rawValue, forKey: GradingMode.storageKey)
+        defer { UserDefaults.standard.removeObject(forKey: GradingMode.storageKey) }
+        let (container, _, plan) = try makeContext()
+        try Snapshot.write(
+            StudySessionView(plan: plan).modelContainer(container),
+            size: CGSize(width: 960, height: 720), name: "10_study_four_button_mac")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/10_study_four_button_mac.png"))
     }
 }
 #endif
