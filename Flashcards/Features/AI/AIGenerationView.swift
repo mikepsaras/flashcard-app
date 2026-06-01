@@ -146,11 +146,8 @@ struct AIGenerationView: View {
                             .labelsHidden()
                         #endif
                     }
-                    Toggle("Auto", isOn: $autoCount.animation())
-                        #if os(macOS)
-                        .toggleStyle(.switch)
-                        #endif
-                        .fixedSize()
+                    Text("Auto").foregroundStyle(.secondary)
+                    CompactSwitch(isOn: $autoCount.animation())
                 }
                 .onChange(of: countText) { _, newValue in
                     let filtered = String(newValue.filter(\.isNumber).prefix(3))
