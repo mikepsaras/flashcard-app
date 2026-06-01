@@ -14,9 +14,10 @@ and user-configurable iCloud sync.
   or adding/removing/renaming source files.
 - The app **ad-hoc signs** (`CODE_SIGN_IDENTITY = "-"`), so it builds and runs with
   no Apple Team ID. This also lets macOS host the unit-test bundle.
-- **No iOS simulator runtime is installed.** The macOS app builds and runs
-  natively; the iPhone target is verified by a Swift type-check against the iOS SDK
-  (a full iOS bundle can't be built here because `actool` needs a sim runtime).
+- The **iOS 26.5 simulator runtime is installed**, so the iPhone target builds and
+  runs in the Simulator (e.g. iPhone 17 Pro). The macOS app also builds and runs
+  natively. Installing on a **physical** iPhone still needs your Apple signing
+  identity (see `INSTALL-iPhone.md`).
 
 ## Common commands
 
@@ -30,7 +31,15 @@ xcodegen generate
 xcodebuild -project Flashcards.xcodeproj -scheme Flashcards -destination 'platform=macOS' build
 open ~/Library/Developer/Xcode/DerivedData/Flashcards-*/Build/Products/Debug/Flashcards.app
 
-# Type-check the iOS target (no sim runtime needed)
+# Build & run the iPhone app in the Simulator
+xcodebuild -project Flashcards.xcodeproj -scheme Flashcards \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcrun simctl bootstatus "iPhone 17 Pro" -b && open -a Simulator
+APP=$(ls -d ~/Library/Developer/Xcode/DerivedData/Flashcards-*/Build/Products/Debug-iphonesimulator/Flashcards.app)
+xcrun simctl install booted "$APP" && xcrun simctl launch booted com.mike.Flashcards
+xcrun simctl io booted screenshot /tmp/iphone.png   # capture a real screenshot
+
+# Or just type-check the iOS target quickly (no sim needed)
 SDK=$(xcrun --sdk iphoneos --show-sdk-path)
 xcrun --sdk iphoneos swiftc -typecheck -sdk "$SDK" -target arm64-apple-ios18.0 \
   -swift-version 6 $(find Flashcards -name '*.swift')
