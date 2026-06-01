@@ -11,7 +11,6 @@ struct DeckLibraryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @Binding var selection: SidebarItem?
-    @Binding var columnVisibility: NavigationSplitViewVisibility
 
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
@@ -52,21 +51,9 @@ struct DeckLibraryView: View {
         .listStyle(.sidebar)
         .navigationTitle("Flashcards")
         #if os(macOS)
-        // Put the sidebar toggle at the leading edge (the system default lands it at the
-        // sidebar's *trailing* edge here), and keep "+ New Deck" out of the toolbar — at
-        // the bottom of the sidebar, the native spot for adding a sidebar item.
-        .toolbar(removing: .sidebarToggle)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    withAnimation {
-                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-                    }
-                } label: {
-                    Label("Toggle Sidebar", systemImage: "sidebar.left")
-                }
-            }
-        }
+        // Leave the sidebar toggle at the system default position (inside the sidebar);
+        // a custom .navigation toggle lands *outside* the panel. "+ New Deck" goes at the
+        // bottom of the sidebar — the native spot for adding a sidebar item.
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 0) {
                 addMenu

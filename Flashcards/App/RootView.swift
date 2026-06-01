@@ -14,7 +14,6 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @State private var studyPlan: StudyPlan?
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     // Auto-select Today on macOS; start at the list on iPhone.
     #if os(macOS)
@@ -59,8 +58,8 @@ struct RootView: View {
     }
 
     private var splitView: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            DeckLibraryView(selection: $selection, columnVisibility: $columnVisibility)
+        NavigationSplitView {
+            DeckLibraryView(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 380)
         } detail: {
             detail
