@@ -150,7 +150,9 @@ struct AIGenerationView: View {
                     }
                     HStack(spacing: 8) {
                         Text("Auto").foregroundStyle(.secondary)
-                        CompactSwitch(isOn: $autoCount.animation())
+                        Toggle("Auto", isOn: $autoCount.animation())
+                            .labelsHidden()
+                            .toggleStyle(.switch)
                     }
                 }
                 .onChange(of: countText) { _, newValue in
