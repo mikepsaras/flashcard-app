@@ -42,8 +42,12 @@ struct DeckDetailView: View {
         .navigationTitle(deck.name.isEmpty ? "Untitled Deck" : deck.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
+        // macOS allows only one search field per window toolbar, and the deck library
+        // (sidebar) already owns it; a second `.searchable` here makes AppKit's NSToolbar
+        // throw when a deck is selected. On iOS the library and deck are separate
+        // navigation screens, so card search is safe there.
         .searchable(text: $cardSearch, prompt: "Search cards")
+        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { cardEditor = .new } label: { Label("Add Card", systemImage: "plus") }
