@@ -61,6 +61,24 @@ final class StudySessionTests {
         #expect(session.answered == 0)
     }
 
+    @Test func progressUsesFixedDenominatorAndCountsClearedCards() {
+        let session = StudySession(cards: makeCards(3), trackLearning: false)
+        #expect(session.plannedCount == 3)
+        #expect(session.completedCount == 0)
+
+        session.grade(known: false)        // miss card 0 → requeued, NOT cleared
+        #expect(session.plannedCount == 3) // denominator stays fixed (no growing bar)
+        #expect(session.completedCount == 0)
+
+        session.grade(known: true)         // clear card 1
+        #expect(session.completedCount == 1)
+        session.grade(known: true)         // clear card 2
+        #expect(session.completedCount == 2)
+        session.grade(known: true)         // clear the requeued card 0
+        #expect(session.completedCount == 3)
+        #expect(session.isFinished)
+    }
+
     @Test func trackingPersistsScheduleChange() {
         let cards = makeCards(1)
         let card = cards[0]

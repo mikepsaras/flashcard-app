@@ -11,6 +11,9 @@ final class StudySession {
     private(set) var isShowingDefinition = false
     private(set) var correctCount = 0
     private(set) var wrongCount = 0
+    /// Distinct review items the session started with — the fixed denominator for the
+    /// progress display, so missing a card (which requeues it) never grows the total.
+    let plannedCount: Int
     var trackLearning: Bool
 
     /// Snapshot captured before each grade so undo can restore exactly.
@@ -31,6 +34,7 @@ final class StudySession {
 
     init(items: [ReviewItem], trackLearning: Bool) {
         self.items = items
+        self.plannedCount = items.count
         self.trackLearning = trackLearning
     }
 
@@ -46,6 +50,15 @@ final class StudySession {
     var isFinished: Bool { index >= items.count }
     var current: ReviewItem? { isFinished ? nil : items[index] }
     var canUndo: Bool { !history.isEmpty }
+
+    /// Distinct cards still to clear (the current card plus any requeued misses).
+    var remainingCount: Int {
+        guard index < items.count else { return 0 }
+        return Set(items[index...].map(\.id)).count
+    }
+    /// Distinct cards cleared so far (monotonic), out of `plannedCount` — drives the
+    /// progress bar so a miss leaves a segment unfilled rather than adding one.
+    var completedCount: Int { max(plannedCount - remainingCount, 0) }
 
     // MARK: Intents
 
