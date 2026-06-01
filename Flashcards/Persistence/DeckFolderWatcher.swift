@@ -4,10 +4,10 @@ import Foundation
 /// text editor, or files dropped in by a sync service — and invokes `onChange` on the
 /// main actor, coalescing the burst of events an atomic save produces into one call.
 ///
-/// Uses a `DispatchSource` vnode watch on the directory (macOS + iOS). A directory
-/// watch reliably catches adds, removes, renames, and the temp-write-then-rename that
-/// most editors use to save; a foreground reconcile (wired in `RootView`) backstops the
-/// rarer in-place truncating write that a directory-level watch can miss.
+/// Uses a `DispatchSource` vnode watch on the directory (macOS + iOS), which catches
+/// adds, removes, renames, and the temp-write-then-rename most editors use to save. A
+/// foreground reconcile (wired in `RootView`) backstops the rarer in-place truncating
+/// write that a directory-level watch can miss.
 @MainActor
 final class DeckFolderWatcher {
     private var source: DispatchSourceFileSystemObject?
@@ -46,21 +46,21 @@ final class DeckFolderWatcher {
             eventMask: [.write, .delete, .rename, .extend, .attrib, .link],
             queue: queue
         )
-        src.setEventHandler { [weak self] in
-            let event = src.data
-            Task { @MainActor in self?.handle(event) }
+        // These handlers run on `queue` (a background queue), so they must NOT be
+        // MainActor-isolated. Marking them @Sendable stops the closure from inheriting
+        // this type's MainActor isolation — otherwise the Swift runtime traps with an
+        // executor-assertion when libdispatch invokes them off-main. Real work hops back
+        // to the main actor via a Task.
+        src.setEventHandler { @Sendable [weak self] in
+            Task { @MainActor in self?.scheduleReconcile() }
         }
-        src.setCancelHandler { close(fd) }
+        src.setCancelHandler { @Sendable in close(fd) }
         source = src
         src.resume()
     }
 
-    private func handle(_ event: DispatchSource.FileSystemEvent) {
-        // If the folder itself was replaced (deleted/renamed), the fd is stale — reopen
-        // it against the (possibly recreated) path before reconciling.
-        if event.contains(.delete) || event.contains(.rename) {
-            openSource()
-        }
+    /// Coalesce a burst of events (an atomic save fires several) into one reconcile.
+    private func scheduleReconcile() {
         debounce?.cancel()
         debounce = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
