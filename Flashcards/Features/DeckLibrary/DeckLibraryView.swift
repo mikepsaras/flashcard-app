@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 /// Sidebar: a Today entry (cross-deck review queue) above the deck list, with
 /// create / edit / delete.
@@ -29,6 +32,9 @@ struct DeckLibraryView: View {
                         .tag(SidebarItem.deck(deck.persistentModelID))
                         .contextMenu {
                             Button { editorMode = .edit(deck) } label: { Label("Edit", systemImage: "pencil") }
+                            #if os(macOS)
+                            Button { revealInFinder(deck) } label: { Label("Reveal in Finder", systemImage: "folder") }
+                            #endif
                             Button(role: .destructive) { delete(deck) } label: { Label("Delete", systemImage: "trash") }
                         }
                 }
@@ -107,6 +113,14 @@ struct DeckLibraryView: View {
         DeckStore.persist(context)
         if let imported { selection = .deck(imported.persistentModelID) }
     }
+
+    #if os(macOS)
+    private func revealInFinder(_ deck: Deck) {
+        if let url = DeckStore.fileURL(for: deck) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+    #endif
 }
 
 /// The "Today" sidebar row with a live due count.

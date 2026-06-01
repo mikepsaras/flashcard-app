@@ -13,11 +13,12 @@ struct CompactSwitch: View {
     var body: some View {
         ZStack(alignment: isOn ? .trailing : .leading) {
             Capsule()
-                .fill(isOn ? tint : Color.primary.opacity(0.20))
+                .fill(isOn ? tint : Color.adaptive(light: (0.90, 0.90, 0.92), dark: (0.24, 0.24, 0.26)))
             Circle()
                 .fill(.white)
-                .shadow(color: .black.opacity(0.18), radius: 1.5, y: 1)
-                .padding(2.5)
+                .frame(width: height - 6, height: height - 6)
+                .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+                .padding(.horizontal, 3)
         }
         .frame(width: width, height: height)
         .animation(.spring(response: 0.28, dampingFraction: 0.7), value: isOn)

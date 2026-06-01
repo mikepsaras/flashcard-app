@@ -128,26 +128,30 @@ struct AIGenerationView: View {
             }
 
             Section {
-                HStack(spacing: 10) {
+                HStack(spacing: 16) {
                     Text("Number of cards")
                         .lineLimit(1)
                         .foregroundStyle(autoCount ? .secondary : .primary)
                     Spacer(minLength: 8)
                     if !autoCount {
-                        TextField("", text: $countText)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 46)
-                            .textFieldStyle(.roundedBorder)
-                            #if os(iOS)
-                            .keyboardType(.numberPad)
+                        HStack(spacing: 4) {
+                            TextField("", text: $countText)
+                                .multilineTextAlignment(.center)
+                                .frame(width: 46)
+                                .textFieldStyle(.roundedBorder)
+                                #if os(iOS)
+                                .keyboardType(.numberPad)
+                                #endif
+                            #if os(macOS)
+                            Stepper("", value: $count, in: 1...100)
+                                .labelsHidden()
                             #endif
-                        #if os(macOS)
-                        Stepper("", value: $count, in: 1...100)
-                            .labelsHidden()
-                        #endif
+                        }
                     }
-                    Text("Auto").foregroundStyle(.secondary)
-                    CompactSwitch(isOn: $autoCount.animation())
+                    HStack(spacing: 8) {
+                        Text("Auto").foregroundStyle(.secondary)
+                        CompactSwitch(isOn: $autoCount.animation())
+                    }
                 }
                 .onChange(of: countText) { _, newValue in
                     let filtered = String(newValue.filter(\.isNumber).prefix(3))
