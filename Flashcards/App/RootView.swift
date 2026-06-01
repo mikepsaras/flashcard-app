@@ -61,7 +61,7 @@ struct RootView: View {
     private var splitView: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             DeckLibraryView(selection: $selection, columnVisibility: $columnVisibility)
-                .navigationSplitViewColumnWidth(min: 250, ideal: 290, max: 360)
+                .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 380)
         } detail: {
             detail
         }

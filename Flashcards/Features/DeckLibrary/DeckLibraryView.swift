@@ -52,12 +52,11 @@ struct DeckLibraryView: View {
         .listStyle(.sidebar)
         .navigationTitle("Flashcards")
         #if os(macOS)
-        // Replace the auto sidebar toggle (which SwiftUI shoves to the right, next to
-        // our + menu) with our own at the leading edge, where macOS expects it.
+        // Put the sidebar toggle at the leading edge (the system default lands it at the
+        // sidebar's *trailing* edge here), and keep "+ New Deck" out of the toolbar — at
+        // the bottom of the sidebar, the native spot for adding a sidebar item.
         .toolbar(removing: .sidebarToggle)
-        #endif
         .toolbar {
-            #if os(macOS)
             ToolbarItem(placement: .navigation) {
                 Button {
                     withAnimation {
@@ -67,18 +66,24 @@ struct DeckLibraryView: View {
                     Label("Toggle Sidebar", systemImage: "sidebar.left")
                 }
             }
-            #endif
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
-                    Button { showingAI = true } label: { Label("New Deck from Notes (AI)…", systemImage: "sparkles") }
-                    Divider()
-                    Button { showingDeckImporter = true } label: { Label("Open .deck File…", systemImage: "folder") }
-                } label: {
-                    Label("Add", systemImage: "plus")
-                }
-            }
         }
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 0) {
+                addMenu
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                Spacer()
+            }
+            .padding(.horizontal, Theme.Spacing.s)
+            .padding(.vertical, 8)
+            .background(.bar)
+        }
+        #else
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { addMenu }
+        }
+        #endif
         .sheet(item: $editorMode) { mode in
             DeckEditorView(mode: mode)
         }
@@ -107,6 +112,17 @@ struct DeckLibraryView: View {
             }
         }
         #endif
+    }
+
+    @ViewBuilder private var addMenu: some View {
+        Menu {
+            Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
+            Button { showingAI = true } label: { Label("New Deck from Notes (AI)…", systemImage: "sparkles") }
+            Divider()
+            Button { showingDeckImporter = true } label: { Label("Open .deck File…", systemImage: "folder") }
+        } label: {
+            Label("New Deck", systemImage: "plus")
+        }
     }
 
     private func delete(_ deck: Deck) {
