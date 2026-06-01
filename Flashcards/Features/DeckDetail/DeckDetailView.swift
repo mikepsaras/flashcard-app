@@ -11,6 +11,7 @@ struct DeckDetailView: View {
     @State private var showingDeckEditor = false
     @State private var showingImporter = false
     @State private var showingExporter = false
+    @State private var showingAI = false
 
     private var sortedCards: [Card] {
         deck.cardArray.sorted { $0.createdAt < $1.createdAt }
@@ -32,6 +33,8 @@ struct DeckDetailView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Menu {
+                    Button { showingAI = true } label: { Label("Generate Cards (AI)…", systemImage: "sparkles") }
+                    Divider()
                     Button { showingImporter = true } label: { Label("Import CSV…", systemImage: "square.and.arrow.down") }
                     Button { showingExporter = true } label: { Label("Export CSV…", systemImage: "square.and.arrow.up") }
                         .disabled(sortedCards.isEmpty)
@@ -47,6 +50,9 @@ struct DeckDetailView: View {
         }
         .sheet(isPresented: $showingDeckEditor) {
             DeckEditorView(mode: .edit(deck))
+        }
+        .sheet(isPresented: $showingAI) {
+            AIGenerationView(target: .existing(deck))
         }
         .fileExporter(
             isPresented: $showingExporter,

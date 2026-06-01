@@ -10,6 +10,7 @@ struct DeckLibraryView: View {
 
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
+    @State private var showingAI = false
 
     private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }
 
@@ -43,11 +44,19 @@ struct DeckLibraryView: View {
         .navigationTitle("Flashcards")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
+                Menu {
+                    Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
+                    Button { showingAI = true } label: { Label("New Deck from Notes (AI)…", systemImage: "sparkles") }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
             }
         }
         .sheet(item: $editorMode) { mode in
             DeckEditorView(mode: mode)
+        }
+        .sheet(isPresented: $showingAI) {
+            AIGenerationView(target: .newDeck)
         }
         #if os(iOS)
         .toolbar {

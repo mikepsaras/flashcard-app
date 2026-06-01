@@ -70,7 +70,14 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
 - `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review
   queue), `DeckDetail` (CRUD editors + **CSV import/export** via `CSVCodec`), `Study`
   (`StudySession` `@Observable @MainActor` state machine, full-screen UI driven by a
-  `StudyPlan`, 2- or 4-button grading), `Settings`.
+  `StudyPlan`, 2- or 4-button grading), `AI` (`AIGenerationView`), `Settings`.
+- `Flashcards/AI` — `CardGenerator` calls **OpenAI / Gemini / Anthropic** (per-provider
+  `makeRequest` + `parse` in `Providers/`, tolerant JSON via `CardJSON`). API keys live in
+  the **Keychain** (`KeychainStore`); provider/model in `@AppStorage`. `AIGenerationView`
+  (notes → review/edit → add) launches from the library ("New Deck from Notes") and a
+  deck's ••• menu. **Live API calls can't be tested here** (need a real key) — the
+  request/response codecs are unit-tested instead (`AIProviderTests`); do the end-to-end
+  test in-app via **Settings → AI → Test connection**.
 - `Flashcards/DesignSystem` — `Theme`, `Typography`, components, and `AppIconArtwork`
   (the icon is drawn in SwiftUI and rendered into the asset catalog).
 - Everything touching SwiftData runs on `@MainActor` (Swift 6 strict concurrency).
