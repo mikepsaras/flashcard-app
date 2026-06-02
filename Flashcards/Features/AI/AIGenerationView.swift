@@ -27,7 +27,7 @@ struct AIGenerationView: View {
     @State private var errorText: String?
     @State private var showingFileImporter = false
 
-    enum Phase { case input, generating, review }
+    enum Phase { case input, generating, review, failed }
 
     private var provider: AIProvider { AIProvider(rawValue: providerRaw) ?? .openAI }
     private var apiKey: String { KeychainStore.get(account: provider.keychainAccount) ?? "" }
@@ -74,6 +74,7 @@ struct AIGenerationView: View {
         case .input: "Generate Cards"
         case .generating: "Generating…"
         case .review: "Review Cards"
+        case .failed: "Generate Cards"
         }
     }
 
@@ -85,6 +86,8 @@ struct AIGenerationView: View {
             ProgressView().controlSize(.small)
         case .review:
             Button("Add \(selectedCount)") { add() }.disabled(selectedCount == 0)
+        case .failed:
+            EmptyView()
         }
     }
 
@@ -104,6 +107,7 @@ struct AIGenerationView: View {
             case .input:      inputForm
             case .generating: generatingState
             case .review:     reviewList
+            case .failed:     errorState
             }
         }
     }
@@ -168,14 +172,6 @@ struct AIGenerationView: View {
                      ? "The AI decides how many cards to create. Generated with \(provider.displayName)."
                      : "Generated with \(provider.displayName). Review and edit before adding.")
             }
-
-            if let errorText {
-                Section {
-                    Label(errorText, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.danger)
-                        .font(Typography.callout)
-                }
-            }
         }
         .formStyle(.grouped)
     }
@@ -190,6 +186,33 @@ struct AIGenerationView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.groupedBackground)
+    }
+
+    /// Shown in the same centered spot as `generatingState` when a request fails, so
+    /// the error is front-and-center instead of buried at the bottom of the form.
+    private var errorState: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 46))
+                .foregroundStyle(Theme.danger)
+            Text("Couldn't Generate Cards")
+                .font(Typography.title)
+            Text(errorText ?? "Something went wrong. Please try again.")
+                .font(Typography.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            HStack(spacing: 12) {
+                Button("Edit Notes") { errorText = nil; phase = .input }
+                    .buttonStyle(.bordered)
+                Button("Try Again") { generate() }
+                    .buttonStyle(.borderedProminent)
+            }
+            .padding(.top, Theme.Spacing.s)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(Theme.Spacing.l)
         .background(Theme.groupedBackground)
     }
 
@@ -261,7 +284,7 @@ struct AIGenerationView: View {
                 phase = .review
             } catch {
                 errorText = (error as? AIError)?.errorDescription ?? error.localizedDescription
-                phase = .input
+                phase = .failed
             }
         }
     }
