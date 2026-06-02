@@ -169,6 +169,46 @@ import SwiftData
         #expect(deck.cardArray.first?.reverseEaseFactor == 2.5)
         #expect(deck.cardArray.first?.reverseRepetitions == 0)
     }
+
+    // MARK: Tags
+
+    @Test func tagsRoundTrip() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Tagged")
+        deck.tags = ["Spanish", "Vocabulary"]
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.tags == ["Spanish", "Vocabulary"])
+        let other = DeckStore.makeContainer()
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        #expect(rebuilt.tags == ["Spanish", "Vocabulary"])
+    }
+
+    @Test func missingTagsDefaultsToEmpty() throws {
+        // A file written before tags existed has no `tags` key; it must still load (→ []).
+        let json = """
+        {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
+        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
+        """
+        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
+        #expect(dto.tags == nil)
+        let container = DeckStore.makeContainer()
+        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
+        #expect(deck.tags == [])
+    }
+
+    @Test func emptyTagsOmitKeyToAvoidPhantomEdit() throws {
+        // Empty tags must omit the key so an untagged deck re-encodes identically (reconcile no-op).
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "NoTags")
+        container.mainContext.insert(deck)
+        let data = try DeckCodec.encode(deck)
+        #expect(!(String(data: data, encoding: .utf8) ?? "").contains("\"tags\""))
+        let dto1 = try DeckCodec.decodeDTO(data)
+        let other = DeckStore.makeContainer()
+        let dto2 = try DeckCodec.decodeDTO(DeckCodec.encode(DeckCodec.makeDeck(from: dto1, in: other.mainContext)))
+        #expect(dto1 == dto2)
+    }
 }
 
 @MainActor

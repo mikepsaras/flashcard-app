@@ -19,6 +19,7 @@ enum DeckCodec {
         var backLabel: String?
         var studyReversed: Bool?
         var gradingMode: String?
+        var tags: [String]?
         var createdAt: Date
         var modifiedAt: Date
         var cards: [CardDTO]
@@ -68,6 +69,9 @@ enum DeckCodec {
             // Omit the key when not explicitly chosen, so files written before this setting
             // re-encode unchanged (the watcher's content comparison sees no phantom edit).
             gradingMode: deck.gradingModeRaw.isEmpty ? nil : deck.gradingModeRaw,
+            // Omit when empty so untagged decks re-encode identically (no phantom edit), exactly
+            // like gradingMode above.
+            tags: deck.tags.isEmpty ? nil : deck.tags,
             createdAt: deck.createdAt,
             modifiedAt: deck.modifiedAt,
             cards: deck.cardArray
@@ -90,6 +94,7 @@ enum DeckCodec {
         deck.backLabel = dto.backLabel ?? "Definition"
         deck.studyReversed = dto.studyReversed ?? false
         deck.gradingModeRaw = dto.gradingMode ?? ""
+        deck.tags = dto.tags ?? []
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
         context.insert(deck)
@@ -114,6 +119,7 @@ enum DeckCodec {
         deck.backLabel = dto.backLabel ?? "Definition"
         deck.studyReversed = dto.studyReversed ?? false
         deck.gradingModeRaw = dto.gradingMode ?? ""
+        deck.tags = dto.tags ?? []
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
 
