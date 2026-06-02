@@ -117,6 +117,28 @@ final class StudySessionTests {
         #expect(session.canUndo == false)
     }
 
+    @Test func undoRestoresScheduleEvenIfTrackingToggledOffAfterGrading() {
+        // Grade with tracking on, then flip "Track learning" off, then undo. The undo must
+        // still fully restore the card — it must not read the live flag and skip the restore.
+        let cards = makeCards(1)
+        let card = cards[0]
+        let dueBefore = card.dueDate
+        let modifiedBefore = card.modifiedAt
+
+        let session = StudySession(cards: cards, trackLearning: true)
+        session.grade(known: true)
+        #expect(card.dueDate != dueBefore)   // schedule advanced
+
+        session.trackLearning = false        // user toggles tracking off mid-session
+        session.undo()
+
+        #expect(card.dueDate == dueBefore)   // schedule restored despite tracking now off
+        #expect(card.repetitions == 0)
+        #expect(card.lastReviewedAt == nil)
+        #expect(card.modifiedAt == modifiedBefore)
+        #expect(session.answered == 0)
+    }
+
     @Test func flipTogglesFace() {
         let session = StudySession(cards: makeCards(1), trackLearning: true)
         #expect(session.isShowingDefinition == false)

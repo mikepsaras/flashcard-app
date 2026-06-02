@@ -90,14 +90,16 @@ final class StudySession {
         guard let move = history.popLast() else { return }
         if !gradeLog.isEmpty { gradeLog.removeLast() }
 
-        if trackLearning {
-            move.item.card.restore(
-                move.previousState,
-                direction: move.item.direction,
-                lastReviewedAt: move.previousReviewedAt,
-                modifiedAt: move.previousModifiedAt
-            )
-        }
+        // Always restore the snapshot — never gate this on the *current* `trackLearning`
+        // value. If the grade applied an SM-2 change, this reverts it; if it didn't (tracking
+        // was off at grade time), restoring the captured state is a no-op. Reading the live
+        // flag instead would leave a card advanced when tracking is toggled off after grading.
+        move.item.card.restore(
+            move.previousState,
+            direction: move.item.direction,
+            lastReviewedAt: move.previousReviewedAt,
+            modifiedAt: move.previousModifiedAt
+        )
 
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
             index = move.previousIndex
