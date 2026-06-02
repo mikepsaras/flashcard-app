@@ -54,6 +54,13 @@ struct RootView: View {
                     DeckStore.persist(context)
                 }
             }
+            .onChange(of: LibraryLocation.shared.current) { _, _ in
+                // The library folder changed (in Settings): re-point the watcher and reload.
+                watcher.stop()
+                watcher.isPaused = studyPlan != nil
+                watcher.start { DeckStore.reconcile(into: context) }
+                if studyPlan == nil { DeckStore.reconcile(into: context) }
+            }
             .alert(
                 "Couldn’t Save",
                 isPresented: Binding(

@@ -6,8 +6,10 @@ struct FlashcardsApp: App {
     @State private var container: ModelContainer
 
     init() {
-        // No database on disk: an in-memory working copy is rebuilt from the
-        // `.deck` files in ~/Documents/Flashcards at every launch.
+        // No database on disk: an in-memory working copy is rebuilt from the `.deck`
+        // files at every launch. Resolve the saved library folder (and start its
+        // security-scoped access) before loading.
+        _ = LibraryLocation.shared
         let container = DeckStore.makeContainer()
         let context = container.mainContext
         if DeckStore.loadAll(into: context) == 0 {

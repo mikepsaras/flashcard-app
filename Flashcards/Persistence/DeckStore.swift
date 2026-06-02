@@ -68,14 +68,62 @@ enum DeckStore {
 
     // MARK: Folder
 
-    /// `~/Documents/Flashcards` (created if needed).
+    /// The active library folder (see `LibraryLocation`), created if needed.
     static func libraryURL() -> URL {
-        let documents = (try? FileManager.default.url(
-            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true
-        )) ?? FileManager.default.temporaryDirectory
-        let directory = documents.appendingPathComponent("Flashcards", isDirectory: true)
+        let directory = LibraryLocation.shared.current
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+
+    // MARK: Folder migration
+
+    /// Moves the current in-memory decks from `oldURL` into `newURL` and merges any decks that
+    /// already live in `newURL` — used when the user changes the library folder. Non-destructive
+    /// to files already in `newURL`; an original in `oldURL` is removed only after it's safely
+    /// written to `newURL`.
+    static func migrate(from oldURL: URL, to newURL: URL, context: ModelContext) {
+        guard oldURL.standardizedFileURL != newURL.standardizedFileURL else { return }
+
+        // Remember the originals so we can remove them after a successful move.
+        var oldFileByID: [UUID: URL] = [:]
+        for url in deckFiles(in: oldURL) {
+            if let data = try? Data(contentsOf: url), let dto = try? DeckCodec.decodeDTO(data) {
+                oldFileByID[dto.id] = url
+            }
+        }
+
+        // Write current decks into the new folder WITHOUT pruning (keep decks already there).
+        let decks = (try? context.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+        var usedNames = Set<String>()
+        var movedIDs = Set<UUID>()
+        var failedNames: [String] = []
+        for deck in decks {
+            let filename = uniqueFilename(for: deck, used: &usedNames)
+            let dest = newURL.appendingPathComponent(filename)
+            if let data = try? DeckCodec.encode(deck),
+               (try? data.write(to: dest, options: .atomic)) != nil {
+                urlByDeckID[deck.id] = dest
+                movedIDs.insert(deck.id)
+            } else {
+                // Couldn't write this deck to the new folder — keep it in memory and don't
+                // let the reconcile below delete it (it isn't on disk in the new folder).
+                unsavedDeckIDs.insert(deck.id)
+                failedNames.append(deck.name.isEmpty ? "Untitled Deck" : deck.name)
+            }
+        }
+        unsavedDeckIDs.subtract(movedIDs)   // moved decks are now saved in the new folder
+
+        // Merge in any decks that already lived in the new folder.
+        reconcile(into: context, from: newURL)
+
+        // Remove the originals we successfully moved (true move).
+        for (id, url) in oldFileByID where movedIDs.contains(id) {
+            try? FileManager.default.removeItem(at: url)
+        }
+
+        if !failedNames.isEmpty {
+            PersistenceMonitor.shared.note(PersistResult(failedDeckNames: failedNames))
+        }
     }
 
     private static func deckFiles(in directory: URL) -> [URL] {

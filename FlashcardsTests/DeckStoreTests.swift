@@ -354,4 +354,33 @@ import SwiftData
         // A second call is blocked by the UserDefaults flag — no duplicate import.
         #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL) == false)
     }
+
+    @Test func migrateMovesCurrentDecksAndMergesExisting() throws {
+        let oldDir = try tempDir()
+        let newDir = try tempDir()
+
+        // Current library (memory + oldDir) has deck A.
+        let container = DeckStore.makeContainer()
+        let a = Deck(name: "A"); container.mainContext.insert(a)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: a))
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: oldDir)
+
+        // The new folder already contains deck B (e.g. from a sync service).
+        let src = DeckStore.makeContainer()
+        let b = Deck(name: "B"); src.mainContext.insert(b)
+        try src.mainContext.save()
+        DeckStore.persist(src.mainContext, to: newDir)
+
+        DeckStore.migrate(from: oldDir, to: newDir, context: container.mainContext)
+
+        // New folder has both; the old folder's A.deck was moved away.
+        let newNames = try deckFilenames(newDir)
+        #expect(newNames.contains("A.deck"))
+        #expect(newNames.contains("B.deck"))
+        #expect(try deckFilenames(oldDir) == [])
+        // In-memory library is now the union of both.
+        let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
+        #expect(names == ["A", "B"])
+    }
 }
