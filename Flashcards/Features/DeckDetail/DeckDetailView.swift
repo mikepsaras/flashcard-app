@@ -141,6 +141,12 @@ struct DeckDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if !deck.tags.isEmpty {
+                WrapLayout(spacing: 6) {
+                    ForEach(deck.tags, id: \.self) { TagChip(text: $0) }
+                }
+            }
+
             HStack(spacing: Theme.Spacing.l) {
                 stat(value: "\(deck.cardCount)", label: "Cards")
                 stat(value: "\(deck.dueCount)", label: "Due", tint: deck.dueCount > 0 ? Theme.accent : .secondary)

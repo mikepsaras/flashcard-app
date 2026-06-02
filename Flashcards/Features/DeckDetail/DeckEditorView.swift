@@ -26,6 +26,8 @@ struct DeckEditorView: View {
     @State private var showLabel: Bool
     @State private var studyReversed: Bool
     @State private var gradingMode: GradingMode
+    @State private var tags: [String]
+    @State private var newTag: String = ""
 
     init(mode: DeckEditorMode) {
         self.mode = mode
@@ -38,6 +40,7 @@ struct DeckEditorView: View {
             _showLabel = State(initialValue: true)
             _studyReversed = State(initialValue: false)
             _gradingMode = State(initialValue: .twoButton)
+            _tags = State(initialValue: [])
         case .edit(let deck):
             _name = State(initialValue: deck.name)
             _deckDescription = State(initialValue: deck.deckDescription)
@@ -48,6 +51,7 @@ struct DeckEditorView: View {
             _showLabel = State(initialValue: !deck.backLabel.isEmpty)
             _studyReversed = State(initialValue: deck.studyReversed)
             _gradingMode = State(initialValue: deck.gradingMode)
+            _tags = State(initialValue: deck.tags)
         }
     }
 
@@ -66,6 +70,30 @@ struct DeckEditorView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     LabeledField(label: "Name", placeholder: "Deck name", text: $name)
                     LabeledField(label: "Description", placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Tags")
+                            .font(.system(.subheadline, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        if !tags.isEmpty {
+                            WrapLayout(spacing: 6) {
+                                ForEach(tags, id: \.self) { tag in
+                                    TagChip(text: tag) { removeTag(tag) }
+                                }
+                            }
+                        }
+                        TextField("Add a tag", text: $newTag)
+                            .textFieldStyle(.plain)
+                            .font(Typography.body)
+                            .onSubmit { commitNewTag() }
+                            .onChange(of: newTag) { _, value in
+                                if value.contains(",") || value.contains("\n") { commitNewTag() }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .fieldBox()
+                        caption("Group decks in the library by tag. Press return or comma to add.")
+                    }
 
                     VStack(alignment: .leading, spacing: 8) {
                         toggleRow("Show answer label", $showLabel.animation())
@@ -165,14 +193,29 @@ struct DeckEditorView: View {
         .padding(.vertical, 4)
     }
 
+    private func commitNewTag() {
+        let parts = newTag.split(whereSeparator: { $0 == "," || $0 == "\n" })
+        for part in parts {
+            let tag = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !tag.isEmpty, !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { continue }
+            tags.append(tag)
+        }
+        newTag = ""
+    }
+
+    private func removeTag(_ tag: String) {
+        tags.removeAll { $0 == tag }
+    }
+
     private func save() {
+        commitNewTag()   // fold in a tag typed but not yet committed (no comma/return pressed)
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         // Toggle off ⇒ store an empty label (no label shown on the card back).
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         switch mode {
         case .new:
-            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode)
+            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, tags: tags)
             context.insert(deck)
         case .edit(let deck):
             deck.name = trimmed
@@ -181,6 +224,7 @@ struct DeckEditorView: View {
             deck.backLabel = label
             deck.studyReversed = studyReversed
             deck.gradingMode = gradingMode
+            deck.tags = tags
             deck.modifiedAt = .now
         }
         try? context.save()

@@ -57,26 +57,21 @@ struct DeckLibraryView: View {
                     .tag(SidebarItem.today)
             }
 
-            Section("Decks") {
-                ForEach(filteredDecks) { deck in
-                    DeckRowView(deck: deck)
-                        .tag(SidebarItem.deck(deck.persistentModelID))
-                        .contextMenu {
-                            Button { editorMode = .edit(deck) } label: { Label("Edit", systemImage: "pencil") }
-                            Button { duplicate(deck) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
-                            #if os(macOS)
-                            Button { revealInFinder(deck) } label: { Label("Reveal in Finder", systemImage: "folder") }
-                            #endif
-                            Button(role: .destructive) { deckPendingDeletion = deck } label: { Label("Delete", systemImage: "trash") }
-                        }
-                }
-                .onDelete(perform: deleteOffsets)
-
-                if decks.isEmpty {
-                    Button { editorMode = .new } label: {
-                        Label("Create your first deck", systemImage: "plus")
+            ForEach(groupedDecks) { group in
+                Section(group.tag ?? (hasAnyTags ? "Untagged" : "Decks")) {
+                    ForEach(group.decks) { deck in
+                        deckRow(deck)
                     }
-                    .foregroundStyle(.secondary)
+                    .onDelete { offsets in
+                        if let index = offsets.first { deckPendingDeletion = group.decks[index] }
+                    }
+
+                    if group.tag == nil && decks.isEmpty {
+                        Button { editorMode = .new } label: {
+                            Label("Create your first deck", systemImage: "plus")
+                        }
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -185,8 +180,44 @@ struct DeckLibraryView: View {
         DeckStore.persist(context)
     }
 
-    private func deleteOffsets(_ offsets: IndexSet) {
-        if let index = offsets.first { deckPendingDeletion = filteredDecks[index] }
+    /// Whether any visible deck has tags — drives section grouping vs a single flat "Decks" section.
+    private var hasAnyTags: Bool { filteredDecks.contains { !$0.tags.isEmpty } }
+
+    private struct DeckGroup: Identifiable {
+        let tag: String?      // nil ⇒ the "Untagged" group
+        let decks: [Deck]
+        var id: String { tag ?? "\u{0}untagged" }
+    }
+
+    /// Decks grouped into sections: one per tag (a deck appears under each of its tags), with an
+    /// "Untagged" group last. When nothing is tagged, a single nil group ⇒ a flat "Decks" section.
+    private var groupedDecks: [DeckGroup] {
+        let base = filteredDecks
+        guard base.contains(where: { !$0.tags.isEmpty }) else { return [DeckGroup(tag: nil, decks: base)] }
+        var byTag: [String: [Deck]] = [:]
+        var untagged: [Deck] = []
+        for deck in base {
+            if deck.tags.isEmpty { untagged.append(deck) }
+            else { for tag in deck.tags { byTag[tag, default: []].append(deck) } }
+        }
+        var result = byTag.keys
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .map { DeckGroup(tag: $0, decks: byTag[$0]!) }
+        if !untagged.isEmpty { result.append(DeckGroup(tag: nil, decks: untagged)) }
+        return result
+    }
+
+    @ViewBuilder private func deckRow(_ deck: Deck) -> some View {
+        DeckRowView(deck: deck)
+            .tag(SidebarItem.deck(deck.persistentModelID))
+            .contextMenu {
+                Button { editorMode = .edit(deck) } label: { Label("Edit", systemImage: "pencil") }
+                Button { duplicate(deck) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+                #if os(macOS)
+                Button { revealInFinder(deck) } label: { Label("Reveal in Finder", systemImage: "folder") }
+                #endif
+                Button(role: .destructive) { deckPendingDeletion = deck } label: { Label("Delete", systemImage: "trash") }
+            }
     }
 
     private func openDeckFiles(_ result: Result<[URL], Error>) {
@@ -221,7 +252,8 @@ struct DeckLibraryView: View {
             colorHex: deck.colorHex,
             backLabel: deck.backLabel,
             studyReversed: deck.studyReversed,
-            gradingMode: deck.gradingMode
+            gradingMode: deck.gradingMode,
+            tags: deck.tags
         )
         context.insert(copy)
         for card in deck.cardArray.sorted(by: { $0.createdAt < $1.createdAt }) {
