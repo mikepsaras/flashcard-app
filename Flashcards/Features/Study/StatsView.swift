@@ -4,7 +4,7 @@ import SwiftData
 /// Cross-deck study insights — streak, activity heatmap, review totals, accuracy, and a
 /// library breakdown by card maturity. A top-level sidebar destination. This wrapper holds the
 /// `@Query` + stats reads and the scroll/empty-state chrome; `StatsContentView` is the pure
-/// card stack (so it previews/snapshots from fixtures, and renders under `ImageRenderer`, which
+/// dashboard (so it previews/snapshots from fixtures, and renders under `ImageRenderer`, which
 /// doesn't lay out `ScrollView` content).
 struct StatsView: View {
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
@@ -41,7 +41,8 @@ struct StatsView: View {
     }
 }
 
-/// The pure card stack — no scroll view / navigation chrome, so it renders under `ImageRenderer`.
+/// The pure dashboard — a dense grid of stat tiles plus the heatmap and maturity bar. No scroll
+/// view / navigation chrome, so it renders under `ImageRenderer`.
 struct StatsContentView: View {
     let insights: StudyInsights
     let reviewsByDay: [String: Int]
@@ -49,26 +50,53 @@ struct StatsContentView: View {
 
     private let learningColor = Color(hex: "#FF9500")
 
+    private struct Stat: Identifiable {
+        var id: String { label }
+        let label: String
+        let value: String
+        let icon: String
+        let tint: Color
+    }
+
+    private var stats: [Stat] {
+        [
+            Stat(label: "Day streak", value: "\(insights.currentStreak)", icon: "flame.fill", tint: .orange),
+            Stat(label: "Longest streak", value: "\(insights.longestStreak)", icon: "trophy.fill", tint: Theme.accent),
+            Stat(label: "Reviewed today", value: "\(insights.reviewsToday)", icon: "checkmark.circle.fill", tint: Theme.success),
+            Stat(label: "Accuracy", value: percent(insights.accuracyAllTime), icon: "target", tint: Theme.success),
+            Stat(label: "Reviews all-time", value: "\(insights.reviewsAllTime)", icon: "tray.full.fill", tint: Theme.accent),
+            Stat(label: "Daily average", value: "\(insights.dailyAverage)", icon: "chart.bar.fill", tint: Theme.accent),
+            Stat(label: "Cards", value: "\(insights.totalCards)", icon: "rectangle.on.rectangle.angled", tint: Theme.accent),
+            Stat(label: "Due now", value: "\(insights.dueNow)", icon: "clock.fill", tint: insights.dueNow > 0 ? .orange : .secondary),
+        ]
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            streakCard
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Spacing.m)],
+                spacing: Theme.Spacing.m
+            ) {
+                ForEach(stats) { tile($0) }
+            }
             heatmapCard
-            totalsCard
-            if insights.accuracyAllTime != nil { accuracyCard }
-            libraryCard
+            maturityCard
         }
     }
 
-    // MARK: Cards
+    // MARK: Pieces
 
-    private var streakCard: some View {
-        card(nil) {
-            HStack(spacing: Theme.Spacing.l) {
-                bigStat("\(insights.currentStreak)", "Day streak", "flame.fill", .orange)
-                bigStat("\(insights.longestStreak)", "Longest", "trophy.fill", Theme.accent)
-                bigStat("\(insights.reviewsToday)", "Today", "checkmark.circle.fill", Theme.success)
-            }
+    private func tile(_ stat: Stat) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: stat.icon).font(.system(size: 15, weight: .semibold)).foregroundStyle(stat.tint)
+            Text(stat.value)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+            Text(stat.label).font(Typography.caption).foregroundStyle(.secondary).lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .cardSurface(cornerRadius: Theme.Radius.tile)
     }
 
     private var heatmapCard: some View {
@@ -77,36 +105,11 @@ struct StatsContentView: View {
         }
     }
 
-    private var totalsCard: some View {
-        card("Reviews") {
-            HStack(spacing: Theme.Spacing.l) {
-                miniStat("\(insights.reviewsThisWeek)", "This week")
-                miniStat("\(insights.reviewsAllTime)", "All time")
-                miniStat("\(insights.dailyAverage)", "Daily avg")
-            }
-        }
-    }
-
-    private var accuracyCard: some View {
-        card("Accuracy") {
-            HStack(spacing: Theme.Spacing.l) {
-                miniStat(percent(insights.accuracyAllTime), "All time")
-                miniStat(percent(insights.accuracyThisWeek), "This week")
-                miniStat("\(insights.correctAllTime)", "Correct")
-            }
-        }
-    }
-
-    private var libraryCard: some View {
-        card("Library") {
+    private var maturityCard: some View {
+        card("Card maturity") {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                HStack(spacing: Theme.Spacing.l) {
-                    miniStat("\(insights.totalCards)", "Cards")
-                    miniStat("\(insights.dueNow)", "Due now")
-                    miniStat("\(insights.dueThisWeek)", "Due ≤ 7d")
-                }
                 MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
-                HStack(spacing: Theme.Spacing.m) {
+                HStack(spacing: Theme.Spacing.l) {
                     legend("New", Theme.accent, insights.newCount)
                     legend("Learning", learningColor, insights.learningCount)
                     legend("Mature", Theme.success, insights.matureCount)
@@ -116,35 +119,14 @@ struct StatsContentView: View {
         }
     }
 
-    // MARK: Building blocks
-
-    private func card<Content: View>(_ title: String?, @ViewBuilder content: () -> Content) -> some View {
+    private func card<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            if let title {
-                Text(title).font(Typography.headline).foregroundStyle(.secondary)
-            }
+            Text(title).font(Typography.headline).foregroundStyle(.secondary)
             content()
         }
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardSurface(cornerRadius: Theme.Radius.tile)
-    }
-
-    private func bigStat(_ value: String, _ label: String, _ systemImage: String, _ tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Image(systemName: systemImage).font(.system(size: 18)).foregroundStyle(tint)
-            Text(value).font(.system(size: 32, weight: .bold, design: .rounded)).monospacedDigit()
-            Text(label).font(Typography.caption).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func miniStat(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.system(.title2, design: .rounded, weight: .bold)).monospacedDigit()
-            Text(label).font(Typography.caption).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func legend(_ label: String, _ color: Color, _ count: Int) -> some View {
@@ -160,9 +142,9 @@ struct StatsContentView: View {
     }
 }
 
-/// GitHub-style contribution grid: ~26 weeks of day cells, tinted by that day's review count.
-/// Drawn in plain SwiftUI (no Charts dependency, no scroll view), so it fits the deck panes and
-/// renders under `ImageRenderer`.
+/// GitHub-style contribution grid: weeks of day cells, tinted by that day's review count. Fills
+/// the available width (as many weeks as fit, up to a year). Drawn in plain SwiftUI (no Charts
+/// dependency, no scroll view), so it renders under `ImageRenderer`.
 struct ActivityHeatmap: View {
     let reviewsByDay: [String: Int]
     var now: Date = .now
@@ -174,7 +156,6 @@ struct ActivityHeatmap: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Fill the available width: as many weeks as fit (capped), so there's no dead space.
             let fit = Int((geo.size.width + gap) / (cell + gap))
             grid(weeks: min(max(fit, 1), maxWeeks))
         }

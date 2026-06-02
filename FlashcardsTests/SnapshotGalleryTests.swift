@@ -93,7 +93,7 @@ struct SnapshotGalleryTests {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(Theme.groupedBackground)
                 .environment(\.colorScheme, .dark),
-            size: CGSize(width: 700, height: 820), name: "11_insights_mac")
+            size: CGSize(width: 700, height: 640), name: "11_insights_mac")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/11_insights_mac.png"))
     }
 }
