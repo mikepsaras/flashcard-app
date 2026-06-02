@@ -170,6 +170,8 @@ struct DeckDetailView: View {
                 stat(value: "\(deck.dueCount)", label: "Due", tint: deck.dueCount > 0 ? Theme.accent : .secondary)
             }
 
+            if deck.cardCount > 0 { maturityStrip }
+
             PrimaryButton(
                 title: studyButtonTitle,
                 systemImage: "play.fill",
@@ -198,6 +200,27 @@ struct DeckDetailView: View {
             Text(label)
                 .font(Typography.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// This deck's card maturity — the actionable, per-deck slice of "Insights".
+    private var maturityStrip: some View {
+        let insights = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:])
+        return VStack(alignment: .leading, spacing: 8) {
+            MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
+            HStack(spacing: Theme.Spacing.m) {
+                maturityLegend("New", Theme.accent, insights.newCount)
+                maturityLegend("Learning", Color(hex: "#FF9500"), insights.learningCount)
+                maturityLegend("Mature", Theme.success, insights.matureCount)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func maturityLegend(_ label: String, _ color: Color, _ count: Int) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text("\(label) \(count)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
         }
     }
 
