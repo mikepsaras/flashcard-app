@@ -1,25 +1,22 @@
 import SwiftUI
 
-/// A text field whose placeholder disappears as soon as the field is focused
-/// (not only once text has been typed). Font and other styling applied at the
-/// call site propagate to the inner field via the environment.
+/// A form text field with **native placeholder behavior**: the placeholder stays
+/// visible until you start typing (it does *not* clear on focus), matching the system
+/// text fields in Apple's own apps. A thin wrapper over `TextField` so call sites share
+/// one placeholder + optional multiline line-limit; styling (font, etc.) applied at the
+/// call site propagates to the inner field via the environment.
 struct ClearableTextField: View {
     let placeholder: String
     @Binding var text: String
     var axis: Axis = .horizontal
     var lines: ClosedRange<Int>? = nil
 
-    @FocusState private var focused: Bool
-
     var body: some View {
-        Group {
-            if let lines {
-                TextField(focused ? "" : placeholder, text: $text, axis: axis)
-                    .lineLimit(lines)
-            } else {
-                TextField(focused ? "" : placeholder, text: $text, axis: axis)
-            }
+        if let lines {
+            TextField(placeholder, text: $text, axis: axis)
+                .lineLimit(lines)
+        } else {
+            TextField(placeholder, text: $text, axis: axis)
         }
-        .focused($focused)
     }
 }
