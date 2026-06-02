@@ -112,6 +112,7 @@ struct StudySessionView: View {
                 canUndo: session.canUndo,
                 compact: compact,
                 fourButton: fourButton,
+                isPractice: session.isPractice,
                 trackLearning: $trackLearning,
                 onUndo: { performUndo() },
                 onGrade: { performGrade($0) }

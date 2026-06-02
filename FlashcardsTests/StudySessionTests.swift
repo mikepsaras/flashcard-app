@@ -96,6 +96,36 @@ final class StudySessionTests {
         #expect(session.correctCount == 1)       // but the session still tallies
     }
 
+    @Test func practiceRunLeavesScheduleUntouchedButStillTallies() {
+        // A card scheduled in the future (not due) — studying it is a practice pass, so
+        // "Study Again" can't keep pushing its interval out.
+        let context = container.mainContext
+        let deck = Deck(name: "Practice"); context.insert(deck)
+        let card = Card(term: "a", definition: "b", deck: deck, dueDate: .now.addingTimeInterval(5 * 86_400))
+        context.insert(card)
+        try? context.save()
+        let dueBefore = card.dueDate
+
+        let session = StudySession(cards: [card], trackLearning: true)
+        #expect(session.isPractice)              // nothing due ⇒ practice
+
+        session.grade(known: true)
+        #expect(session.correctCount == 1)       // scoreboard still works
+        #expect(card.dueDate == dueBefore)       // but the schedule is untouched
+        #expect(card.repetitions == 0)
+        #expect(card.lastReviewedAt == nil)
+    }
+
+    @Test func runWithDueCardsIsNotPracticeAndStillTracks() {
+        let cards = makeCards(2)                  // seeded cards are due now
+        let session = StudySession(cards: cards, trackLearning: true)
+        #expect(session.isPractice == false)
+        let dueBefore = cards[0].dueDate
+        session.grade(known: true)
+        #expect(cards[0].dueDate != dueBefore)   // a due card still advances normally
+        #expect(cards[0].repetitions == 1)
+    }
+
     @Test func undoRestoresCountsIndexAndSchedule() {
         let cards = makeCards(2)
         let card0 = cards[0]

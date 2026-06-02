@@ -14,6 +14,11 @@ final class StudySession {
     /// The grade given to each answered card, in order — used to color the progress bar.
     private(set) var gradeLog: [Grade] = []
     var trackLearning: Bool
+    /// A run where nothing is actually due — a pure practice pass (e.g. "Study Again" after
+    /// the deck's due cards are cleared, or studying a deck ahead of schedule). Schedules are
+    /// never advanced in practice, so repeating it can't inflate intervals; the ✓/✕ scoreboard
+    /// still works.
+    let isPractice: Bool
 
     /// Snapshot captured before each grade so undo can restore exactly.
     private struct Move {
@@ -28,9 +33,12 @@ final class StudySession {
     }
     private var history: [Move] = []
 
-    init(items: [ReviewItem], trackLearning: Bool) {
+    init(items: [ReviewItem], trackLearning: Bool, now: Date = .now) {
         self.items = items
         self.trackLearning = trackLearning
+        // Nothing due ⇒ practice. Studying cards that aren't due (and advancing them) would
+        // push their intervals out further with every pass, so practice leaves them alone.
+        self.isPractice = !items.isEmpty && items.allSatisfy { !$0.card.isDue($0.direction, now: now) }
     }
 
     /// Convenience: a forward-only run (used by tests and single-direction callers).
@@ -76,7 +84,7 @@ final class StudySession {
             previousWrong: wrongCount
         ))
 
-        if trackLearning {
+        if trackLearning && !isPractice {
             let updated = SM2.schedule(current: card.schedulingState(direction), grade: grade, now: now)
             card.apply(updated, direction: direction, reviewedAt: now)
         }

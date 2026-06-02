@@ -7,6 +7,7 @@ struct StudyControlsBar: View {
     let canUndo: Bool
     var compact: Bool = false
     var fourButton: Bool = false
+    var isPractice: Bool = false
     @Binding var trackLearning: Bool
     var onUndo: () -> Void
     var onGrade: (Grade) -> Void
@@ -89,16 +90,29 @@ struct StudyControlsBar: View {
         .accessibilityLabel("Undo")
     }
 
-    private func trackToggle(showLabel: Bool) -> some View {
-        HStack(spacing: 8) {
-            if showLabel {
-                Text("Track learning").font(Typography.callout)
+    @ViewBuilder private func trackToggle(showLabel: Bool) -> some View {
+        if isPractice {
+            // Nothing is due — schedules won't change, so the toggle is moot. Show why.
+            HStack(spacing: 6) {
+                Image(systemName: "graduationcap.fill")
+                if showLabel { Text("Practice") }
             }
-            CompactSwitch(isOn: $trackLearning)
+            .font(Typography.callout)
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Practice mode")
+            .accessibilityHint("Nothing is due, so your review schedule won't change")
+        } else {
+            HStack(spacing: 8) {
+                if showLabel {
+                    Text("Track learning").font(Typography.callout)
+                }
+                CompactSwitch(isOn: $trackLearning)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Track learning")
+            .accessibilityValue(trackLearning ? "On" : "Off")
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Track learning")
-        .accessibilityValue(trackLearning ? "On" : "Off")
     }
 }
 
