@@ -126,6 +126,20 @@ enum DeckStore {
         }
     }
 
+    /// "Use the decks already here": replaces the in-memory library with the decks in
+    /// `newURL`, leaving the previous folder's files untouched on disk — the current decks
+    /// aren't moved, just dropped from view until you switch back to that folder.
+    static func switchFolder(to newURL: URL, context: ModelContext) {
+        let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+        for deck in existing {
+            context.delete(deck)
+            urlByDeckID[deck.id] = nil
+        }
+        unsavedDeckIDs.removeAll()
+        try? context.save()
+        loadAll(into: context, from: newURL)
+    }
+
     private static func deckFiles(in directory: URL) -> [URL] {
         (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil))?
             .filter { $0.pathExtension == fileExtension }

@@ -383,4 +383,27 @@ import SwiftData
         let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
         #expect(names == ["A", "B"])
     }
+
+    @Test func switchFolderLoadsNewAndLeavesOldDecksInPlace() throws {
+        let oldDir = try tempDir()
+        let newDir = try tempDir()
+
+        let container = DeckStore.makeContainer()
+        let a = Deck(name: "A"); container.mainContext.insert(a)
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: oldDir)   // A in oldDir + memory
+
+        let src = DeckStore.makeContainer()
+        let b = Deck(name: "B"); src.mainContext.insert(b)
+        try src.mainContext.save()
+        DeckStore.persist(src.mainContext, to: newDir)         // B in newDir
+
+        DeckStore.switchFolder(to: newDir, context: container.mainContext)
+
+        // In-memory shows only the new folder's decks; the old decks are NOT moved.
+        let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
+        #expect(names == ["B"])
+        #expect(try deckFilenames(oldDir) == ["A.deck"])   // old folder untouched
+        #expect(try deckFilenames(newDir) == ["B.deck"])
+    }
 }

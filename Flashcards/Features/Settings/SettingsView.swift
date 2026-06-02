@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var model = ""
     @State private var testStatus: TestStatus = .idle
     @State private var showingFolderPicker = false
+    @State private var pendingFolderURL: URL?
 
     private var reminderTime: Binding<Date> {
         Binding(
@@ -39,6 +40,18 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder]) { result in
             handleFolderPick(result)
+        }
+        .confirmationDialog(
+            pendingFolderURL.map { "Use “\($0.lastPathComponent)” for your decks?" } ?? "",
+            isPresented: Binding(get: { pendingFolderURL != nil }, set: { if !$0 { cancelPendingFolder() } }),
+            titleVisibility: .visible,
+            presenting: pendingFolderURL
+        ) { url in
+            Button("Move My Decks Here") { applyFolder(url, move: true) }
+            Button("Use the Decks Already Here") { applyFolder(url, move: false) }
+            Button("Cancel", role: .cancel) { cancelPendingFolder() }
+        } message: { _ in
+            Text("Move copies your current decks into this folder. Use loads the decks already there and leaves your current ones where they are.")
         }
         .navigationTitle("Settings")
         .onAppear { loadAI() }
@@ -163,7 +176,7 @@ struct SettingsView: View {
         } header: {
             Text("Storage")
         } footer: {
-            Text("Where your .deck files are saved and loaded. Changing it moves your current decks into the new folder and loads any decks already there.")
+            Text("Where your .deck files are saved and loaded. When you choose a folder you can move your current decks into it, or just use the decks already there.")
         }
     }
 
@@ -193,17 +206,31 @@ struct SettingsView: View {
 
     private func handleFolderPick(_ result: Result<URL, Error>) {
         guard let url = try? result.get() else { return }
-        _ = url.startAccessingSecurityScopedResource()   // needed to write into the folder
+        _ = url.startAccessingSecurityScopedResource()   // needed to read/write the folder
+        pendingFolderURL = url                            // ask how to use it
+    }
+
+    private func applyFolder(_ url: URL, move: Bool) {
         let old = LibraryLocation.shared.current
-        // Move the current decks in (and merge any already there) BEFORE switching, so the
-        // watcher/reconcile never sees an empty new folder and deletes the in-memory decks.
-        DeckStore.migrate(from: old, to: url, context: context)
+        if move {
+            // Move the decks in (merging any already there) BEFORE switching, so the
+            // watcher/reconcile never sees an empty folder and deletes the in-memory decks.
+            DeckStore.migrate(from: old, to: url, context: context)
+        } else {
+            DeckStore.switchFolder(to: url, context: context)
+        }
         LibraryLocation.shared.setCustom(url)
+        pendingFolderURL = nil
+    }
+
+    private func cancelPendingFolder() {
+        pendingFolderURL?.stopAccessingSecurityScopedResource()
+        pendingFolderURL = nil
     }
 
     private func useDefaultFolder() {
-        let old = LibraryLocation.shared.current
-        DeckStore.migrate(from: old, to: LibraryLocation.defaultFolder(), context: context)
+        // Revert to ~/Documents/Flashcards and load its decks (the custom folder is left intact).
+        DeckStore.switchFolder(to: LibraryLocation.defaultFolder(), context: context)
         LibraryLocation.shared.resetToDefault()
     }
 
