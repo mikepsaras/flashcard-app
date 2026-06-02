@@ -46,7 +46,10 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
-                    DeckStore.reconcile(into: context)   // catch edits made while backgrounded
+                    // Not while studying: a reconcile can delete cards the live
+                    // StudySession still references (the watcher is paused for the same
+                    // reason). The study-end handler above reconciles when it finishes.
+                    if studyPlan == nil { DeckStore.reconcile(into: context) }
                 } else {
                     DeckStore.persist(context)
                 }
@@ -70,7 +73,10 @@ struct RootView: View {
         // Study fills the whole window (replaces the split view) rather than a sheet.
         Group {
             if let plan = studyPlan {
+                // .id ties the session's @State to the plan, so switching plans always
+                // starts a fresh session (matches the iOS fullScreenCover(item:) identity).
                 StudySessionView(plan: plan, onClose: { studyPlan = nil })
+                    .id(plan.id)
             } else {
                 splitView
             }
