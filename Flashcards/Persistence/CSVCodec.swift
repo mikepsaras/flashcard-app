@@ -40,7 +40,8 @@ enum CSVCodec {
     static func parse(_ text: String) -> [Row] {
         let records = parseRecords(text)
         var rows: [Row] = []
-        for (index, record) in records.enumerated() {
+        var sawContent = false
+        for record in records {
             guard !record.isEmpty else { continue }
             // Quoted fields are preserved verbatim; only unquoted fields are trimmed
             // (so a quoted "  spaced  " survives import intact).
@@ -49,8 +50,13 @@ enum CSVCodec {
             // Trim only for header/blank detection — never mutate quoted content.
             let termKey = term.trimmingCharacters(in: .whitespacesAndNewlines)
             let defKey = definition.trimmingCharacters(in: .whitespacesAndNewlines)
-            if index == 0, termKey.lowercased() == "term", defKey.lowercased() == "definition" { continue }
-            if termKey.isEmpty && defKey.isEmpty { continue }
+            if termKey.isEmpty && defKey.isEmpty { continue }   // blank row (incl. leading blanks)
+            // The header is the FIRST non-blank row — detected here rather than at record
+            // index 0, so a leading blank line can't push the header into the data.
+            if !sawContent {
+                sawContent = true
+                if termKey.lowercased() == "term", defKey.lowercased() == "definition" { continue }
+            }
             rows.append(Row(term: term, definition: definition))
         }
         return rows

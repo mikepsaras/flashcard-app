@@ -35,6 +35,11 @@ import Testing
         #expect(rows.count == 2)
     }
 
+    @Test func leadingBlankLineDoesNotImportHeaderAsCard() {
+        let rows = CSVCodec.parse("\nTerm,Definition\nSprint,A time-box\n")
+        #expect(rows == [CSVCodec.Row(term: "Sprint", definition: "A time-box")])
+    }
+
     @Test func handlesCRLFLineEndings() {
         // Windows / Excel exports use CRLF. Compare the whole array (no indexing) so a
         // regression fails cleanly instead of trapping on an out-of-bounds subscript.
