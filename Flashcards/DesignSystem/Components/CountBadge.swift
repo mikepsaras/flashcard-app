@@ -22,6 +22,8 @@ struct CountBadge: View {
         .padding(.horizontal, 11)
         .padding(.vertical, 5)
         .background(color.opacity(0.15), in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(kind == .correct ? "\(count) correct" : "\(count) to review")
     }
 }
 

@@ -23,6 +23,9 @@ struct ProgressDashBar: View {
             }
         }
         .animation(.snappy, value: colors.count)
+        // Purely decorative; callers pair it with a numeric position label that VoiceOver
+        // reads, so exposing the capsules as elements would just be noise.
+        .accessibilityHidden(true)
     }
 
     /// One-to-one with cards when the session fits; otherwise each segment spans a
