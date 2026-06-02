@@ -292,6 +292,27 @@ import SwiftData
         #expect(try Data(contentsOf: dir.appendingPathComponent("Keep.deck")) == originalData)
     }
 
+    @Test func reconcileKeepsUnsavedDeckAfterFailedWrite() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Draft"); container.mainContext.insert(deck)
+        try container.mainContext.save()
+        #expect(DeckStore.persist(container.mainContext, to: dir).isSuccess)   // file on disk
+
+        // Make the folder unwritable, edit the deck, persist (fails).
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path) }
+        deck.name = "Draft (edited)"
+        try? container.mainContext.save()
+        #expect(!DeckStore.persist(container.mainContext, to: dir).isSuccess)
+
+        // Reconcile must NOT revert the in-memory edit from the stale disk file, nor
+        // delete the deck whose write just failed.
+        DeckStore.reconcile(into: container.mainContext, from: dir)
+        #expect(deck.name == "Draft (edited)")
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)
+    }
+
     @Test func importDeckReassignsCollidingID() throws {
         let dir = try tempDir()
         let container = DeckStore.makeContainer()

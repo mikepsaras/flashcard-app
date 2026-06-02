@@ -43,6 +43,11 @@ enum DeckStore {
     /// on the main thread each time a menu is built.
     private static var urlByDeckID: [UUID: URL] = [:]
 
+    /// Decks whose most recent write failed — they hold unsaved changes the on-disk file
+    /// doesn't have, so `reconcile` must not revert or delete them from disk until a save
+    /// succeeds. Recomputed on every `persist`.
+    private static var unsavedDeckIDs: Set<UUID> = []
+
     // MARK: Container (no database on disk)
 
     static func makeContainer() -> ModelContainer {
@@ -127,8 +132,10 @@ enum DeckStore {
 
         var changed = false
 
-        // Decks whose file disappeared externally.
-        for deck in existing where diskDTOs[deck.id] == nil {
+        // Decks whose file disappeared externally — but never one whose own write just
+        // failed (its file is missing because we couldn't save it, not because it was
+        // deleted; removing it here would lose the user's unsaved deck).
+        for deck in existing where diskDTOs[deck.id] == nil && !unsavedDeckIDs.contains(deck.id) {
             context.delete(deck)
             urlByDeckID[deck.id] = nil
             changed = true
@@ -138,6 +145,9 @@ enum DeckStore {
         for id in order {
             guard let dto = diskDTOs[id] else { continue }
             if let deck = byID[id] {
+                // Don't overwrite a deck whose own write just failed: the in-memory copy
+                // holds unsaved edits newer than the stale file on disk.
+                if unsavedDeckIDs.contains(id) { continue }
                 // Compare via the same lossy encode path both sides take, so identical
                 // content (including our own just-written files) compares equal.
                 let current = (try? DeckCodec.encode(deck)).flatMap { try? DeckCodec.decodeDTO($0) }
@@ -184,14 +194,20 @@ enum DeckStore {
             }
         }
         for url in deckFiles(in: directory) where !written.contains(url.lastPathComponent) {
-            // Don't prune a file belonging to a deck whose write just failed: keep its
-            // previous on-disk copy rather than losing it.
-            if !failedIDs.isEmpty,
-               let data = try? Data(contentsOf: url),
-               let dto = try? DeckCodec.decodeDTO(data),
-               failedIDs.contains(dto.id) { continue }
+            // When a write failed this pass, be conservative: keep any file we can't prove
+            // is safe to delete — one that's unreadable/undecodable right now (e.g. locked
+            // by an external editor) or that belongs to a deck whose write just failed.
+            if !failedIDs.isEmpty {
+                guard let data = try? Data(contentsOf: url),
+                      let dto = try? DeckCodec.decodeDTO(data) else { continue }   // unreadable → keep
+                if failedIDs.contains(dto.id) { continue }                          // failed deck → keep
+            }
             try? FileManager.default.removeItem(at: url)
         }
+
+        // Track decks with unsaved changes so reconcile won't revert/delete them from the
+        // stale disk copy before a save succeeds.
+        unsavedDeckIDs = failedIDs
 
         let result = PersistResult(failedDeckNames: failedNames)
         PersistenceMonitor.shared.note(result)
