@@ -69,7 +69,10 @@ struct StudyInsights: Equatable {
                 if !card.hasBeenReviewed {
                     insights.newCount += 1
                 } else {
-                    let interval = deck.studyReversed ? max(card.interval, card.reverseInterval) : card.interval
+                    // Best interval the card earned in any direction — independent of the deck's
+                    // current `studyReversed` toggle, so maturity isn't lost if reverse study is
+                    // turned off after the reverse side was already learned.
+                    let interval = max(card.interval, card.reverseInterval)
                     if interval >= matureIntervalDays { insights.matureCount += 1 }
                     else { insights.learningCount += 1 }
                 }

@@ -569,6 +569,34 @@ import SwiftData
         #expect(try deckFilenames(dir).isEmpty)
     }
 
+    @Test func reconcileAfterDeleteAllDoesNotResurrect() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        container.mainContext.insert(Deck(name: "A"))
+        container.mainContext.insert(Deck(name: "B"))
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: dir)
+
+        DeckStore.deleteAllDecks(container.mainContext, in: dir)
+        // The watcher-driven reconcile that fires after a delete must not bring decks back.
+        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == false)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 0)
+    }
+
+    @Test func reconcileIsNoOpForTaggedDeck() throws {
+        // The reconcile no-op guarantee must hold for tagged decks too (tag order preserved on
+        // re-encode), or the watcher would reload-loop on the app's own writes.
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Tagged", tags: ["Spanish", "Vocabulary"])
+        container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: dir)
+
+        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == false)
+    }
+
     // MARK: Test-host safety (the app must not touch the real library while hosting tests)
 
     @Test func isHostingTestsIsTrueUnderTestRunner() {

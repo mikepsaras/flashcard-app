@@ -61,8 +61,8 @@ struct DeckLibraryView: View {
 
             ForEach(groupedDecks) { group in
                 Section(group.tag ?? (hasAnyTags ? "Untagged" : "Decks")) {
-                    ForEach(group.decks) { deck in
-                        deckRow(deck)
+                    ForEach(group.rows) { row in
+                        deckRow(row.deck)
                     }
                     .onDelete { offsets in
                         if let index = offsets.first { deckPendingDeletion = group.decks[index] }
@@ -189,6 +189,14 @@ struct DeckLibraryView: View {
         let tag: String?      // nil ⇒ the "Untagged" group
         let decks: [Deck]
         var id: String { tag ?? "\u{0}untagged" }
+        /// Section-scoped row identities, so a deck that appears in several tag sections doesn't
+        /// produce duplicate List identities across sections (which glitches diffing on insert/delete).
+        var rows: [Row] { decks.map { Row(groupID: id, deck: $0) } }
+        struct Row: Identifiable {
+            let groupID: String
+            let deck: Deck
+            var id: String { "\(groupID)#\(deck.id.uuidString)" }
+        }
     }
 
     /// Decks grouped into sections: one per tag (a deck appears under each of its tags), with an

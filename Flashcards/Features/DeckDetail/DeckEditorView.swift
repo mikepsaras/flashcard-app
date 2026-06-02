@@ -196,7 +196,8 @@ struct DeckEditorView: View {
     private func commitNewTag() {
         let parts = newTag.split(whereSeparator: { $0 == "," || $0 == "\n" })
         for part in parts {
-            let tag = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Cap length so an over-long pasted tag can't blow out the chip flow layout.
+            let tag = String(part.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
             guard !tag.isEmpty, !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { continue }
             tags.append(tag)
         }

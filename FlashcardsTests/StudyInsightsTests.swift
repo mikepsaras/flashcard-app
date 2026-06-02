@@ -56,6 +56,17 @@ final class StudyInsightsTests {
         #expect(s.learningCount == 0)
     }
 
+    @Test func reverseEarnedMaturityCountsEvenWhenReverseDisabled() {
+        // A card matured on the reverse side, then reverse study turned OFF, must still count as
+        // Mature (not demoted to Learning) — maturity reflects what was learned, not the toggle.
+        let deck = makeDeck(studyReversed: false)
+        addCard(to: deck, reviewed: false, reverseInterval: 30)
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.newCount == 0)
+        #expect(s.learningCount == 0)
+        #expect(s.matureCount == 1)
+    }
+
     @Test func accuracyIsCorrectOverReviewsAndNilWhenEmpty() {
         let deck = makeDeck()
         let reviews = [key(0): 2, key(-1): 2]   // 4 total
