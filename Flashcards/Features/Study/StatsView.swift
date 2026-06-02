@@ -8,8 +8,10 @@ import SwiftData
 /// doesn't lay out `ScrollView` content).
 struct StatsView: View {
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
+    @AppStorage(StudyStats.revisionKey) private var statsRevision = 0
 
     var body: some View {
+        let _ = statsRevision   // re-render when stats are reset (the log isn't otherwise observed)
         let reviews = StudyStats.reviewsByDay()
         let insights = StudyInsights.make(
             decks: decks,
@@ -27,8 +29,6 @@ struct StatsView: View {
                 ScrollView {
                     StatsContentView(insights: insights, reviewsByDay: reviews)
                         .padding(Theme.Spacing.m)
-                        .frame(maxWidth: 640)
-                        .frame(maxWidth: .infinity)   // center the readable column
                 }
             }
         }
@@ -92,7 +92,7 @@ struct StatsContentView: View {
             HStack(spacing: Theme.Spacing.l) {
                 miniStat(percent(insights.accuracyAllTime), "All time")
                 miniStat(percent(insights.accuracyThisWeek), "This week")
-                Spacer(minLength: 0)
+                miniStat("\(insights.correctAllTime)", "Correct")
             }
         }
     }
@@ -168,18 +168,26 @@ struct ActivityHeatmap: View {
     var now: Date = .now
     var calendar: Calendar = .current
 
-    private let weeks = 26
-    private let cell: CGFloat = 11
+    private let cell: CGFloat = 13
     private let gap: CGFloat = 3
+    private let maxWeeks = 53
 
     var body: some View {
+        GeometryReader { geo in
+            // Fill the available width: as many weeks as fit (capped), so there's no dead space.
+            let fit = Int((geo.size.width + gap) / (cell + gap))
+            grid(weeks: min(max(fit, 1), maxWeeks))
+        }
+        .frame(height: 7 * cell + 6 * gap)
+    }
+
+    private func grid(weeks: Int) -> some View {
         let today = calendar.startOfDay(for: now)
         let weekday = calendar.component(.weekday, from: today)
         let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
         let firstDay = calendar.date(byAdding: .day, value: -((weeks - 1) * 7), to: startOfWeek) ?? today
-
-        HStack(spacing: gap) {
-            ForEach(0..<weeks, id: \.self) { col in
+        return HStack(spacing: gap) {
+            ForEach(Array(0..<weeks), id: \.self) { col in
                 VStack(spacing: gap) {
                     ForEach(0..<7, id: \.self) { row in
                         cellView(firstDay: firstDay, today: today, index: col * 7 + row)
@@ -187,7 +195,6 @@ struct ActivityHeatmap: View {
                 }
             }
         }
-        .frame(height: 7 * cell + 6 * gap, alignment: .leading)
     }
 
     @ViewBuilder private func cellView(firstDay: Date, today: Date, index: Int) -> some View {

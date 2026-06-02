@@ -5,6 +5,7 @@ import SwiftData
 struct TodayDetailView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
+    @AppStorage(StudyStats.revisionKey) private var statsRevision = 0
     var onStudy: (StudyPlan) -> Void
 
     private var dueDecks: [(deck: Deck, count: Int)] {
@@ -17,6 +18,7 @@ struct TodayDetailView: View {
     private var totalDue: Int { dueDecks.reduce(0) { $0 + $1.count } }
 
     var body: some View {
+        let _ = statsRevision   // re-render when stats are reset (the log isn't otherwise observed)
         Group {
             if totalDue == 0 {
                 let streak = StudyStats.currentStreak()

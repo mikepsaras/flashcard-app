@@ -339,6 +339,19 @@ enum DeckStore {
         return result
     }
 
+    /// Deletes every deck from the context and removes all deck files in `directory` — the
+    /// "delete all data" reset. Destructive; the caller confirms first.
+    static func deleteAllDecks(_ context: ModelContext, in directory: URL = libraryURL()) {
+        let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+        for deck in existing { context.delete(deck) }
+        try? context.save()
+        if let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+            for url in urls where isDeckFile(url) { try? FileManager.default.removeItem(at: url) }
+        }
+        urlByDeckID.removeAll()
+        unsavedDeckIDs.removeAll()
+    }
+
     // MARK: Import / share
 
     /// Imports a `.deck` file (from anywhere) into the context, giving it a fresh

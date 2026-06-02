@@ -555,6 +555,20 @@ import SwiftData
         #expect(try deckFilenames(dir) == ["Dup.cards"])
     }
 
+    @Test func deleteAllDecksRemovesDecksAndFiles() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        container.mainContext.insert(Deck(name: "A"))
+        container.mainContext.insert(Deck(name: "B"))
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: dir)
+        #expect(try deckFilenames(dir).count == 2)
+
+        DeckStore.deleteAllDecks(container.mainContext, in: dir)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 0)
+        #expect(try deckFilenames(dir).isEmpty)
+    }
+
     // MARK: Test-host safety (the app must not touch the real library while hosting tests)
 
     @Test func isHostingTestsIsTrueUnderTestRunner() {

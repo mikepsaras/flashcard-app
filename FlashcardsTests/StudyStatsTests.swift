@@ -134,4 +134,15 @@ import Foundation
         let log = [key(0): 0, key(-3): 1]   // a zero day + a lone active day
         #expect(StudyStats.longestStreak(in: log, calendar: cal) == 1)
     }
+
+    @Test func resetClearsAllHistory() {
+        withIsolatedDefaults { defaults in
+            StudyStats.recordReview(correct: true, now: now, defaults: defaults)
+            StudyStats.recordReview(correct: false, now: now, defaults: defaults)
+            StudyStats.reset(defaults: defaults)
+            #expect(StudyStats.reviewsByDay(defaults: defaults).isEmpty)
+            #expect(StudyStats.correctByDay(defaults: defaults).isEmpty)
+            #expect(StudyStats.currentStreak(now: now, defaults: defaults) == 0)
+        }
+    }
 }

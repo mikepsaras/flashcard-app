@@ -14,6 +14,8 @@ struct StudyInsights: Equatable {
     /// correct / reviews; `nil` when there are no reviews to divide by.
     var accuracyAllTime: Double?
     var accuracyThisWeek: Double?
+    /// Total correct reviews all-time (the numerator behind accuracyAllTime).
+    var correctAllTime = 0
     var totalCards = 0
     var newCount = 0
     var learningCount = 0
@@ -53,6 +55,7 @@ struct StudyInsights: Equatable {
             ? Double(correctAllTime) / Double(insights.reviewsAllTime) : nil
         insights.accuracyThisWeek = insights.reviewsThisWeek > 0
             ? Double(correctThisWeek) / Double(insights.reviewsThisWeek) : nil
+        insights.correctAllTime = correctAllTime
 
         let activeDays = reviewsByDay.values.filter { $0 > 0 }.count
         insights.dailyAverage = activeDays > 0

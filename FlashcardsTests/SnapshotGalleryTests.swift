@@ -91,8 +91,9 @@ struct SnapshotGalleryTests {
             StatsContentView(insights: insights, reviewsByDay: reviews, now: now)
                 .padding(Theme.Spacing.m)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(Theme.groupedBackground),
-            size: CGSize(width: 600, height: 880), name: "11_insights_mac")
+                .background(Theme.groupedBackground)
+                .environment(\.colorScheme, .dark),
+            size: CGSize(width: 700, height: 820), name: "11_insights_mac")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/11_insights_mac.png"))
     }
 }

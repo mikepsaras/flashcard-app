@@ -11,6 +11,9 @@ enum StudyStats {
     /// Correct reviews each day, by day-key — a parallel store so accuracy / retention can be
     /// derived without migrating the existing reviews log.
     static let correctStorageKey = "reviewCorrectByDay"
+    /// Bumped whenever the logs are cleared (reset), so views that read raw UserDefaults rather
+    /// than `@AppStorage` re-render. Study sessions already re-render on their own when they end.
+    static let revisionKey = "studyStatsRevision"
 
     static func dayKey(_ date: Date, calendar: Calendar = .current) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
@@ -44,6 +47,13 @@ enum StudyStats {
     static func unrecordReview(correct: Bool, now: Date = .now, defaults: UserDefaults = .standard) {
         bump(storageKey, now: now, by: -1, defaults: defaults)
         if correct { bump(correctStorageKey, now: now, by: -1, defaults: defaults) }
+    }
+
+    /// Clears all recorded study history — streak, reviews, and accuracy.
+    static func reset(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: storageKey)
+        defaults.removeObject(forKey: correctStorageKey)
+        defaults.set(defaults.integer(forKey: revisionKey) + 1, forKey: revisionKey)
     }
 
     static func reviewsToday(now: Date = .now, defaults: UserDefaults = .standard) -> Int {

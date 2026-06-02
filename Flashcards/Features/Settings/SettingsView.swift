@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var testStatus: TestStatus = .idle
     @State private var showingFolderPicker = false
     @State private var pendingFolderURL: URL?
+    @State private var showingResetStats = false
+    @State private var showingDeleteAll = false
 
     private var reminderTime: Binding<Date> {
         Binding(
@@ -35,6 +37,7 @@ struct SettingsView: View {
             remindersSection
             aiSection
             storageSection
+            dataSection
         }
         .formStyle(.grouped)
         .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder]) { result in
@@ -53,6 +56,21 @@ struct SettingsView: View {
             Text("Move copies your current decks into this folder. Use loads the decks already there and leaves your current ones where they are.")
         }
         .navigationTitle("Settings")
+        .confirmationDialog("Reset statistics?", isPresented: $showingResetStats, titleVisibility: .visible) {
+            Button("Reset Statistics", role: .destructive) { StudyStats.reset() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Clears your study streak and review history. Your decks and cards are kept.")
+        }
+        .confirmationDialog("Delete all decks?", isPresented: $showingDeleteAll, titleVisibility: .visible) {
+            Button("Delete Everything", role: .destructive) {
+                DeckStore.deleteAllDecks(context)
+                StudyStats.reset()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Permanently deletes every deck and card, and clears your statistics. This can’t be undone.")
+        }
         .onAppear { loadAI() }
         .task {
             // Resync the reminder toggle if notification permission was revoked in System
@@ -169,6 +187,17 @@ struct SettingsView: View {
             Text("Storage")
         } footer: {
             Text("Where your deck files are saved and loaded. When you choose a folder you can move your current decks into it, or just use the decks already there.")
+        }
+    }
+
+    private var dataSection: some View {
+        Section {
+            Button("Reset Statistics") { showingResetStats = true }
+            Button("Delete All Decks", role: .destructive) { showingDeleteAll = true }
+        } header: {
+            Text("Data")
+        } footer: {
+            Text("Reset Statistics clears your streak and review history but keeps your decks. Delete All Decks permanently removes every deck and card, and clears statistics.")
         }
     }
 

@@ -63,6 +63,7 @@ final class StudyInsightsTests {
         let s = StudyInsights.make(decks: [deck], reviewsByDay: reviews, correctByDay: correct, now: now, calendar: cal)
         #expect(s.reviewsAllTime == 4)
         #expect(s.accuracyAllTime == 0.75)
+        #expect(s.correctAllTime == 3)
         let empty = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
         #expect(empty.accuracyAllTime == nil)
     }
