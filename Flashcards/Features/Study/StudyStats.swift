@@ -25,6 +25,16 @@ enum StudyStats {
         UserDefaults.standard.set(current, forKey: storageKey)
     }
 
+    /// Reverses one recorded review for today (used when a grade is undone) so a
+    /// grade-then-undo can't inflate "reviewed today" or fabricate a streak.
+    static func unrecordReview(now: Date = .now) {
+        var current = log()
+        let key = dayKey(now)
+        guard let count = current[key] else { return }
+        if count <= 1 { current.removeValue(forKey: key) } else { current[key] = count - 1 }
+        UserDefaults.standard.set(current, forKey: storageKey)
+    }
+
     static func reviewsToday(now: Date = .now) -> Int {
         log()[dayKey(now)] ?? 0
     }

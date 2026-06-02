@@ -114,7 +114,7 @@ struct StudySessionView: View {
                 compact: compact,
                 fourButton: fourButton,
                 trackLearning: $trackLearning,
-                onUndo: { session.undo() },
+                onUndo: { performUndo() },
                 onGrade: { performGrade($0) }
             )
             .padding(.horizontal, Theme.Spacing.m)
@@ -192,6 +192,12 @@ struct StudySessionView: View {
         #endif
     }
 
+    private func performUndo() {
+        guard session.canUndo else { return }
+        session.undo()
+        StudyStats.unrecordReview()   // keep the daily review count / streak honest
+    }
+
     private func finish() {
         try? context.save()
         DeckStore.persist(context)
@@ -221,7 +227,7 @@ struct StudySessionView: View {
                     .keyboardShortcut(.space, modifiers: [])
                 Button("Shuffle") { session.shuffleRemaining() }
                     .keyboardShortcut("s", modifiers: [])
-                Button("Undo") { session.undo() }
+                Button("Undo") { performUndo() }
                     .keyboardShortcut("z", modifiers: .command)
                 if fourButton {
                     Button("Again") { performGrade(.again) }.keyboardShortcut("1", modifiers: [])
