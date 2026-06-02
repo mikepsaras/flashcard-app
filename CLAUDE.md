@@ -4,6 +4,28 @@ An ultra-clean native flashcard app for **macOS and iPhone**, built as a single
 SwiftUI multiplatform codebase. SM-2 spaced repetition, AI card generation, and
 **file-based local storage** — each deck is its own `.deck` file.
 
+## Git & syncing (read first — more than one agent works in this folder)
+
+This is a solo project, but multiple AI agents/sessions edit this same folder, and
+branches have silently drifted before (one model committed onto a local
+`feature/…` branch while another kept pushing `main`). To stay in sync:
+
+- **Work on `main`.** Do **not** create feature branches unless explicitly asked.
+- **Before starting any work, sync with the remote:**
+  ```bash
+  git fetch origin
+  git switch main
+  git pull --ff-only origin main
+  ```
+- **Before committing, confirm where you are:** `git branch --show-current`
+  (must be `main`) and `git status` / `git log --oneline -5`.
+- **Commit and push after each meaningful change:** `git push origin main`.
+  `origin/main` is the source of truth.
+- **Red flag:** if `git push` says *"Everything up-to-date"* right after you
+  committed, you're on the wrong branch — check `git branch --show-current`, then
+  `git switch main && git merge --ff-only <your-branch>` to move the work onto main.
+- End commit messages with a `Co-Authored-By:` trailer naming your model.
+
 ## Toolchain notes (important)
 
 - Xcode 26.5 is installed but the active developer dir is the Command Line Tools.
