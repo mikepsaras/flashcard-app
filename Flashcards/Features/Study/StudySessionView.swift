@@ -186,20 +186,19 @@ struct StudySessionView: View {
     private func performGrade(_ grade: Grade) {
         session.grade(grade)
         // Practice runs (nothing due) don't advance schedules, and must not feed the daily
-        // review count / streak either — otherwise "Study Again" or studying an already-
-        // caught-up deck would keep a streak alive with nothing actually due.
-        if !session.isPractice { StudyStats.recordReview() }
+        // review count / accuracy / streak either — otherwise "Study Again" or studying an
+        // already-caught-up deck would keep a streak alive with nothing actually due.
+        if !session.isPractice { StudyStats.recordReview(correct: grade.isCorrect) }
         #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(grade.isCorrect ? .success : .warning)
         #endif
     }
 
     private func performUndo() {
-        guard session.canUndo else { return }
-        session.undo()
-        // Mirror performGrade: only real (non-practice) reviews were recorded, so only those
-        // are reversed — keeps the daily review count / streak honest.
-        if !session.isPractice { StudyStats.unrecordReview() }
+        guard let undone = session.undo() else { return }
+        // Mirror performGrade: only real (non-practice) reviews were recorded, so only those are
+        // reversed — and with the same correctness — keeping the count / accuracy / streak honest.
+        if !session.isPractice { StudyStats.unrecordReview(correct: undone.isCorrect) }
     }
 
     private func finish() {

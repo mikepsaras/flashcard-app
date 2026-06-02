@@ -101,9 +101,10 @@ final class StudySession {
         advance()
     }
 
-    func undo() {
-        guard let move = history.popLast() else { return }
-        if !gradeLog.isEmpty { gradeLog.removeLast() }
+    @discardableResult
+    func undo() -> Grade? {
+        guard let move = history.popLast() else { return nil }
+        let undoneGrade = gradeLog.popLast()
 
         // Always restore the snapshot — never gate this on the *current* `trackLearning`
         // value. If the grade applied an SM-2 change, this reverts it; if it didn't (tracking
@@ -122,6 +123,7 @@ final class StudySession {
             wrongCount = move.previousWrong
             isShowingDefinition = move.wasShowingDefinition
         }
+        return undoneGrade
     }
 
     /// Shuffles the current item and everything not yet answered. Undo history is
