@@ -113,67 +113,82 @@ struct AIGenerationView: View {
     }
 
     private var inputForm: some View {
-        Form {
-            if case .newDeck = target {
-                Section("Deck name") {
-                    ClearableTextField(placeholder: "e.g. Spanish Basics", text: $deckName)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                if case .newDeck = target {
+                    LabeledField(label: "Deck name", placeholder: "e.g. Spanish Basics", text: $deckName)
                 }
-            }
 
-            Section {
-                TextEditor(text: $prompt)
-                    .font(Typography.body)
-                    .frame(minHeight: 130)
-                Button {
-                    showingFileImporter = true
-                } label: {
-                    Label("Import from file…", systemImage: "doc.badge.plus")
-                }
-            } header: {
-                Text("Notes or topic")
-            } footer: {
-                Text("Type or paste text, or import a .txt / .md file to use as the source.")
-            }
-
-            Section {
-                HStack(spacing: 12) {
-                    Text("Number of cards")
-                        .lineLimit(1)
-                        .foregroundStyle(autoCount ? .secondary : .primary)
-                    Spacer(minLength: 8)
-                    if !autoCount {
-                        TextField("", text: $countText)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 48)
-                            .textFieldStyle(.roundedBorder)
-                            #if os(iOS)
-                            .keyboardType(.numberPad)
-                            #endif
-                        #if os(macOS)
-                        Stepper("", value: $count, in: 1...100)
-                            .labelsHidden()
-                        #endif
+                VStack(alignment: .leading, spacing: 7) {
+                    fieldLabel("Notes or topic")
+                    TextEditor(text: $prompt)
+                        .font(Typography.body)
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 150)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .fieldBox()
+                    Button { showingFileImporter = true } label: {
+                        Label("Import from file…", systemImage: "doc.badge.plus").font(Typography.callout)
                     }
-                    Text("Auto").foregroundStyle(.secondary)
-                    Toggle("Auto", isOn: $autoCount.animation())
-                        .labelsHidden()
-                        .toggleStyle(.switch)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.accent)
+                    .padding(.top, 2)
+                    caption("Type or paste text, or import a .txt / .md file to use as the source.")
                 }
-                .onChange(of: countText) { _, newValue in
-                    let filtered = String(newValue.filter(\.isNumber).prefix(3))
-                    if filtered != newValue { countText = filtered; return }
-                    if let value = Int(filtered) { count = min(max(value, 1), 100) }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 12) {
+                        Text("Number of cards")
+                            .lineLimit(1)
+                            .foregroundStyle(autoCount ? .secondary : .primary)
+                        Spacer(minLength: 8)
+                        if !autoCount {
+                            TextField("", text: $countText)
+                                .multilineTextAlignment(.center)
+                                .frame(width: 48)
+                                .textFieldStyle(.roundedBorder)
+                                #if os(iOS)
+                                .keyboardType(.numberPad)
+                                #endif
+                            #if os(macOS)
+                            Stepper("", value: $count, in: 1...100)
+                                .labelsHidden()
+                            #endif
+                        }
+                        Text("Auto").foregroundStyle(.secondary)
+                        Toggle("Auto", isOn: $autoCount.animation())
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .fieldBox()
+                    .onChange(of: countText) { _, newValue in
+                        let filtered = String(newValue.filter(\.isNumber).prefix(3))
+                        if filtered != newValue { countText = filtered; return }
+                        if let value = Int(filtered) { count = min(max(value, 1), 100) }
+                    }
+                    .onChange(of: count) { _, newValue in
+                        if countText != String(newValue) { countText = String(newValue) }
+                    }
+                    caption(autoCount
+                        ? "The AI decides how many cards to create. Generated with \(provider.displayName)."
+                        : "Generated with \(provider.displayName). Review and edit before adding.")
                 }
-                .onChange(of: count) { _, newValue in
-                    if countText != String(newValue) { countText = String(newValue) }
-                }
-            } footer: {
-                Text(autoCount
-                     ? "The AI decides how many cards to create. Generated with \(provider.displayName)."
-                     : "Generated with \(provider.displayName). Review and edit before adding.")
             }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .formStyle(.grouped)
+        .background(Theme.groupedBackground)
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text).font(.system(.subheadline, weight: .medium)).foregroundStyle(.secondary)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 2)
     }
 
     private var generatingState: some View {

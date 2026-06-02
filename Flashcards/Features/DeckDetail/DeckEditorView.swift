@@ -113,8 +113,7 @@ struct DeckEditorView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fieldSurface))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.10)))
+        .fieldBox()
     }
 
     private func caption(_ text: String) -> some View {

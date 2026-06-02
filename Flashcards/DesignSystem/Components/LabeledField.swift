@@ -21,14 +21,7 @@ struct LabeledField: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Theme.fieldSurface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.10))
-                )
+                .fieldBox()
         }
     }
 
@@ -38,6 +31,16 @@ struct LabeledField: View {
         } else {
             TextField(placeholder, text: $text, axis: axis)
         }
+    }
+}
+
+extension View {
+    /// The editor field-box chrome — a rounded surface a step above the grouped page,
+    /// subtly bordered. Shared by `LabeledField`, the editor toggle rows, and the AI form
+    /// so every input box matches. Apply your own inner padding before this.
+    func fieldBox(cornerRadius: CGFloat = 10) -> some View {
+        background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Theme.fieldSurface))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).strokeBorder(Color.primary.opacity(0.10)))
     }
 }
 
