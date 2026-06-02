@@ -14,33 +14,35 @@ enum StudyStats {
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
-    private static func log() -> [String: Int] {
-        UserDefaults.standard.dictionary(forKey: storageKey) as? [String: Int] ?? [:]
+    private static func log(_ defaults: UserDefaults) -> [String: Int] {
+        defaults.dictionary(forKey: storageKey) as? [String: Int] ?? [:]
     }
 
-    /// Records one graded card against today.
-    static func recordReview(now: Date = .now) {
-        var current = log()
+    /// Records one graded card against today. `defaults` is injectable so tests use an
+    /// isolated suite and never mutate the app's real streak data (the test host shares
+    /// `.standard`).
+    static func recordReview(now: Date = .now, defaults: UserDefaults = .standard) {
+        var current = log(defaults)
         current[dayKey(now), default: 0] += 1
-        UserDefaults.standard.set(current, forKey: storageKey)
+        defaults.set(current, forKey: storageKey)
     }
 
     /// Reverses one recorded review for today (used when a grade is undone) so a
     /// grade-then-undo can't inflate "reviewed today" or fabricate a streak.
-    static func unrecordReview(now: Date = .now) {
-        var current = log()
+    static func unrecordReview(now: Date = .now, defaults: UserDefaults = .standard) {
+        var current = log(defaults)
         let key = dayKey(now)
         guard let count = current[key] else { return }
         if count <= 1 { current.removeValue(forKey: key) } else { current[key] = count - 1 }
-        UserDefaults.standard.set(current, forKey: storageKey)
+        defaults.set(current, forKey: storageKey)
     }
 
-    static func reviewsToday(now: Date = .now) -> Int {
-        log()[dayKey(now)] ?? 0
+    static func reviewsToday(now: Date = .now, defaults: UserDefaults = .standard) -> Int {
+        log(defaults)[dayKey(now)] ?? 0
     }
 
-    static func currentStreak(now: Date = .now) -> Int {
-        streak(in: log(), asOf: now)
+    static func currentStreak(now: Date = .now, defaults: UserDefaults = .standard) -> Int {
+        streak(in: log(defaults), asOf: now)
     }
 
     /// Consecutive days (ending today, or yesterday if today isn't studied yet) that
