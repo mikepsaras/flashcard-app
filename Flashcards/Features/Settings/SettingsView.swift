@@ -176,7 +176,7 @@ struct SettingsView: View {
         } header: {
             Text("Storage")
         } footer: {
-            Text("Where your .deck files are saved and loaded. When you choose a folder you can move your current decks into it, or just use the decks already there.")
+            Text("Where your deck files are saved and loaded. When you choose a folder you can move your current decks into it, or just use the decks already there.")
         }
     }
 

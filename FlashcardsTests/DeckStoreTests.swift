@@ -133,7 +133,7 @@ import SwiftData
 
     private func deckFilenames(_ dir: URL) throws -> [String] {
         try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "deck" }
+            .filter { DeckStore.isDeckFile($0) }
             .map(\.lastPathComponent)
             .sorted()
     }
@@ -148,7 +148,7 @@ import SwiftData
         try first.mainContext.save()
         DeckStore.persist(first.mainContext, to: dir)
 
-        #expect(try deckFilenames(dir) == ["Spanish.deck"])
+        #expect(try deckFilenames(dir) == ["Spanish.cards"])
 
         let second = DeckStore.makeContainer()
         #expect(DeckStore.loadAll(into: second.mainContext, from: dir) == 1)
@@ -164,12 +164,12 @@ import SwiftData
         let beta = Deck(name: "Beta"); container.mainContext.insert(beta)
         try container.mainContext.save()
         DeckStore.persist(container.mainContext, to: dir)
-        #expect(try deckFilenames(dir) == ["Alpha.deck", "Beta.deck"])
+        #expect(try deckFilenames(dir) == ["Alpha.cards", "Beta.cards"])
 
         container.mainContext.delete(beta)
         try container.mainContext.save()
         DeckStore.persist(container.mainContext, to: dir)
-        #expect(try deckFilenames(dir) == ["Alpha.deck"])
+        #expect(try deckFilenames(dir) == ["Alpha.cards"])
     }
 
     @Test func renamingADeckRenamesItsFile() throws {
@@ -178,12 +178,12 @@ import SwiftData
         let deck = Deck(name: "Old Name"); container.mainContext.insert(deck)
         try container.mainContext.save()
         DeckStore.persist(container.mainContext, to: dir)
-        #expect(try deckFilenames(dir) == ["Old Name.deck"])
+        #expect(try deckFilenames(dir) == ["Old Name.cards"])
 
         deck.name = "New Name"
         try container.mainContext.save()
         DeckStore.persist(container.mainContext, to: dir)
-        #expect(try deckFilenames(dir) == ["New Name.deck"])
+        #expect(try deckFilenames(dir) == ["New Name.cards"])
     }
 
     @Test func duplicateNamesGetSuffixes() throws {
@@ -193,7 +193,7 @@ import SwiftData
         container.mainContext.insert(Deck(name: "Dup"))
         try container.mainContext.save()
         DeckStore.persist(container.mainContext, to: dir)
-        #expect(try deckFilenames(dir) == ["Dup 2.deck", "Dup.deck"])
+        #expect(try deckFilenames(dir) == ["Dup 2.cards", "Dup.cards"])
     }
 
     // MARK: Reconcile (external edits)
@@ -236,7 +236,7 @@ import SwiftData
         try container.mainContext.save()
         DeckStore.persist(container.mainContext, to: dir)
 
-        try FileManager.default.removeItem(at: dir.appendingPathComponent("B.deck"))
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("B.cards"))
         #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == true)
         let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
         #expect(names == ["A"])
@@ -274,7 +274,7 @@ import SwiftData
         container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try container.mainContext.save()
         #expect(DeckStore.persist(container.mainContext, to: dir).isSuccess)
-        let originalData = try Data(contentsOf: dir.appendingPathComponent("Keep.deck"))
+        let originalData = try Data(contentsOf: dir.appendingPathComponent("Keep.cards"))
 
         // Make the folder unwritable so the next atomic write fails.
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
@@ -288,8 +288,8 @@ import SwiftData
         #expect(!result.isSuccess)
         #expect(result.failedDeckNames == ["Changed"])
         // The previous good file is neither pruned nor corrupted.
-        #expect(try deckFilenames(dir) == ["Keep.deck"])
-        #expect(try Data(contentsOf: dir.appendingPathComponent("Keep.deck")) == originalData)
+        #expect(try deckFilenames(dir) == ["Keep.cards"])
+        #expect(try Data(contentsOf: dir.appendingPathComponent("Keep.cards")) == originalData)
     }
 
     @Test func reconcileKeepsUnsavedDeckAfterFailedWrite() throws {
@@ -323,7 +323,7 @@ import SwiftData
         let originalID = deck.id
 
         // Re-importing the same file into the same context must clone it under a new id.
-        let imported = try #require(DeckStore.importDeck(from: dir.appendingPathComponent("Orig.deck"), into: container.mainContext))
+        let imported = try #require(DeckStore.importDeck(from: dir.appendingPathComponent("Orig.cards"), into: container.mainContext))
         #expect(imported.id != originalID)
         #expect(imported.name == "Orig")
         #expect(imported.cardArray.count == 1)
@@ -376,8 +376,8 @@ import SwiftData
 
         // New folder has both; the old folder's A.deck was moved away.
         let newNames = try deckFilenames(newDir)
-        #expect(newNames.contains("A.deck"))
-        #expect(newNames.contains("B.deck"))
+        #expect(newNames.contains("A.cards"))
+        #expect(newNames.contains("B.cards"))
         #expect(try deckFilenames(oldDir) == [])
         // In-memory library is now the union of both.
         let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
@@ -403,7 +403,67 @@ import SwiftData
         // In-memory shows only the new folder's decks; the old decks are NOT moved.
         let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
         #expect(names == ["B"])
-        #expect(try deckFilenames(oldDir) == ["A.deck"])   // old folder untouched
-        #expect(try deckFilenames(newDir) == ["B.deck"])
+        #expect(try deckFilenames(oldDir) == ["A.cards"])   // old folder untouched
+        #expect(try deckFilenames(newDir) == ["B.cards"])
+    }
+
+    // MARK: Legacy .deck → .cards extension migration
+
+    @Test func migrateLegacyExtensionRenamesDeckToCards() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Legacy"); container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+        let data = try DeckCodec.encode(deck)
+        try data.write(to: dir.appendingPathComponent("Legacy.deck"))   // an old-format filename
+
+        #expect(DeckStore.migrateLegacyExtension(in: dir) == 1)
+        #expect(try deckFilenames(dir) == ["Legacy.cards"])             // renamed; .deck is gone
+        // Renamed by copying the exact bytes — no re-encode.
+        #expect(try Data(contentsOf: dir.appendingPathComponent("Legacy.cards")) == data)
+
+        // Loads like any deck, and a second pass is a no-op.
+        let loaded = DeckStore.makeContainer()
+        #expect(DeckStore.loadAll(into: loaded.mainContext, from: dir) == 1)
+        #expect(DeckStore.migrateLegacyExtension(in: dir) == 0)
+    }
+
+    @Test func loadAllReadsLegacyDeckFilesWithoutMigrating() throws {
+        let dir = try tempDir()
+        let src = DeckStore.makeContainer()
+        let deck = Deck(name: "Old"); src.mainContext.insert(deck)
+        try src.mainContext.save()
+        try DeckCodec.encode(deck).write(to: dir.appendingPathComponent("Old.deck"))
+
+        // A bare .deck file still loads even if it hasn't been renamed yet (backward compatible).
+        let loaded = DeckStore.makeContainer()
+        #expect(DeckStore.loadAll(into: loaded.mainContext, from: dir) == 1)
+        #expect(try loaded.mainContext.fetch(FetchDescriptor<Deck>()).first?.name == "Old")
+    }
+
+    @Test func migrateLegacyExtensionKeepsExistingCardsFile() throws {
+        // If both Foo.deck and Foo.cards exist, don't clobber the .cards file.
+        let dir = try tempDir()
+        try Data("new".utf8).write(to: dir.appendingPathComponent("Foo.cards"))
+        try Data("old".utf8).write(to: dir.appendingPathComponent("Foo.deck"))
+
+        #expect(DeckStore.migrateLegacyExtension(in: dir) == 0)   // skipped (unreadable, not same id)
+        #expect(try Data(contentsOf: dir.appendingPathComponent("Foo.cards")) == Data("new".utf8))
+    }
+
+    @Test func migrateLegacyExtensionRemovesRedundantSameDeckDuplicate() throws {
+        // Both extensions hold the SAME deck (a transition-state duplicate, e.g. one device
+        // wrote .cards while another re-synced the old .deck). The redundant .deck is dropped.
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Dup"); container.mainContext.insert(deck)
+        try container.mainContext.save()
+        let data = try DeckCodec.encode(deck)
+        try data.write(to: dir.appendingPathComponent("Dup.cards"))
+        try data.write(to: dir.appendingPathComponent("Dup.deck"))
+
+        #expect(DeckStore.migrateLegacyExtension(in: dir) == 1)
+        #expect(try deckFilenames(dir) == ["Dup.cards"])
     }
 }

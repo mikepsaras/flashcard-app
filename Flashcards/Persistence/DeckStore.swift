@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftData
+import UniformTypeIdentifiers
 
 /// Outcome of a `persist` pass — which decks (if any) failed to write to disk.
 struct PersistResult: Equatable {
@@ -35,8 +36,26 @@ final class PersistenceMonitor {
 /// keeps an in-memory SwiftData working copy that's rebuilt from the files at launch.
 @MainActor
 enum DeckStore {
-    static let fileExtension = "deck"
+    /// Current deck-file extension. `.cards` is ours alone — the old `.deck` collided with
+    /// another app's document type on some systems, so deck files couldn't pick up our icon.
+    static let fileExtension = "cards"
+
+    /// Older releases (and decks shared from them) used `.deck`. We still read these and
+    /// migrate them to `.cards` in place (see `migrateLegacyExtension`).
+    static let legacyFileExtensions: Set<String> = ["deck"]
+
     static let schema = Schema([Deck.self, Card.self])
+
+    /// Whether a URL is one of our deck files (current or legacy extension).
+    static func isDeckFile(_ url: URL) -> Bool {
+        url.pathExtension == fileExtension || legacyFileExtensions.contains(url.pathExtension)
+    }
+
+    /// UTTypes accepted by the deck importers: current + legacy extensions, plus JSON.
+    static var importContentTypes: [UTType] {
+        ([fileExtension] + legacyFileExtensions)
+            .compactMap { UTType(filenameExtension: $0) } + [.json]
+    }
 
     /// Cache of deck id → on-disk file URL, kept warm by `loadAll`/`persist` so the
     /// share / reveal-in-Finder lookups don't rescan and re-decode every `.deck` file
@@ -113,7 +132,8 @@ enum DeckStore {
         }
         unsavedDeckIDs.subtract(movedIDs)   // moved decks are now saved in the new folder
 
-        // Merge in any decks that already lived in the new folder.
+        // Convert any legacy .deck files already in the new folder, then merge them in.
+        migrateLegacyExtension(in: newURL)
         reconcile(into: context, from: newURL)
 
         // Remove the originals we successfully moved (true move).
@@ -137,12 +157,46 @@ enum DeckStore {
         }
         unsavedDeckIDs.removeAll()
         try? context.save()
+        migrateLegacyExtension(in: newURL)
         loadAll(into: context, from: newURL)
+    }
+
+    /// Renames legacy `.deck` files in `directory` to the current `.cards` extension in
+    /// place — writing the new file first, then removing the old (never the reverse), so a
+    /// failure mid-way can't lose a deck. A no-op when there are none; skips a file whose
+    /// `.cards` counterpart already exists. Returns how many were converted.
+    @discardableResult
+    static func migrateLegacyExtension(in directory: URL = libraryURL()) -> Int {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        else { return 0 }
+        var migrated = 0
+        for url in contents where legacyFileExtensions.contains(url.pathExtension) {
+            let dest = url.deletingPathExtension().appendingPathExtension(fileExtension)
+            if fm.fileExists(atPath: dest.path) {
+                // A .cards counterpart already exists (e.g. written by another device mid-
+                // transition). Drop the legacy .deck only when it's the SAME deck — never when
+                // it's unreadable or a different id, so a genuine name collision isn't lost.
+                let legacyID = (try? Data(contentsOf: url)).flatMap { try? DeckCodec.decodeDTO($0) }?.id
+                let cardsID = (try? Data(contentsOf: dest)).flatMap { try? DeckCodec.decodeDTO($0) }?.id
+                if let legacyID, legacyID == cardsID {
+                    try? fm.removeItem(at: url)
+                    migrated += 1
+                }
+                continue
+            }
+            guard let data = try? Data(contentsOf: url) else { continue }
+            if (try? data.write(to: dest, options: .atomic)) != nil {
+                try? fm.removeItem(at: url)
+                migrated += 1
+            }
+        }
+        return migrated
     }
 
     private static func deckFiles(in directory: URL) -> [URL] {
         (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil))?
-            .filter { $0.pathExtension == fileExtension }
+            .filter { isDeckFile($0) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
     }
 
@@ -255,7 +309,11 @@ enum DeckStore {
                 failedNames.append(deck.name.isEmpty ? "Untitled Deck" : deck.name)
             }
         }
-        for url in deckFiles(in: directory) where !written.contains(url.lastPathComponent) {
+        // Only prune files with the current extension; legacy `.deck` files are converted by
+        // `migrateLegacyExtension` (write-then-delete) and never deleted out from under an
+        // unloaded deck here.
+        for url in deckFiles(in: directory)
+        where url.pathExtension == fileExtension && !written.contains(url.lastPathComponent) {
             // When a write failed this pass, be conservative: keep any file we can't prove
             // is safe to delete — one that's unreadable/undecodable right now (e.g. locked
             // by an external editor) or that belongs to a deck whose write just failed.

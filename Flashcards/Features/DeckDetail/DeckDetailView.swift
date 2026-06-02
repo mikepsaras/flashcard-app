@@ -56,7 +56,7 @@ struct DeckDetailView: View {
                 Menu {
                     Button { showingAI = true } label: { Label("Generate Cards (AI)…", systemImage: "sparkles") }
                     if let fileURL = DeckStore.fileURL(for: deck) {
-                        ShareLink(item: fileURL) { Label("Share .deck File", systemImage: "square.and.arrow.up") }
+                        ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
                     }
                     Divider()
                     Button { showingImporter = true } label: { Label("Import CSV…", systemImage: "square.and.arrow.down") }

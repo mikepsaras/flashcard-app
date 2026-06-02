@@ -118,7 +118,7 @@ struct DeckLibraryView: View {
         }
         .fileImporter(
             isPresented: $showingDeckImporter,
-            allowedContentTypes: [UTType(filenameExtension: DeckStore.fileExtension) ?? .json],
+            allowedContentTypes: DeckStore.importContentTypes,
             allowsMultipleSelection: true
         ) { result in openDeckFiles(result) }
         .confirmationDialog(
@@ -162,7 +162,7 @@ struct DeckLibraryView: View {
             Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
             Button { showingAI = true } label: { Label("New Deck from Notes (AI)…", systemImage: "sparkles") }
             Divider()
-            Button { showingDeckImporter = true } label: { Label("Open .deck File…", systemImage: "folder") }
+            Button { showingDeckImporter = true } label: { Label("Open Deck File…", systemImage: "folder") }
         } label: {
             Label("New Deck", systemImage: "plus")
         }
@@ -202,7 +202,7 @@ struct DeckLibraryView: View {
 
     @discardableResult
     private func importDroppedDecks(_ urls: [URL]) -> Bool {
-        let deckURLs = urls.filter { $0.pathExtension == DeckStore.fileExtension }
+        let deckURLs = urls.filter { DeckStore.isDeckFile($0) }
         guard !deckURLs.isEmpty else { return false }
         var imported: Deck?
         for url in deckURLs {

@@ -33,6 +33,31 @@ targets:
         # Expose the Documents/Flashcards folder (the .deck files) in the Files app on iOS.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        # Make .cards files first-class Flashcards documents: custom icon + "open with
+        # Flashcards" / double-click to open. The exported UTI owns the .cards extension
+        # (unlike .deck, which collides with another app's document type on some systems).
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Flashcards Deck
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - com.mike.flashcards.cards
+            CFBundleTypeIconFile: DeckDocument      # macOS uses the .icns in Resources
+            CFBundleTypeIconFiles:                  # iOS uses the asset-catalog image set
+              - DeckDocumentIcon
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.mike.flashcards.cards
+            UTTypeDescription: Flashcards Deck
+            # Conform to public.data (not public.json/text): a deck is our own document, so
+            # macOS shows our icon instead of the generic text-document preview icon.
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - cards
+            UTTypeIconFile: DeckDocument
+            UTTypeIconFiles:
+              - DeckDocumentIcon
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mike.Flashcards
