@@ -49,8 +49,8 @@ struct CardEditorView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    LabeledField(label: "Term", placeholder: "Front of the card", text: $term, axis: .vertical, lines: 1...4)
-                    LabeledField(label: "Definition", placeholder: "Back of the card", text: $definition, axis: .vertical, lines: 3...10)
+                    LabeledField(label: "Front", placeholder: "Front of the card", text: $term, axis: .vertical, lines: 1...4)
+                    LabeledField(label: "Back", placeholder: "Back of the card", text: $definition, axis: .vertical, lines: 3...10)
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
