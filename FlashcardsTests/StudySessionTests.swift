@@ -57,6 +57,18 @@ final class StudySessionTests {
         #expect(card.dueDate > dueBefore)  // rescheduled (sooner) for a future session
     }
 
+    @Test func gradeLogTracksGradesInOrderForProgressColors() {
+        let session = StudySession(cards: makeCards(3), trackLearning: false)
+        #expect(session.gradeLog.isEmpty)
+
+        session.grade(.again)
+        session.grade(.good)
+        #expect(session.gradeLog == [.again, .good])
+
+        session.undo()
+        #expect(session.gradeLog == [.again])   // stays in sync with undo
+    }
+
     @Test func trackingPersistsScheduleChange() {
         let cards = makeCards(1)
         let card = cards[0]

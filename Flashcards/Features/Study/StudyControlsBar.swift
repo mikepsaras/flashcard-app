@@ -27,8 +27,8 @@ struct StudyControlsBar: View {
     private var twoButtonBar: some View {
         ZStack {
             HStack(spacing: 22) {
-                CircleIconButton(systemName: "xmark", tint: Theme.danger, size: 60, weight: .bold) { onGrade(.again) }
-                CircleIconButton(systemName: "checkmark", tint: Theme.success, size: 60, weight: .bold) { onGrade(.good) }
+                CircleIconButton(systemName: "xmark", tint: Grade.again.studyColor, size: 60, weight: .bold) { onGrade(.again) }
+                CircleIconButton(systemName: "checkmark", tint: Grade.good.studyColor, size: 60, weight: .bold) { onGrade(.good) }
             }
             HStack(spacing: 12) {
                 undoButton(showLabel: !compact)
@@ -42,15 +42,16 @@ struct StudyControlsBar: View {
 
     private var fourButtonRow: some View {
         HStack(spacing: 10) {
-            gradeButton("Again", .again, Theme.danger)
-            gradeButton("Hard", .hard, Color(hex: "#FF9500"))
-            gradeButton("Good", .good, Theme.success)
-            gradeButton("Easy", .easy, Theme.accent)
+            gradeButton("Again", .again)
+            gradeButton("Hard", .hard)
+            gradeButton("Good", .good)
+            gradeButton("Easy", .easy)
         }
     }
 
-    private func gradeButton(_ title: String, _ grade: Grade, _ color: Color) -> some View {
-        Button { onGrade(grade) } label: {
+    private func gradeButton(_ title: String, _ grade: Grade) -> some View {
+        let color = grade.studyColor
+        return Button { onGrade(grade) } label: {
             Text(title)
                 .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 .foregroundStyle(color)
@@ -98,6 +99,19 @@ struct StudyControlsBar: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Track learning")
         .accessibilityValue(trackLearning ? "On" : "Off")
+    }
+}
+
+/// Canonical color for each grade, shared by the grading buttons and the progress bar
+/// so a bar segment matches the button that produced it.
+extension Grade {
+    var studyColor: Color {
+        switch self {
+        case .again: Theme.danger
+        case .hard:  Color(hex: "#FF9500")
+        case .good:  Theme.success
+        case .easy:  Theme.accent
+        }
     }
 }
 

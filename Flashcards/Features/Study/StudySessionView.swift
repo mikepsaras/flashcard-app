@@ -82,7 +82,7 @@ struct StudySessionView: View {
     private func studyContent(compact: Bool) -> some View {
         VStack(spacing: Theme.Spacing.m) {
             HStack(spacing: 14) {
-                ProgressDashBar(answered: session.answered, total: session.total, accent: accent)
+                ProgressDashBar(colors: session.gradeLog.map(\.studyColor), total: session.total)
                 Text("\(session.position) / \(session.total)")
                     .font(.system(.subheadline, design: .rounded, weight: .medium))
                     .foregroundStyle(.secondary)

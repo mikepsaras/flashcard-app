@@ -11,6 +11,8 @@ final class StudySession {
     private(set) var isShowingDefinition = false
     private(set) var correctCount = 0
     private(set) var wrongCount = 0
+    /// The grade given to each answered card, in order — used to color the progress bar.
+    private(set) var gradeLog: [Grade] = []
     var trackLearning: Bool
 
     /// Snapshot captured before each grade so undo can restore exactly.
@@ -80,11 +82,13 @@ final class StudySession {
         }
 
         if grade.isCorrect { correctCount += 1 } else { wrongCount += 1 }
+        gradeLog.append(grade)
         advance()
     }
 
     func undo() {
         guard let move = history.popLast() else { return }
+        if !gradeLog.isEmpty { gradeLog.removeLast() }
 
         if trackLearning {
             move.item.card.restore(
