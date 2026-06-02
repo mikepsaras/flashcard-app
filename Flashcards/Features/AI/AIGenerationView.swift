@@ -11,6 +11,12 @@ struct AIGenerationView: View {
     }
 
     let target: Target
+    /// When set (new-deck flow launched from the deck editor), the deck is built from this on
+    /// "Add" instead of from a name field — so the editor's name/section/color carry over, and
+    /// cancelling creates nothing.
+    var deckFactory: (() -> Deck)? = nil
+    /// Called after cards are added (lets a presenting editor dismiss itself).
+    var onAdded: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -34,6 +40,12 @@ struct AIGenerationView: View {
     private var hasKey: Bool { !apiKey.trimmingCharacters(in: .whitespaces).isEmpty }
     private var selectedCount: Int { cards.filter { included.contains($0.id) }.count }
     private var canGenerate: Bool { !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// Show the deck-name field only for a bare new-deck flow (not when a `deckFactory` supplies it).
+    private var showsNameField: Bool {
+        if case .newDeck = target, deckFactory == nil { return true }
+        return false
+    }
 
     private var importTypes: [UTType] {
         var types: [UTType] = [.plainText, .text]
@@ -115,7 +127,7 @@ struct AIGenerationView: View {
     private var inputForm: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                if case .newDeck = target {
+                if showsNameField {
                     LabeledField(label: "Deck name", placeholder: "e.g. Spanish Basics", text: $deckName)
                 }
 
@@ -310,9 +322,13 @@ struct AIGenerationView: View {
         case .existing(let existing):
             deck = existing
         case .newDeck:
-            let trimmed = deckName.trimmingCharacters(in: .whitespacesAndNewlines)
-            deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed)
-            context.insert(deck)
+            if let deckFactory {
+                deck = deckFactory()
+            } else {
+                let trimmed = deckName.trimmingCharacters(in: .whitespacesAndNewlines)
+                deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed)
+                context.insert(deck)
+            }
         }
         // Skip any card whose term was edited down to empty: the generator drops empty terms
         // at parse time, but the review list lets the user blank one out before adding.
@@ -323,6 +339,6 @@ struct AIGenerationView: View {
         deck.modifiedAt = .now
         try? context.save()
         DeckStore.persist(context)
-        dismiss()
+        if let onAdded { onAdded() } else { dismiss() }
     }
 }

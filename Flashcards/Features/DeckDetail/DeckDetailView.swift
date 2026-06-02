@@ -62,11 +62,15 @@ struct DeckDetailView: View {
         #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { cardEditor = .new } label: { Label("Add Card", systemImage: "plus") }
+                Menu {
+                    Button { cardEditor = .new } label: { Label("New Card", systemImage: "plus") }
+                    Button { showingAI = true } label: { Label("Generate Cards with AI…", systemImage: "sparkles") }
+                } label: {
+                    Label("Add Card", systemImage: "plus")
+                }
             }
             ToolbarItem(placement: .automatic) {
                 Menu {
-                    Button { showingAI = true } label: { Label("Generate Cards (AI)…", systemImage: "sparkles") }
                     if let fileURL = DeckStore.fileURL(for: deck) {
                         ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
                     }

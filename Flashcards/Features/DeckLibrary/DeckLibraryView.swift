@@ -27,7 +27,6 @@ struct DeckLibraryView: View {
 
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
-    @State private var showingAI = false
     @State private var showingDeckImporter = false
     @State private var search = ""
     @State private var deckPendingDeletion: Deck?
@@ -110,9 +109,6 @@ struct DeckLibraryView: View {
         .sheet(item: $editorMode) { mode in
             DeckEditorView(mode: mode)
         }
-        .sheet(isPresented: $showingAI) {
-            AIGenerationView(target: .newDeck)
-        }
         .fileImporter(
             isPresented: $showingDeckImporter,
             allowedContentTypes: DeckStore.importContentTypes,
@@ -157,8 +153,6 @@ struct DeckLibraryView: View {
     @ViewBuilder private var addMenu: some View {
         Menu {
             Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
-            Button { showingAI = true } label: { Label("New Deck from Notes (AI)…", systemImage: "sparkles") }
-            Divider()
             Button { showingDeckImporter = true } label: { Label("Open Deck File…", systemImage: "folder") }
         } label: {
             Label("New Deck", systemImage: "plus")

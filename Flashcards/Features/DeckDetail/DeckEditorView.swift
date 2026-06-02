@@ -27,6 +27,7 @@ struct DeckEditorView: View {
     @State private var studyReversed: Bool
     @State private var gradingMode: GradingMode
     @State private var section: String
+    @State private var showingAI = false
 
     init(mode: DeckEditorMode) {
         self.mode = mode
@@ -101,6 +102,15 @@ struct DeckEditorView: View {
                             .foregroundStyle(.secondary)
                         colorGrid
                     }
+
+                    if case .new = mode {
+                        Button { showingAI = true } label: {
+                            Label("Generate cards with AI…", systemImage: "sparkles").font(Typography.callout)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.accent)
+                        .disabled(!canSave)
+                    }
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -114,6 +124,9 @@ struct DeckEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }.disabled(!canSave)
                 }
+            }
+            .sheet(isPresented: $showingAI) {
+                AIGenerationView(target: .newDeck, deckFactory: { makeNewDeck() }, onAdded: { dismiss() })
             }
         }
         #if os(macOS)
@@ -171,6 +184,18 @@ struct DeckEditorView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// Builds + inserts a new deck from the current fields, for the AI flow (which then adds cards
+    /// to it). Only called when the user actually adds AI cards, so cancelling creates nothing.
+    private func makeNewDeck() -> Deck {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSection = String(section.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
+        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection)
+        context.insert(deck)
+        return deck
     }
 
     private func save() {
