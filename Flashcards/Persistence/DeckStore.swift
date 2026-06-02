@@ -57,6 +57,23 @@ enum DeckStore {
             .compactMap { UTType(filenameExtension: $0) } + [.json]
     }
 
+    /// True when this process is only hosting the unit-test bundle (tests are loaded into the
+    /// app). The app must not read, write, or prune the user's real library then — the test
+    /// host shares the app's bundle id + library bookmark, and tests use their own temp dirs.
+    static var isHostingTests: Bool { NSClassFromString("XCTestCase") != nil }
+
+    /// Whether the library folder holds any deck files — including iCloud "dataless"
+    /// placeholders (`.Foo.cards.icloud`) for files not yet downloaded. Lets launch avoid
+    /// seeding over (or pruning) real decks that simply aren't readable yet.
+    static func libraryHasDeckFiles(in directory: URL = libraryURL()) -> Bool {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return false }
+        return names.contains { name in
+            if isDeckFile(URL(fileURLWithPath: name)) { return true }
+            let lower = name.lowercased()
+            return lower.hasSuffix(".cards.icloud") || lower.hasSuffix(".deck.icloud")
+        }
+    }
+
     /// Cache of deck id → on-disk file URL, kept warm by `loadAll`/`persist` so the
     /// share / reveal-in-Finder lookups don't rescan and re-decode every `.deck` file
     /// on the main thread each time a menu is built.

@@ -14,15 +14,15 @@ struct FlashcardsApp: App {
         let context = container.mainContext
 
         // Don't touch the user's real library when this process is only hosting unit tests
-        // (each test builds its own temp container); otherwise a test run would migrate and
-        // rewrite the live deck files, since the test host shares the app's bundle id + folder.
-        let hostingTests = NSClassFromString("XCTestCase") != nil
-        if !hostingTests {
+        // (each test builds its own temp container); the test host shares the app's bundle id
+        // + library bookmark, so loading/seeding/persisting here would rewrite the live files.
+        if !DeckStore.isHostingTests {
             // Convert any legacy `.deck` files in the library folder to `.cards`, then load.
             DeckStore.migrateLegacyExtension()
-            if DeckStore.loadAll(into: context) == 0 {
-                // Empty library: carry over a pre-file-storage database if present, otherwise
-                // seed the samples. Either way, write out the deck files.
+            // Only seed/persist into a genuinely empty library. If files exist but loaded as 0
+            // (e.g. iCloud copies not yet downloaded), leave them alone — seeding or persisting
+            // an empty library here would overwrite or prune the user's real decks.
+            if DeckStore.loadAll(into: context) == 0 && !DeckStore.libraryHasDeckFiles() {
                 if !DeckStore.migrateLegacyStore(into: context) {
                     SeedData.seedIfNeeded(context)
                 }
@@ -34,8 +34,14 @@ struct FlashcardsApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(PersistenceMonitor.shared)
+            // Hosting unit tests: render nothing and run no lifecycle, so the test host never
+            // starts the file watcher or persists the user's live library (which would prune it).
+            if DeckStore.isHostingTests {
+                Color.clear
+            } else {
+                RootView()
+                    .environment(PersistenceMonitor.shared)
+            }
         }
         .modelContainer(container)
         #if os(macOS)

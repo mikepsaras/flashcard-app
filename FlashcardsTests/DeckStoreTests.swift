@@ -511,4 +511,28 @@ import SwiftData
         #expect(DeckStore.migrateLegacyExtension(in: dir) == 1)
         #expect(try deckFilenames(dir) == ["Dup.cards"])
     }
+
+    // MARK: Test-host safety (the app must not touch the real library while hosting tests)
+
+    @Test func isHostingTestsIsTrueUnderTestRunner() {
+        // The app's launch + scenePhase-persist guard depends on this being true while the
+        // test bundle is loaded. If it were ever false, the test host would prune the live
+        // library. Asserting it here keeps that guarantee from silently regressing.
+        #expect(DeckStore.isHostingTests)
+    }
+
+    @Test func libraryHasDeckFilesDetectsRealFilesAndICloudPlaceholders() throws {
+        let empty = try tempDir()
+        #expect(DeckStore.libraryHasDeckFiles(in: empty) == false)
+
+        let withCard = try tempDir()
+        try Data("{}".utf8).write(to: withCard.appendingPathComponent("Foo.cards"))
+        #expect(DeckStore.libraryHasDeckFiles(in: withCard))
+
+        // iCloud "dataless" placeholder for a deck not yet downloaded must count as present,
+        // so launch won't seed over it.
+        let dataless = try tempDir()
+        try Data().write(to: dataless.appendingPathComponent(".Bar.cards.icloud"))
+        #expect(DeckStore.libraryHasDeckFiles(in: dataless))
+    }
 }
