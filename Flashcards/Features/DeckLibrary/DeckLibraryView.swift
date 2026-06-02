@@ -55,6 +55,8 @@ struct DeckLibraryView: View {
             Section {
                 TodayRow(dueCount: totalDue)
                     .tag(SidebarItem.today)
+                InsightsRow()
+                    .tag(SidebarItem.insights)
             }
 
             ForEach(groupedDecks) { group in

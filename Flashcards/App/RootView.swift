@@ -4,6 +4,7 @@ import SwiftData
 /// Sidebar selection: the cross-deck Today queue, or a specific deck.
 enum SidebarItem: Hashable {
     case today
+    case insights
     case deck(PersistentIdentifier)
 }
 
@@ -112,6 +113,8 @@ struct RootView: View {
         switch selection {
         case .today:
             TodayDetailView { studyPlan = $0 }
+        case .insights:
+            StatsView()
         case .deck:
             if let deck = selectedDeck {
                 DeckDetailView(deck: deck) { studyPlan = deckPlan(deck) }

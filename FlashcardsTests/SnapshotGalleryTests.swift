@@ -72,5 +72,28 @@ struct SnapshotGalleryTests {
             size: CGSize(width: 960, height: 720), name: "10_study_four_button_mac")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/10_study_four_button_mac.png"))
     }
+
+    @Test func renderStatsScreen() throws {
+        let container = DeckStore.previewContainer(seeded: true)
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let cal = Calendar.current
+        var reviews: [String: Int] = [:]
+        var correct: [String: Int] = [:]
+        for offset in 0..<40 where offset % 6 != 4 {   // a few gaps in the heatmap
+            let day = StudyStats.dayKey(cal.date(byAdding: .day, value: -offset, to: now)!)
+            let n = (offset % 8) + 1
+            reviews[day] = n
+            correct[day] = max(0, n - (offset % 3))
+        }
+        let decks = try container.mainContext.fetch(FetchDescriptor<Deck>())
+        let insights = StudyInsights.make(decks: decks, reviewsByDay: reviews, correctByDay: correct, now: now)
+        try Snapshot.write(
+            StatsContentView(insights: insights, reviewsByDay: reviews, now: now)
+                .padding(Theme.Spacing.m)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Theme.groupedBackground),
+            size: CGSize(width: 600, height: 880), name: "11_insights_mac")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/11_insights_mac.png"))
+    }
 }
 #endif
