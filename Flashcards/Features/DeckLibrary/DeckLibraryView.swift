@@ -60,15 +60,15 @@ struct DeckLibraryView: View {
             }
 
             ForEach(groupedDecks) { group in
-                Section(group.tag ?? (hasAnyTags ? "Untagged" : "Decks")) {
-                    ForEach(group.rows) { row in
-                        deckRow(row.deck)
+                Section(group.section ?? (hasAnySections ? "Uncategorized" : "Decks")) {
+                    ForEach(group.decks) { deck in
+                        deckRow(deck)
                     }
                     .onDelete { offsets in
                         if let index = offsets.first { deckPendingDeletion = group.decks[index] }
                     }
 
-                    if group.tag == nil && decks.isEmpty {
+                    if group.section == nil && decks.isEmpty {
                         Button { editorMode = .new } label: {
                             Label("Create your first deck", systemImage: "plus")
                         }
@@ -182,38 +182,31 @@ struct DeckLibraryView: View {
         DeckStore.persist(context)
     }
 
-    /// Whether any visible deck has tags — drives section grouping vs a single flat "Decks" section.
-    private var hasAnyTags: Bool { filteredDecks.contains { !$0.tags.isEmpty } }
+    /// Whether any visible deck has a section — drives grouping vs a single flat "Decks" section.
+    private var hasAnySections: Bool { filteredDecks.contains { !$0.section.isEmpty } }
 
     private struct DeckGroup: Identifiable {
-        let tag: String?      // nil ⇒ the "Untagged" group
+        let section: String?      // nil ⇒ the "Uncategorized" group
         let decks: [Deck]
-        var id: String { tag ?? "\u{0}untagged" }
-        /// Section-scoped row identities, so a deck that appears in several tag sections doesn't
-        /// produce duplicate List identities across sections (which glitches diffing on insert/delete).
-        var rows: [Row] { decks.map { Row(groupID: id, deck: $0) } }
-        struct Row: Identifiable {
-            let groupID: String
-            let deck: Deck
-            var id: String { "\(groupID)#\(deck.id.uuidString)" }
-        }
+        var id: String { section ?? "\u{0}uncategorized" }
     }
 
-    /// Decks grouped into sections: one per tag (a deck appears under each of its tags), with an
-    /// "Untagged" group last. When nothing is tagged, a single nil group ⇒ a flat "Decks" section.
+    /// Decks grouped into sections: one group per section, with an "Uncategorized" group last.
+    /// When nothing has a section, a single nil group ⇒ a flat "Decks" section. Each deck belongs
+    /// to exactly one section, so row identities stay unique across the List.
     private var groupedDecks: [DeckGroup] {
         let base = filteredDecks
-        guard base.contains(where: { !$0.tags.isEmpty }) else { return [DeckGroup(tag: nil, decks: base)] }
-        var byTag: [String: [Deck]] = [:]
-        var untagged: [Deck] = []
+        guard base.contains(where: { !$0.section.isEmpty }) else { return [DeckGroup(section: nil, decks: base)] }
+        var bySection: [String: [Deck]] = [:]
+        var uncategorized: [Deck] = []
         for deck in base {
-            if deck.tags.isEmpty { untagged.append(deck) }
-            else { for tag in deck.tags { byTag[tag, default: []].append(deck) } }
+            if deck.section.isEmpty { uncategorized.append(deck) }
+            else { bySection[deck.section, default: []].append(deck) }
         }
-        var result = byTag.keys
+        var result = bySection.keys
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-            .map { DeckGroup(tag: $0, decks: byTag[$0]!) }
-        if !untagged.isEmpty { result.append(DeckGroup(tag: nil, decks: untagged)) }
+            .map { DeckGroup(section: $0, decks: bySection[$0]!) }
+        if !uncategorized.isEmpty { result.append(DeckGroup(section: nil, decks: uncategorized)) }
         return result
     }
 
@@ -263,7 +256,7 @@ struct DeckLibraryView: View {
             backLabel: deck.backLabel,
             studyReversed: deck.studyReversed,
             gradingMode: deck.gradingMode,
-            tags: deck.tags
+            section: deck.section
         )
         context.insert(copy)
         for card in deck.cardArray.sorted(by: { $0.createdAt < $1.createdAt }) {

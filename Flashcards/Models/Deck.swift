@@ -22,9 +22,9 @@ final class Deck {
     /// "not explicitly chosen" — a deck saved before this setting existed — and inherits the
     /// legacy default (see `gradingMode`). Decks created in-app always store a concrete value.
     var gradingModeRaw: String = ""
-    /// Freeform tags for organizing the library (the deck list groups into sections by tag).
-    /// CloudKit-safe: defaulted.
-    var tags: [String] = []
+    /// The single section this deck belongs to; the library groups decks into sections by it.
+    /// Empty ⇒ "Uncategorized". CloudKit-safe: defaulted.
+    var section: String = ""
     var createdAt: Date = Date.now
     var modifiedAt: Date = Date.now
 
@@ -38,7 +38,7 @@ final class Deck {
         backLabel: String = "Definition",
         studyReversed: Bool = false,
         gradingMode: GradingMode = .twoButton,
-        tags: [String] = []
+        section: String = ""
     ) {
         self.id = UUID()
         self.name = name
@@ -47,7 +47,7 @@ final class Deck {
         self.backLabel = backLabel
         self.studyReversed = studyReversed
         self.gradingModeRaw = gradingMode.rawValue
-        self.tags = tags
+        self.section = section
         self.createdAt = .now
         self.modifiedAt = .now
         self.cards = []

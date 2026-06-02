@@ -78,7 +78,7 @@ struct SnapshotGalleryTests {
         // deleted out from under it. Rendering its body (via ImageRenderer) must NOT trap —
         // the modelContext-nil guard returns Color.clear instead of reading deleted properties.
         let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Doomed", tags: ["x"])
+        let deck = Deck(name: "Doomed", section: "x")
         container.mainContext.insert(deck)
         container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try container.mainContext.save()

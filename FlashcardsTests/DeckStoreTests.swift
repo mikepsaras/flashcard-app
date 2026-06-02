@@ -170,40 +170,40 @@ import SwiftData
         #expect(deck.cardArray.first?.reverseRepetitions == 0)
     }
 
-    // MARK: Tags
+    // MARK: Section
 
-    @Test func tagsRoundTrip() throws {
+    @Test func sectionRoundTrip() throws {
         let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Tagged")
-        deck.tags = ["Spanish", "Vocabulary"]
+        let deck = Deck(name: "Sectioned")
+        deck.section = "Spanish"
         container.mainContext.insert(deck)
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.tags == ["Spanish", "Vocabulary"])
+        #expect(dto.section == "Spanish")
         let other = DeckStore.makeContainer()
         let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
-        #expect(rebuilt.tags == ["Spanish", "Vocabulary"])
+        #expect(rebuilt.section == "Spanish")
     }
 
-    @Test func missingTagsDefaultsToEmpty() throws {
-        // A file written before tags existed has no `tags` key; it must still load (→ []).
+    @Test func missingSectionDefaultsToEmpty() throws {
+        // A file written before sections existed has no `section` key; it must still load (→ "").
         let json = """
         {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
         "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
         """
         let dto = try DeckCodec.decodeDTO(Data(json.utf8))
-        #expect(dto.tags == nil)
+        #expect(dto.section == nil)
         let container = DeckStore.makeContainer()
         let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
-        #expect(deck.tags == [])
+        #expect(deck.section == "")
     }
 
-    @Test func emptyTagsOmitKeyToAvoidPhantomEdit() throws {
-        // Empty tags must omit the key so an untagged deck re-encodes identically (reconcile no-op).
+    @Test func emptySectionOmitsKeyToAvoidPhantomEdit() throws {
+        // An empty section must omit the key so an unsectioned deck re-encodes identically (reconcile no-op).
         let container = DeckStore.makeContainer()
-        let deck = Deck(name: "NoTags")
+        let deck = Deck(name: "NoSection")
         container.mainContext.insert(deck)
         let data = try DeckCodec.encode(deck)
-        #expect(!(String(data: data, encoding: .utf8) ?? "").contains("\"tags\""))
+        #expect(!(String(data: data, encoding: .utf8) ?? "").contains("\"section\""))
         let dto1 = try DeckCodec.decodeDTO(data)
         let other = DeckStore.makeContainer()
         let dto2 = try DeckCodec.decodeDTO(DeckCodec.encode(DeckCodec.makeDeck(from: dto1, in: other.mainContext)))
@@ -595,12 +595,12 @@ import SwiftData
         #expect(deck.modelContext == nil)
     }
 
-    @Test func reconcileIsNoOpForTaggedDeck() throws {
-        // The reconcile no-op guarantee must hold for tagged decks too (tag order preserved on
-        // re-encode), or the watcher would reload-loop on the app's own writes.
+    @Test func reconcileIsNoOpForDeckWithSection() throws {
+        // The reconcile no-op guarantee must hold for decks with a section too, or the watcher
+        // would reload-loop on the app's own writes.
         let dir = try tempDir()
         let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Tagged", tags: ["Spanish", "Vocabulary"])
+        let deck = Deck(name: "Sectioned", section: "Spanish")
         container.mainContext.insert(deck)
         container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try container.mainContext.save()

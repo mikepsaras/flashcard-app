@@ -152,10 +152,13 @@ struct DeckDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if !deck.tags.isEmpty {
-                WrapLayout(spacing: 6) {
-                    ForEach(deck.tags, id: \.self) { TagChip(text: $0) }
-                }
+            if !deck.section.isEmpty {
+                Text(deck.section)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Theme.accent.opacity(0.14), in: Capsule())
             }
 
             HStack(spacing: Theme.Spacing.l) {
