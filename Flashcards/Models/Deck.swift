@@ -58,12 +58,15 @@ extension Deck {
     /// value (a deck file predating this setting) resolves to the legacy global default, so
     /// existing decks don't silently change.
     var gradingMode: GradingMode {
-        get {
-            GradingMode(rawValue: gradingModeRaw)
-                ?? GradingMode(rawValue: GradingMode.legacyDefaultRaw)
-                ?? .twoButton
-        }
+        get { resolvedGradingMode() }
         set { gradingModeRaw = newValue.rawValue }
+    }
+
+    /// Resolves the grading mode; takes `defaults` so tests don't read the app's real prefs.
+    func resolvedGradingMode(defaults: UserDefaults = .standard) -> GradingMode {
+        GradingMode(rawValue: gradingModeRaw)
+            ?? GradingMode(rawValue: GradingMode.legacyDefaultRaw(defaults))
+            ?? .twoButton
     }
 
     /// Every review unit this deck offers: forward for each card, plus a reverse unit

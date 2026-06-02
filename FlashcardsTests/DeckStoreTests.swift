@@ -83,8 +83,12 @@ import SwiftData
     @Test func missingGradingModeInheritsLegacyGlobalDefault() throws {
         // A deck file written before per-deck grading has no gradingMode key; it must inherit
         // whatever the old global default was (here four-button), not snap to two-button.
-        UserDefaults.standard.set(GradingMode.fourButton.rawValue, forKey: GradingMode.storageKey)
-        defer { UserDefaults.standard.removeObject(forKey: GradingMode.storageKey) }
+        // Isolated UserDefaults so the test never touches the app's real preferences.
+        let suite = "test-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(GradingMode.fourButton.rawValue, forKey: GradingMode.storageKey)
+
         let json = """
         {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
         "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
@@ -93,7 +97,7 @@ import SwiftData
         #expect(dto.gradingMode == nil)
         let container = DeckStore.makeContainer()
         let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
-        #expect(deck.gradingMode == .fourButton)
+        #expect(deck.resolvedGradingMode(defaults: defaults) == .fourButton)
     }
 
     @Test func unsetGradingModeRoundTripsWithoutPhantomChange() throws {
@@ -375,7 +379,7 @@ import SwiftData
         #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 2)
     }
 
-    @Test func migrateLegacyStoreImportsOnceThenGuards() throws {
+    @Test func migrateLegacyStoreImportsOnceThenArchivesSoItCannotResurrect() throws {
         let storeURL = try tempDir().appendingPathComponent("legacy.store")
 
         // Seed a legacy on-disk store, then let the container deallocate (closing it)
@@ -389,15 +393,27 @@ import SwiftData
         }
         try seedLegacy()
 
-        UserDefaults.standard.removeObject(forKey: "didMigrateLegacyStore")
-        defer { UserDefaults.standard.removeObject(forKey: "didMigrateLegacyStore") }
+        // Isolated defaults so the test never clears the app's real "didMigrateLegacyStore"
+        // flag — clearing the real flag is exactly what let deleted decks resurrect.
+        let suite = "test-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
 
         let target = DeckStore.makeContainer()
-        #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL))
+        #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL, defaults: defaults))
         #expect(try target.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)
 
-        // A second call is blocked by the UserDefaults flag — no duplicate import.
-        #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL) == false)
+        // #3: the store is archived (renamed) rather than left in place.
+        #expect(!FileManager.default.fileExists(atPath: storeURL.path))
+        #expect(FileManager.default.fileExists(atPath: storeURL.path + ".imported"))
+
+        // The real safety net: even with a brand-new flag (as if it had been cleared), a
+        // second import finds no store and imports nothing — so a deleted deck can't return.
+        let freshSuite = "test-\(UUID().uuidString)"
+        let fresh = UserDefaults(suiteName: freshSuite)!
+        defer { fresh.removePersistentDomain(forName: freshSuite) }
+        #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL, defaults: fresh) == false)
+        #expect(try target.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)   // not resurrected
     }
 
     @Test func migrateMovesCurrentDecksAndMergesExisting() throws {

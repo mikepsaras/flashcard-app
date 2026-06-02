@@ -387,11 +387,13 @@ enum DeckStore {
     /// One-time import of the pre-file-storage on-disk SwiftData store, if present,
     /// so existing decks survive the switch. Best-effort; returns whether anything migrated.
     @discardableResult
-    static func migrateLegacyStore(into context: ModelContext, storeURL: URL? = nil) -> Bool {
-        // Guard against re-importing the old store on a later launch (e.g. if the user
-        // empties the .deck folder), which would silently duplicate every legacy deck.
+    static func migrateLegacyStore(into context: ModelContext, storeURL: URL? = nil,
+                                   defaults: UserDefaults = .standard) -> Bool {
+        // Guard against re-importing the old store on a later launch (e.g. if the deck folder
+        // is empty), which would silently duplicate — or resurrect deleted — decks. `defaults`
+        // is injectable so tests never touch the app's real preferences.
         let migratedKey = "didMigrateLegacyStore"
-        guard !UserDefaults.standard.bool(forKey: migratedKey) else { return false }
+        guard !defaults.bool(forKey: migratedKey) else { return false }
 
         let resolvedURL: URL
         if let storeURL {
@@ -404,20 +406,41 @@ enum DeckStore {
         }
         guard FileManager.default.fileExists(atPath: resolvedURL.path) else { return false }
 
-        let configuration = ModelConfiguration(schema: schema, url: resolvedURL)
-        guard let legacy = try? ModelContainer(for: schema, configurations: [configuration]) else { return false }
-        let decks = (try? legacy.mainContext.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
-        guard !decks.isEmpty else { return false }
-
-        for deck in decks {
-            guard let data = try? DeckCodec.encode(deck), let dto = try? DeckCodec.decodeDTO(data) else { continue }
-            DeckCodec.makeDeck(from: dto, in: context)
+        // Import inside a scope so the legacy container (and its open store handle) is released
+        // before the store is archived below.
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: resolvedURL)
+            guard let legacy = try? ModelContainer(for: schema, configurations: [configuration]) else { return false }
+            let decks = (try? legacy.mainContext.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+            guard !decks.isEmpty else { return false }
+            for deck in decks {
+                guard let data = try? DeckCodec.encode(deck), let dto = try? DeckCodec.decodeDTO(data) else { continue }
+                DeckCodec.makeDeck(from: dto, in: context)
+            }
         }
-        // Persist the imports into the context explicitly (don't rely on the caller's
-        // fetch seeing unsaved inserts) so a later `persist` always writes them out.
+
+        // Persist the imports explicitly (don't rely on the caller's fetch seeing unsaved
+        // inserts) so a later `persist` always writes them out.
         try? context.save()
-        UserDefaults.standard.set(true, forKey: migratedKey)
+        defaults.set(true, forKey: migratedKey)
+        // Archive the old store so it can NEVER be re-imported — its absence is a durable
+        // guard that doesn't depend on the (losable) UserDefaults flag, so a deleted deck
+        // can't rise again on a future empty-folder launch.
+        archiveLegacyStore(at: resolvedURL)
         return true
+    }
+
+    /// Renames a just-imported legacy store (and its `-wal`/`-shm` sidecars) aside, so the
+    /// canonical `default.store` no longer exists and can't be re-imported.
+    private static func archiveLegacyStore(at url: URL) {
+        let fm = FileManager.default
+        for suffix in ["", "-wal", "-shm"] {
+            let src = URL(fileURLWithPath: url.path + suffix)
+            guard fm.fileExists(atPath: src.path) else { continue }
+            let dst = URL(fileURLWithPath: url.path + suffix + ".imported")
+            try? fm.removeItem(at: dst)
+            try? fm.moveItem(at: src, to: dst)
+        }
     }
 
     // MARK: Filenames
