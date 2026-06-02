@@ -379,43 +379,6 @@ import SwiftData
         #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 2)
     }
 
-    @Test func migrateLegacyStoreImportsOnceThenArchivesSoItCannotResurrect() throws {
-        let storeURL = try tempDir().appendingPathComponent("legacy.store")
-
-        // Seed a legacy on-disk store, then let the container deallocate (closing it)
-        // before migration opens it fresh.
-        func seedLegacy() throws {
-            let config = ModelConfiguration(schema: DeckStore.schema, url: storeURL)
-            let legacy = try ModelContainer(for: DeckStore.schema, configurations: [config])
-            let deck = Deck(name: "Legacy"); legacy.mainContext.insert(deck)
-            legacy.mainContext.insert(Card(term: "x", definition: "y", deck: deck))
-            try legacy.mainContext.save()
-        }
-        try seedLegacy()
-
-        // Isolated defaults so the test never clears the app's real "didMigrateLegacyStore"
-        // flag — clearing the real flag is exactly what let deleted decks resurrect.
-        let suite = "test-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-
-        let target = DeckStore.makeContainer()
-        #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL, defaults: defaults))
-        #expect(try target.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)
-
-        // #3: the store is archived (renamed) rather than left in place.
-        #expect(!FileManager.default.fileExists(atPath: storeURL.path))
-        #expect(FileManager.default.fileExists(atPath: storeURL.path + ".imported"))
-
-        // The real safety net: even with a brand-new flag (as if it had been cleared), a
-        // second import finds no store and imports nothing — so a deleted deck can't return.
-        let freshSuite = "test-\(UUID().uuidString)"
-        let fresh = UserDefaults(suiteName: freshSuite)!
-        defer { fresh.removePersistentDomain(forName: freshSuite) }
-        #expect(DeckStore.migrateLegacyStore(into: target.mainContext, storeURL: storeURL, defaults: fresh) == false)
-        #expect(try target.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)   // not resurrected
-    }
-
     @Test func migrateMovesCurrentDecksAndMergesExisting() throws {
         let oldDir = try tempDir()
         let newDir = try tempDir()
@@ -535,20 +498,5 @@ import SwiftData
         // test bundle is loaded. If it were ever false, the test host would prune the live
         // library. Asserting it here keeps that guarantee from silently regressing.
         #expect(DeckStore.isHostingTests)
-    }
-
-    @Test func libraryHasDeckFilesDetectsRealFilesAndICloudPlaceholders() throws {
-        let empty = try tempDir()
-        #expect(DeckStore.libraryHasDeckFiles(in: empty) == false)
-
-        let withCard = try tempDir()
-        try Data("{}".utf8).write(to: withCard.appendingPathComponent("Foo.cards"))
-        #expect(DeckStore.libraryHasDeckFiles(in: withCard))
-
-        // iCloud "dataless" placeholder for a deck not yet downloaded must count as present,
-        // so launch won't seed over it.
-        let dataless = try tempDir()
-        try Data().write(to: dataless.appendingPathComponent(".Bar.cards.icloud"))
-        #expect(DeckStore.libraryHasDeckFiles(in: dataless))
     }
 }

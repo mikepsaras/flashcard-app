@@ -62,18 +62,6 @@ enum DeckStore {
     /// host shares the app's bundle id + library bookmark, and tests use their own temp dirs.
     static var isHostingTests: Bool { NSClassFromString("XCTestCase") != nil }
 
-    /// Whether the library folder holds any deck files — including iCloud "dataless"
-    /// placeholders (`.Foo.cards.icloud`) for files not yet downloaded. Lets launch avoid
-    /// seeding over (or pruning) real decks that simply aren't readable yet.
-    static func libraryHasDeckFiles(in directory: URL = libraryURL()) -> Bool {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return false }
-        return names.contains { name in
-            if isDeckFile(URL(fileURLWithPath: name)) { return true }
-            let lower = name.lowercased()
-            return lower.hasSuffix(".cards.icloud") || lower.hasSuffix(".deck.icloud")
-        }
-    }
-
     /// Cache of deck id → on-disk file URL, kept warm by `loadAll`/`persist` so the
     /// share / reveal-in-Finder lookups don't rescan and re-decode every `.deck` file
     /// on the main thread each time a menu is built.
@@ -380,67 +368,6 @@ enum DeckStore {
             }
         }
         return nil
-    }
-
-    // MARK: Legacy migration
-
-    /// One-time import of the pre-file-storage on-disk SwiftData store, if present,
-    /// so existing decks survive the switch. Best-effort; returns whether anything migrated.
-    @discardableResult
-    static func migrateLegacyStore(into context: ModelContext, storeURL: URL? = nil,
-                                   defaults: UserDefaults = .standard) -> Bool {
-        // Guard against re-importing the old store on a later launch (e.g. if the deck folder
-        // is empty), which would silently duplicate — or resurrect deleted — decks. `defaults`
-        // is injectable so tests never touch the app's real preferences.
-        let migratedKey = "didMigrateLegacyStore"
-        guard !defaults.bool(forKey: migratedKey) else { return false }
-
-        let resolvedURL: URL
-        if let storeURL {
-            resolvedURL = storeURL
-        } else {
-            guard let appSupport = try? FileManager.default.url(
-                for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false
-            ) else { return false }
-            resolvedURL = appSupport.appendingPathComponent("default.store")
-        }
-        guard FileManager.default.fileExists(atPath: resolvedURL.path) else { return false }
-
-        // Import inside a scope so the legacy container (and its open store handle) is released
-        // before the store is archived below.
-        do {
-            let configuration = ModelConfiguration(schema: schema, url: resolvedURL)
-            guard let legacy = try? ModelContainer(for: schema, configurations: [configuration]) else { return false }
-            let decks = (try? legacy.mainContext.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
-            guard !decks.isEmpty else { return false }
-            for deck in decks {
-                guard let data = try? DeckCodec.encode(deck), let dto = try? DeckCodec.decodeDTO(data) else { continue }
-                DeckCodec.makeDeck(from: dto, in: context)
-            }
-        }
-
-        // Persist the imports explicitly (don't rely on the caller's fetch seeing unsaved
-        // inserts) so a later `persist` always writes them out.
-        try? context.save()
-        defaults.set(true, forKey: migratedKey)
-        // Archive the old store so it can NEVER be re-imported — its absence is a durable
-        // guard that doesn't depend on the (losable) UserDefaults flag, so a deleted deck
-        // can't rise again on a future empty-folder launch.
-        archiveLegacyStore(at: resolvedURL)
-        return true
-    }
-
-    /// Renames a just-imported legacy store (and its `-wal`/`-shm` sidecars) aside, so the
-    /// canonical `default.store` no longer exists and can't be re-imported.
-    private static func archiveLegacyStore(at url: URL) {
-        let fm = FileManager.default
-        for suffix in ["", "-wal", "-shm"] {
-            let src = URL(fileURLWithPath: url.path + suffix)
-            guard fm.fileExists(atPath: src.path) else { continue }
-            let dst = URL(fileURLWithPath: url.path + suffix + ".imported")
-            try? fm.removeItem(at: dst)
-            try? fm.moveItem(at: src, to: dst)
-        }
     }
 
     // MARK: Filenames

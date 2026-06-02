@@ -15,19 +15,13 @@ struct FlashcardsApp: App {
 
         // Don't touch the user's real library when this process is only hosting unit tests
         // (each test builds its own temp container); the test host shares the app's bundle id
-        // + library bookmark, so loading/seeding/persisting here would rewrite the live files.
+        // + library bookmark, so loading here would read the live files unnecessarily.
         if !DeckStore.isHostingTests {
-            // Convert any legacy `.deck` files in the library folder to `.cards`, then load.
+            // Load whatever deck files exist, converting any legacy `.deck` to `.cards` first.
+            // The library is never auto-seeded and the old SwiftData store is never imported,
+            // so an empty folder stays an empty library and nothing resurrects deleted decks.
             DeckStore.migrateLegacyExtension()
-            // Only seed/persist into a genuinely empty library. If files exist but loaded as 0
-            // (e.g. iCloud copies not yet downloaded), leave them alone — seeding or persisting
-            // an empty library here would overwrite or prune the user's real decks.
-            if DeckStore.loadAll(into: context) == 0 && !DeckStore.libraryHasDeckFiles() {
-                if !DeckStore.migrateLegacyStore(into: context) {
-                    SeedData.seedIfNeeded(context)
-                }
-                DeckStore.persist(context)
-            }
+            DeckStore.loadAll(into: context)
         }
         _container = State(initialValue: container)
     }
