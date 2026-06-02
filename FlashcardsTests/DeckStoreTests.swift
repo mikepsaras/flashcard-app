@@ -583,6 +583,18 @@ import SwiftData
         #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 0)
     }
 
+    @Test func deletedDeckReportsNilModelContext() throws {
+        // DeckDetailView guards on `deck.modelContext == nil` to avoid trapping when its deck is
+        // deleted out from under it (e.g. Delete All Decks). Pin that signal down.
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Doomed"); container.mainContext.insert(deck)
+        try container.mainContext.save()
+        #expect(deck.modelContext != nil)
+        container.mainContext.delete(deck)
+        try container.mainContext.save()
+        #expect(deck.modelContext == nil)
+    }
+
     @Test func reconcileIsNoOpForTaggedDeck() throws {
         // The reconcile no-op guarantee must hold for tagged decks too (tag order preserved on
         // re-encode), or the watcher would reload-loop on the app's own writes.

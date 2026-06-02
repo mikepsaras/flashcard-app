@@ -32,6 +32,17 @@ struct DeckDetailView: View {
     }
 
     var body: some View {
+        // The deck can be deleted out from under this view (Settings → Delete All Decks, or an
+        // external file removal the watcher reconciles). Reading a deleted @Model's persisted
+        // properties traps, so render nothing until RootView swaps in the placeholder.
+        if deck.modelContext == nil {
+            Color.clear
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
             header
             #if os(macOS)

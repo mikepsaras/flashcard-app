@@ -73,6 +73,24 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/10_study_four_button_mac.png"))
     }
 
+    @Test func deckDetailDoesNotTrapWhenDeckDeleted() throws {
+        // Reproduces the "Delete All Decks" crash: DeckDetailView bound to a deck that gets
+        // deleted out from under it. Rendering its body (via ImageRenderer) must NOT trap —
+        // the modelContext-nil guard returns Color.clear instead of reading deleted properties.
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Doomed", tags: ["x"])
+        container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+        container.mainContext.delete(deck)
+        try container.mainContext.save()
+
+        try Snapshot.write(
+            DeckDetailView(deck: deck, onStudy: {}).modelContainer(container),
+            size: CGSize(width: 600, height: 500), name: "12_deck_detail_deleted")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/12_deck_detail_deleted.png"))
+    }
+
     @Test func renderStatsScreen() throws {
         let container = DeckStore.previewContainer(seeded: true)
         let now = Date(timeIntervalSince1970: 1_700_000_000)

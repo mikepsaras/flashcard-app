@@ -41,6 +41,13 @@ struct RootView: View {
                 watcher.isPaused = studyPlan != nil
                 watcher.start { DeckStore.reconcile(into: context) }
             }
+            .onChange(of: decks.count) { _, _ in
+                // If the selected deck vanished (Delete All Decks, or an external file removal),
+                // drop the now-dangling selection so the detail pane falls back to the placeholder.
+                if case .deck(let id) = selection, !decks.contains(where: { $0.persistentModelID == id }) {
+                    selection = nil
+                }
+            }
             .onChange(of: studyPlan != nil) { _, studying in
                 watcher.isPaused = studying
                 if !studying { DeckStore.reconcile(into: context) }
