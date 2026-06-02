@@ -11,9 +11,6 @@ final class StudySession {
     private(set) var isShowingDefinition = false
     private(set) var correctCount = 0
     private(set) var wrongCount = 0
-    /// Distinct review items the session started with — the fixed denominator for the
-    /// progress display, so missing a card (which requeues it) never grows the total.
-    let plannedCount: Int
     var trackLearning: Bool
 
     /// Snapshot captured before each grade so undo can restore exactly.
@@ -26,15 +23,11 @@ final class StudySession {
         let previousIndex: Int
         let previousCorrect: Int
         let previousWrong: Int
-        /// Whether this grade appended the item back onto the queue (a lapse), so undo
-        /// can pop it off again.
-        let requeued: Bool
     }
     private var history: [Move] = []
 
     init(items: [ReviewItem], trackLearning: Bool) {
         self.items = items
-        self.plannedCount = items.count
         self.trackLearning = trackLearning
     }
 
@@ -50,15 +43,6 @@ final class StudySession {
     var isFinished: Bool { index >= items.count }
     var current: ReviewItem? { isFinished ? nil : items[index] }
     var canUndo: Bool { !history.isEmpty }
-
-    /// Distinct cards still to clear (the current card plus any requeued misses).
-    var remainingCount: Int {
-        guard index < items.count else { return 0 }
-        return Set(items[index...].map(\.id)).count
-    }
-    /// Distinct cards cleared so far (monotonic), out of `plannedCount` — drives the
-    /// progress bar so a miss leaves a segment unfilled rather than adding one.
-    var completedCount: Int { max(plannedCount - remainingCount, 0) }
 
     // MARK: Intents
 
@@ -79,10 +63,6 @@ final class StudySession {
         let card = item.card
         let direction = item.direction
 
-        // A missed item comes back later this session (the expected SRS behavior) rather
-        // than vanishing until its next due date.
-        let requeue = !grade.isCorrect
-
         history.append(Move(
             item: item,
             wasShowingDefinition: isShowingDefinition,
@@ -91,8 +71,7 @@ final class StudySession {
             previousModifiedAt: card.modifiedAt,
             previousIndex: index,
             previousCorrect: correctCount,
-            previousWrong: wrongCount,
-            requeued: requeue
+            previousWrong: wrongCount
         ))
 
         if trackLearning {
@@ -101,15 +80,11 @@ final class StudySession {
         }
 
         if grade.isCorrect { correctCount += 1 } else { wrongCount += 1 }
-        if requeue { items.append(item) }
         advance()
     }
 
     func undo() {
         guard let move = history.popLast() else { return }
-
-        // Pop the requeued copy this move appended (LIFO ⇒ it's the last item).
-        if move.requeued, items.last?.id == move.item.id { items.removeLast() }
 
         if trackLearning {
             move.item.card.restore(

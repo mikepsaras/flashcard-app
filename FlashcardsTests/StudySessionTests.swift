@@ -33,50 +33,28 @@ final class StudySessionTests {
         #expect(session.correctCount == 1)
         #expect(session.answered == 1)
 
-        session.grade(known: false)        // lapse ⇒ comes back later this session
+        session.grade(known: false)        // a miss still advances (single pass)
         #expect(session.wrongCount == 1)
-        #expect(session.total == 4)        // requeued
+        #expect(session.total == 3)        // the queue never grows
 
         session.grade(known: true)
-        #expect(!session.isFinished)       // the requeued card still remains
+        #expect(session.isFinished)        // three grades ⇒ done
         #expect(session.correctCount == 2)
-
-        session.grade(known: true)         // clear the requeued card
-        #expect(session.isFinished)
-        #expect(session.correctCount == 3)
         #expect(session.wrongCount == 1)
     }
 
-    @Test func lapsedCardIsRequeuedAndUndoPopsIt() {
-        let session = StudySession(cards: makeCards(2), trackLearning: false)
-        #expect(session.total == 2)
+    @Test func missAdvancesProgressAndSchedulesSooner() {
+        let cards = makeCards(1)
+        let card = cards[0]
+        let dueBefore = card.dueDate
 
-        session.grade(known: false)        // miss the first card
-        #expect(session.total == 3)        // appended to the end
-        #expect(session.wrongCount == 1)
+        let session = StudySession(cards: cards, trackLearning: true)
+        session.grade(known: false)        // didn't know it
 
-        session.undo()
-        #expect(session.total == 2)        // requeued copy removed again
-        #expect(session.wrongCount == 0)
-        #expect(session.answered == 0)
-    }
-
-    @Test func progressUsesFixedDenominatorAndCountsClearedCards() {
-        let session = StudySession(cards: makeCards(3), trackLearning: false)
-        #expect(session.plannedCount == 3)
-        #expect(session.completedCount == 0)
-
-        session.grade(known: false)        // miss card 0 → requeued, NOT cleared
-        #expect(session.plannedCount == 3) // denominator stays fixed (no growing bar)
-        #expect(session.completedCount == 0)
-
-        session.grade(known: true)         // clear card 1
-        #expect(session.completedCount == 1)
-        session.grade(known: true)         // clear card 2
-        #expect(session.completedCount == 2)
-        session.grade(known: true)         // clear the requeued card 0
-        #expect(session.completedCount == 3)
-        #expect(session.isFinished)
+        #expect(session.isFinished)        // single pass: the session completes
+        #expect(session.answered == 1)     // progress advanced
+        #expect(card.lastReviewedAt != nil)
+        #expect(card.dueDate > dueBefore)  // rescheduled (sooner) for a future session
     }
 
     @Test func trackingPersistsScheduleChange() {
