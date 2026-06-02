@@ -216,10 +216,10 @@ struct StudySessionView: View {
         session = StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: trackLearning)
     }
 
-    /// Applies the "cards per session" setting (0 ⇒ unlimited).
+    /// Applies the "cards per session" setting (0 ⇒ unlimited). The cap logic lives on
+    /// `StudySession` (unit-tested); this just supplies the stored limit.
     private static func cappedItems(_ items: [ReviewItem]) -> [ReviewItem] {
-        let limit = UserDefaults.standard.integer(forKey: "studySessionLimit")
-        return limit > 0 ? Array(items.prefix(limit)) : items
+        StudySession.cap(items, limit: UserDefaults.standard.integer(forKey: "studySessionLimit"))
     }
 
     // MARK: Keyboard

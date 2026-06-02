@@ -211,4 +211,27 @@ final class StudySessionTests {
         let due = try container.mainContext.fetch(descriptor)
         #expect(due.count == 5)
     }
+
+    // MARK: Session-size cap
+
+    private func forwardItems(_ n: Int) -> [ReviewItem] {
+        makeCards(n).map { ReviewItem(card: $0, direction: .forward) }
+    }
+
+    @Test func sessionCapTakesLeadingItems() {
+        let items = forwardItems(5)
+        let capped = StudySession.cap(items, limit: 2)
+        #expect(capped.count == 2)
+        #expect(capped.map(\.id) == Array(items.prefix(2)).map(\.id))   // order preserved
+    }
+
+    @Test func sessionCapZeroMeansUnlimited() {
+        let items = forwardItems(4)
+        #expect(StudySession.cap(items, limit: 0).count == 4)
+    }
+
+    @Test func sessionCapLargerThanCountReturnsAll() {
+        let items = forwardItems(3)
+        #expect(StudySession.cap(items, limit: 100).count == 3)
+    }
 }

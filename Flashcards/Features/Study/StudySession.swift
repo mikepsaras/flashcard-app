@@ -46,6 +46,13 @@ final class StudySession {
         self.init(items: cards.map { ReviewItem(card: $0, direction: .forward) }, trackLearning: trackLearning)
     }
 
+    /// Applies the "cards per session" cap to a list of review items (0 ⇒ unlimited),
+    /// taking the leading `limit` (callers pass them most-due first). Pure and static so
+    /// it's unit-testable without the view's `@AppStorage`.
+    static func cap(_ items: [ReviewItem], limit: Int) -> [ReviewItem] {
+        limit > 0 ? Array(items.prefix(limit)) : items
+    }
+
     // MARK: Derived state
     var total: Int { items.count }
     var answered: Int { index }
