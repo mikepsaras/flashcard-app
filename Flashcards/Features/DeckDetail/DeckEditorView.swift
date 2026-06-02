@@ -59,35 +59,37 @@ struct DeckEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Name") {
-                    ClearableTextField(placeholder: "Deck name", text: $name)
-                }
-                Section("Description") {
-                    ClearableTextField(placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
-                }
-                Section {
-                    Toggle("Show answer label", isOn: $showLabel.animation())
-                    if showLabel {
-                        ClearableTextField(placeholder: "Definition", text: $backLabel)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    LabeledField(label: "Name", placeholder: "Deck name", text: $name)
+                    LabeledField(label: "Description", placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        toggleRow("Show answer label", $showLabel.animation())
+                        if showLabel {
+                            LabeledField(label: "Answer label", placeholder: "Definition", text: $backLabel)
+                        }
+                        caption(showLabel
+                            ? "The small label above the answer side of each card — e.g. Definition, Capital, Translation."
+                            : "No label is shown above the answer side.")
                     }
-                } header: {
-                    Text("Answer label")
-                } footer: {
-                    Text(showLabel
-                         ? "The small label above the answer side of each card — e.g. Definition, Capital, Translation."
-                         : "No label is shown above the answer side.")
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        toggleRow("Study both directions", $studyReversed)
+                        caption("Also quiz the answer back to the term, scheduled separately. A card then counts as two reviews — one each way.")
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Color")
+                            .font(.system(.subheadline, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        colorGrid
+                    }
                 }
-                Section {
-                    Toggle("Study both directions", isOn: $studyReversed)
-                } footer: {
-                    Text("Also quiz the answer back to the term, scheduled separately. A card then counts as two reviews — one each way.")
-                }
-                Section("Color") {
-                    colorGrid
-                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .formStyle(.grouped)
+            .background(Theme.groupedBackground)
             .navigationTitle(isEditing ? "Edit Deck" : "New Deck")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -99,8 +101,24 @@ struct DeckEditorView: View {
             }
         }
         #if os(macOS)
-        .frame(width: 460, height: 520)
+        .frame(width: 460, height: 560)
         #endif
+    }
+
+    private func toggleRow(_ title: String, _ isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(title).font(Typography.body)
+            Spacer(minLength: 8)
+            Toggle("", isOn: isOn).labelsHidden().toggleStyle(.switch)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.fieldSurface))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.10)))
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 2)
     }
 
     private var colorGrid: some View {

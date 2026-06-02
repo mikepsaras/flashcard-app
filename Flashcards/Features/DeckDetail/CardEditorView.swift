@@ -47,17 +47,15 @@ struct CardEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Term") {
-                    ClearableTextField(placeholder: "Front of the card", text: $term, axis: .vertical, lines: 1...4)
-                        .font(Typography.body)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    LabeledField(label: "Term", placeholder: "Front of the card", text: $term, axis: .vertical, lines: 1...4)
+                    LabeledField(label: "Definition", placeholder: "Back of the card", text: $definition, axis: .vertical, lines: 3...10)
                 }
-                Section("Definition") {
-                    ClearableTextField(placeholder: "Back of the card", text: $definition, axis: .vertical, lines: 3...10)
-                        .font(Typography.body)
-                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .formStyle(.grouped)
+            .background(Theme.groupedBackground)
             .navigationTitle(isEditing ? "Edit Card" : "New Card")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -69,7 +67,7 @@ struct CardEditorView: View {
             }
         }
         #if os(macOS)
-        .frame(width: 480, height: 460)
+        .frame(width: 480, height: 440)
         #endif
     }
 

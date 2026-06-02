@@ -20,6 +20,13 @@ enum Theme {
         dark:  (0.150, 0.155, 0.168)
     )
 
+    /// Surface for editable field boxes in the editors — a step above the grouped page
+    /// background so the box reads as a distinct, fillable field.
+    static let fieldSurface = Color.adaptive(
+        light: (1.0, 1.0, 1.0),
+        dark:  (0.170, 0.175, 0.190)
+    )
+
     static var windowBackground: Color {
         #if os(macOS)
         Color(nsColor: .windowBackgroundColor)
