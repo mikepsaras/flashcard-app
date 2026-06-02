@@ -50,7 +50,6 @@ struct StudySessionView: View {
             .background(keyboardControls)
         }
         .onChange(of: trackLearning) { _, newValue in session.trackLearning = newValue }
-        .onDisappear { try? context.save(); DeckStore.persist(context) }
     }
 
     // MARK: Top bar
@@ -204,6 +203,10 @@ struct StudySessionView: View {
     }
 
     private func finish() {
+        // The single persist on study exit. It must run BEFORE onClose() clears the plan:
+        // clearing it triggers RootView's post-study reconcile, which reads these files back,
+        // so they have to be current first. (No onDisappear persist — finish, or a scene-
+        // background while studying, always covers it, without rewriting every deck twice.)
         try? context.save()
         DeckStore.persist(context)
         onClose()
