@@ -89,6 +89,13 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .navigationTitle("Settings")
         .onAppear { loadAI() }
+        .task {
+            // Resync the reminder toggle if notification permission was revoked in System
+            // Settings (otherwise it stays "on" while no nudges ever fire).
+            if remindersEnabled, !(await StudyReminders.isAuthorized()) {
+                remindersEnabled = false
+            }
+        }
         .onChange(of: aiProviderRaw) { _, _ in loadAI() }
         .onChange(of: apiKey) { _, newValue in
             KeychainStore.set(newValue, account: aiProvider.keychainAccount)

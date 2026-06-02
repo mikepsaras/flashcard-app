@@ -13,6 +13,14 @@ enum StudyReminders {
         return (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
     }
 
+    /// Whether notifications are currently permitted — so the Settings toggle can resync
+    /// if the user revoked permission in System Settings (otherwise it shows "on" while
+    /// silently scheduling nothing).
+    static func isAuthorized() async -> Bool {
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        return status == .authorized || status == .provisional
+    }
+
     /// (Re)schedules the daily reminder at the given time, replacing any existing one.
     static func schedule(hour: Int, minute: Int) {
         let center = UNUserNotificationCenter.current()
