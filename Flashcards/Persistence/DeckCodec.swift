@@ -18,6 +18,7 @@ enum DeckCodec {
         // Optional so `.deck` files written before this field still decode (→ nil).
         var backLabel: String?
         var studyReversed: Bool?
+        var gradingMode: String?
         var createdAt: Date
         var modifiedAt: Date
         var cards: [CardDTO]
@@ -64,6 +65,9 @@ enum DeckCodec {
             colorHex: deck.colorHex,
             backLabel: deck.backLabel,
             studyReversed: deck.studyReversed,
+            // Omit the key when not explicitly chosen, so files written before this setting
+            // re-encode unchanged (the watcher's content comparison sees no phantom edit).
+            gradingMode: deck.gradingModeRaw.isEmpty ? nil : deck.gradingModeRaw,
             createdAt: deck.createdAt,
             modifiedAt: deck.modifiedAt,
             cards: deck.cardArray
@@ -85,6 +89,7 @@ enum DeckCodec {
         deck.id = dto.id
         deck.backLabel = dto.backLabel ?? "Definition"
         deck.studyReversed = dto.studyReversed ?? false
+        deck.gradingModeRaw = dto.gradingMode ?? ""
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
         context.insert(deck)
@@ -108,6 +113,7 @@ enum DeckCodec {
         deck.colorHex = dto.colorHex
         deck.backLabel = dto.backLabel ?? "Definition"
         deck.studyReversed = dto.studyReversed ?? false
+        deck.gradingModeRaw = dto.gradingMode ?? ""
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
 

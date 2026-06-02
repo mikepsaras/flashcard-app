@@ -137,7 +137,8 @@ struct RootView: View {
             id: "deck-\(deck.id.uuidString)",
             title: deck.name.isEmpty ? "Study" : deck.name,
             accent: Color(hex: deck.colorHex),
-            exportText: deck.cardArray.map { "\($0.term) — \($0.definition)" }.joined(separator: "\n")
+            exportText: deck.cardArray.map { "\($0.term) — \($0.definition)" }.joined(separator: "\n"),
+            fourButton: deck.gradingMode == .fourButton
         ) {
             let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
             return due.isEmpty ? deck.allReviewItems : due

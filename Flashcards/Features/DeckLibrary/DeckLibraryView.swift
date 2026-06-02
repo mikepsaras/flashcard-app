@@ -220,7 +220,8 @@ struct DeckLibraryView: View {
             deckDescription: deck.deckDescription,
             colorHex: deck.colorHex,
             backLabel: deck.backLabel,
-            studyReversed: deck.studyReversed
+            studyReversed: deck.studyReversed,
+            gradingMode: deck.gradingMode
         )
         context.insert(copy)
         for card in deck.cardArray.sorted(by: { $0.createdAt < $1.createdAt }) {

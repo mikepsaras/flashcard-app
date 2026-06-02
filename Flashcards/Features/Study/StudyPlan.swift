@@ -9,5 +9,8 @@ struct StudyPlan: Identifiable {
     let accent: Color
     /// Text shared via the share button; `nil` hides the button (e.g. Today).
     let exportText: String?
+    /// Whether this run uses 4-button grading. Set from the deck's own setting; the
+    /// cross-deck Today queue uses 2-button.
+    let fourButton: Bool
     let makeItems: () -> [ReviewItem]
 }

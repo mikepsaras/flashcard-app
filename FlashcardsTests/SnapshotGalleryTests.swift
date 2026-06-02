@@ -10,19 +10,18 @@ import SwiftData
 @MainActor
 struct SnapshotGalleryTests {
 
-    private func makeContext() throws -> (ModelContainer, Deck, StudyPlan) {
+    private func makeContext(fourButton: Bool = false) throws -> (ModelContainer, Deck, StudyPlan) {
         let container = DeckStore.previewContainer(seeded: true)
         let decks = try container.mainContext.fetch(
             FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)])
         )
         let deck = decks.first { $0.name.contains("Project") } ?? decks.first!
         let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
-        let plan = StudyPlan(id: "test", title: deck.name, accent: Color(hex: deck.colorHex), exportText: nil) { due }
+        let plan = StudyPlan(id: "test", title: deck.name, accent: Color(hex: deck.colorHex), exportText: nil, fourButton: fourButton) { due }
         return (container, deck, plan)
     }
 
     @Test func renderGallery() throws {
-        UserDefaults.standard.removeObject(forKey: GradingMode.storageKey) // default = two-button
         let (container, _, plan) = try makeContext()
 
         let term = "User Stories"
@@ -67,9 +66,7 @@ struct SnapshotGalleryTests {
     }
 
     @Test func renderFourButtonStudyScreen() throws {
-        UserDefaults.standard.set(GradingMode.fourButton.rawValue, forKey: GradingMode.storageKey)
-        defer { UserDefaults.standard.removeObject(forKey: GradingMode.storageKey) }
-        let (container, _, plan) = try makeContext()
+        let (container, _, plan) = try makeContext(fourButton: true)
         try Snapshot.write(
             StudySessionView(plan: plan, onClose: {}).modelContainer(container),
             size: CGSize(width: 960, height: 720), name: "10_study_four_button_mac")

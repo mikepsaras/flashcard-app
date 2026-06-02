@@ -69,6 +69,51 @@ import SwiftData
         #expect(deck.backLabel == "Definition")
     }
 
+    @Test func gradingModeRoundTrips() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Quiz", gradingMode: .fourButton)
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.gradingMode == GradingMode.fourButton.rawValue)
+        let other = DeckStore.makeContainer()
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        #expect(rebuilt.gradingMode == .fourButton)
+    }
+
+    @Test func missingGradingModeInheritsLegacyGlobalDefault() throws {
+        // A deck file written before per-deck grading has no gradingMode key; it must inherit
+        // whatever the old global default was (here four-button), not snap to two-button.
+        UserDefaults.standard.set(GradingMode.fourButton.rawValue, forKey: GradingMode.storageKey)
+        defer { UserDefaults.standard.removeObject(forKey: GradingMode.storageKey) }
+        let json = """
+        {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
+        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
+        """
+        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
+        #expect(dto.gradingMode == nil)
+        let container = DeckStore.makeContainer()
+        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
+        #expect(deck.gradingMode == .fourButton)
+    }
+
+    @Test func unsetGradingModeRoundTripsWithoutPhantomChange() throws {
+        // A deck file from before per-deck grading (no gradingMode key) must re-encode
+        // identically — no key appears — so the watcher's content comparison sees no edit.
+        let id = UUID().uuidString
+        let json = """
+        {"formatVersion":2,"id":"\(id)","name":"X","deckDescription":"","colorHex":"#3478F6",\
+        "backLabel":"Definition","studyReversed":false,\
+        "createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
+        """
+        let dto1 = try DeckCodec.decodeDTO(Data(json.utf8))
+        #expect(dto1.gradingMode == nil)
+        let container = DeckStore.makeContainer()
+        let deck = DeckCodec.makeDeck(from: dto1, in: container.mainContext)
+        let dto2 = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto2.gradingMode == nil)   // no key written back
+        #expect(dto1 == dto2)              // full DTO stable → reconcile stays a no-op
+    }
+
     @Test func fileIsHumanReadableJSON() throws {
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "X")

@@ -25,6 +25,7 @@ struct DeckEditorView: View {
     @State private var backLabel: String
     @State private var showLabel: Bool
     @State private var studyReversed: Bool
+    @State private var gradingMode: GradingMode
 
     init(mode: DeckEditorMode) {
         self.mode = mode
@@ -36,6 +37,7 @@ struct DeckEditorView: View {
             _backLabel = State(initialValue: "Definition")
             _showLabel = State(initialValue: true)
             _studyReversed = State(initialValue: false)
+            _gradingMode = State(initialValue: .twoButton)
         case .edit(let deck):
             _name = State(initialValue: deck.name)
             _deckDescription = State(initialValue: deck.deckDescription)
@@ -45,6 +47,7 @@ struct DeckEditorView: View {
             _backLabel = State(initialValue: deck.backLabel.isEmpty ? "Definition" : deck.backLabel)
             _showLabel = State(initialValue: !deck.backLabel.isEmpty)
             _studyReversed = State(initialValue: deck.studyReversed)
+            _gradingMode = State(initialValue: deck.gradingMode)
         }
     }
 
@@ -79,6 +82,11 @@ struct DeckEditorView: View {
                         caption("Also quiz the answer back to the term, scheduled separately. A card then counts as two reviews — one each way.")
                     }
 
+                    VStack(alignment: .leading, spacing: 8) {
+                        gradingRow
+                        caption("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler a finer signal.")
+                    }
+
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Color")
                             .font(.system(.subheadline, weight: .medium))
@@ -103,6 +111,22 @@ struct DeckEditorView: View {
         #if os(macOS)
         .frame(width: 460, height: 560)
         #endif
+    }
+
+    private var gradingRow: some View {
+        HStack {
+            Text("Grading buttons").font(Typography.body)
+            Spacer(minLength: 8)
+            Picker("", selection: $gradingMode) {
+                ForEach(GradingMode.allCases) { Text($0.title).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .fieldBox()
     }
 
     private func toggleRow(_ title: String, _ isOn: Binding<Bool>) -> some View {
@@ -148,7 +172,7 @@ struct DeckEditorView: View {
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         switch mode {
         case .new:
-            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed)
+            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode)
             context.insert(deck)
         case .edit(let deck):
             deck.name = trimmed
@@ -156,6 +180,7 @@ struct DeckEditorView: View {
             deck.colorHex = colorHex
             deck.backLabel = label
             deck.studyReversed = studyReversed
+            deck.gradingMode = gradingMode
             deck.modifiedAt = .now
         }
         try? context.save()

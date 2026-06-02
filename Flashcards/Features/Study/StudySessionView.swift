@@ -12,7 +12,6 @@ struct StudySessionView: View {
 
     @Environment(\.modelContext) private var context
     @AppStorage("trackLearning") private var trackLearning = true
-    @AppStorage(GradingMode.storageKey) private var gradingModeRaw = GradingMode.twoButton.rawValue
     @State private var session: StudySession
 
     init(plan: StudyPlan, onClose: @escaping () -> Void) {
@@ -23,7 +22,7 @@ struct StudySessionView: View {
     }
 
     private var accent: Color { plan.accent }
-    private var fourButton: Bool { gradingModeRaw == GradingMode.fourButton.rawValue }
+    private var fourButton: Bool { plan.fourButton }
 
     /// Extra leading space on macOS so the title clears the overlaid traffic lights
     /// (the window uses a full-size-content title bar during study).

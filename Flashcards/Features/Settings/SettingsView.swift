@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
-    @AppStorage(GradingMode.storageKey) private var gradingModeRaw = GradingMode.twoButton.rawValue
     @AppStorage(AIProvider.selectedProviderKey) private var aiProviderRaw = AIProvider.openAI.rawValue
     @AppStorage("studySessionLimit") private var sessionLimit = 0
     @AppStorage("remindersEnabled") private var remindersEnabled = false
@@ -96,13 +95,6 @@ struct SettingsView: View {
 
     private var studyingSection: some View {
         Section {
-            Picker(selection: $gradingModeRaw) {
-                ForEach(GradingMode.allCases) { mode in
-                    Text(mode.title).tag(mode.rawValue)
-                }
-            } label: {
-                Label("Grading buttons", systemImage: "square.grid.2x2")
-            }
             Picker(selection: $sessionLimit) {
                 Text("Unlimited").tag(0)
                 Text("10").tag(10)
@@ -115,7 +107,7 @@ struct SettingsView: View {
         } header: {
             Text("Studying")
         } footer: {
-            Text("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler finer signal. A session cap studies the most-due cards in batches.")
+            Text("A session cap studies the most-due cards in batches. Grading buttons (2 or 4) are set per deck, in the deck’s editor.")
         }
     }
 
