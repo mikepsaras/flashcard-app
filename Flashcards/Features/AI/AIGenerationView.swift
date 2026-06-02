@@ -314,7 +314,10 @@ struct AIGenerationView: View {
             deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed)
             context.insert(deck)
         }
-        for card in cards where included.contains(card.id) {
+        // Skip any card whose term was edited down to empty: the generator drops empty terms
+        // at parse time, but the review list lets the user blank one out before adding.
+        for card in cards where included.contains(card.id)
+            && !card.term.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             context.insert(Card(term: card.term, definition: card.definition, deck: deck))
         }
         deck.modifiedAt = .now

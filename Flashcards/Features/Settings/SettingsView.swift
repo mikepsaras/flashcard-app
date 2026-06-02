@@ -204,14 +204,25 @@ struct SettingsView: View {
 
     private func applyFolder(_ url: URL, move: Bool) {
         let old = LibraryLocation.shared.current
+        // Commit the new location FIRST. setCustom only changes the active folder if it can
+        // actually persist the choice (write the security-scoped bookmark); if it can't, bail
+        // without touching the in-memory library — otherwise we'd swap in the new folder's
+        // decks while still pointed at `old`, and the next persist would write them into `old`.
+        // The folder change drives RootView's reconcile, but only on the next render pass —
+        // after the migrate/switch below has populated the new folder — so it stays a no-op.
+        guard LibraryLocation.shared.setCustom(url) else {
+            cancelPendingFolder()
+            return
+        }
+        // setCustom now holds the session-long access; release the extra one from handleFolderPick.
+        url.stopAccessingSecurityScopedResource()
         if move {
-            // Move the decks in (merging any already there) BEFORE switching, so the
-            // watcher/reconcile never sees an empty folder and deletes the in-memory decks.
+            // Move the decks in (merging any already there) so the new folder is populated
+            // before any reconcile can run against it.
             DeckStore.migrate(from: old, to: url, context: context)
         } else {
             DeckStore.switchFolder(to: url, context: context)
         }
-        LibraryLocation.shared.setCustom(url)
         pendingFolderURL = nil
     }
 

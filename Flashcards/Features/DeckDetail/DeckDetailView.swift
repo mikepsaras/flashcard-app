@@ -14,6 +14,7 @@ struct DeckDetailView: View {
     @State private var showingDeckEditor = false
     @State private var showingImporter = false
     @State private var showingExporter = false
+    @State private var exportText = ""
     @State private var showingAI = false
     @State private var showingResetConfirm = false
     @State private var cardSearch = ""
@@ -60,7 +61,10 @@ struct DeckDetailView: View {
                     }
                     Divider()
                     Button { showingImporter = true } label: { Label("Import CSV…", systemImage: "square.and.arrow.down") }
-                    Button { showingExporter = true } label: { Label("Export CSV…", systemImage: "square.and.arrow.up") }
+                    Button {
+                        exportText = CSVCodec.export(sortedCards)   // build once, on demand
+                        showingExporter = true
+                    } label: { Label("Export CSV…", systemImage: "square.and.arrow.up") }
                         .disabled(sortedCards.isEmpty)
                     Divider()
                     Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
@@ -84,7 +88,7 @@ struct DeckDetailView: View {
         }
         .fileExporter(
             isPresented: $showingExporter,
-            document: CSVDocument(text: CSVCodec.export(sortedCards)),
+            document: CSVDocument(text: exportText),
             contentType: .commaSeparatedText,
             defaultFilename: deck.name.isEmpty ? "Flashcards" : deck.name
         ) { _ in }

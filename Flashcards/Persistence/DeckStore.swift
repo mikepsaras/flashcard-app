@@ -319,14 +319,14 @@ enum DeckStore {
         // unloaded deck here.
         for url in deckFiles(in: directory)
         where url.pathExtension == fileExtension && !written.contains(url.lastPathComponent) {
-            // When a write failed this pass, be conservative: keep any file we can't prove
-            // is safe to delete — one that's unreadable/undecodable right now (e.g. locked
-            // by an external editor) or that belongs to a deck whose write just failed.
-            if !failedIDs.isEmpty {
-                guard let data = try? Data(contentsOf: url),
-                      let dto = try? DeckCodec.decodeDTO(data) else { continue }   // unreadable → keep
-                if failedIDs.contains(dto.id) { continue }                          // failed deck → keep
-            }
+            // Never delete a file we can't read AND decode: it isn't provably an orphan of
+            // ours — it may be corrupt, a half-finished external write, or a newer format we
+            // didn't load — and pruning it would silently lose data. Only a file that decodes
+            // to a deck no longer present (or one whose own write just failed) is handled
+            // below; anything unreadable is kept.
+            guard let data = try? Data(contentsOf: url),
+                  let dto = try? DeckCodec.decodeDTO(data) else { continue }   // unreadable → keep
+            if failedIDs.contains(dto.id) { continue }                          // write just failed → keep
             try? FileManager.default.removeItem(at: url)
         }
 

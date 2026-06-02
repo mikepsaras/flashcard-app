@@ -54,7 +54,6 @@ final class Card {
 }
 
 extension Card {
-    var isDue: Bool { dueDate <= .now }
     /// Reviewed in either direction.
     var hasBeenReviewed: Bool { lastReviewedAt != nil || reverseLastReviewedAt != nil }
 }

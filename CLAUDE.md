@@ -2,7 +2,7 @@
 
 An ultra-clean native flashcard app for **macOS and iPhone**, built as a single
 SwiftUI multiplatform codebase. SM-2 spaced repetition, AI card generation, and
-**file-based local storage** — each deck is its own `.deck` file.
+**file-based local storage** — each deck is its own `.cards` file.
 
 ## Git & syncing (read first — more than one agent works in this folder)
 
@@ -87,15 +87,18 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   `.cascade` delete.
 - `Flashcards/Scheduling` — pure, unit-tested SM-2 (`SM2.swift`, `Grade.swift`) +
   `Card+Scheduling` bridge (direction-aware), and `ReviewDirection`.
-- `Flashcards/Persistence` — **file-based storage**: each deck is a `.deck` JSON file in
-  `~/Documents/Flashcards` (the source of truth, **format v2**). `DeckStore` builds an
-  *in-memory* `ModelContainer`, loads `.deck` files at launch, and rewrites them after
-  every change (and on scene-background); `DeckCodec` maps `@Model` ⇄ Codable DTOs.
-  `persist` returns a `PersistResult` and reports failures via `PersistenceMonitor`
-  (surfaced as an alert) — writes are never silently lost. `DeckFolderWatcher` +
-  `DeckStore.reconcile` reflect **external edits** to the `.deck` files live (content
-  comparison suppresses the app's own writes). `SeedData` seeds samples on first run;
-  `migrateLegacyStore` imports any pre-existing on-disk store once.
+- `Flashcards/Persistence` — **file-based storage**: each deck is a `.cards` JSON file in
+  `~/Documents/Flashcards` (the source of truth, **format v2**; legacy `.deck` files still
+  load). `DeckStore` builds an *in-memory* `ModelContainer`, loads the deck files at launch,
+  and rewrites them after every change (and on scene-background); `DeckCodec` maps `@Model`
+  ⇄ Codable DTOs. `persist` returns a `PersistResult` and reports failures via
+  `PersistenceMonitor` (surfaced as an alert) — writes are never silently lost, and the
+  prune step never deletes a file it can't read+decode. `DeckFolderWatcher` +
+  `DeckStore.reconcile` reflect **external edits** to the deck files live (content
+  comparison suppresses the app's own writes). The library starts **empty** by default —
+  there's no auto-seeding and no legacy-store import (an empty folder stays an empty
+  library; `SeedData` survives only for previews/snapshots). At launch `migrateLegacyExtension`
+  renames any legacy `.deck` files to `.cards` in place (write-then-delete, never destructive).
 - `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review queue,
   search, sort, duplicate, drag-drop import), `DeckDetail` (CRUD editors + **CSV
   import/export** via `CSVCodec` + move-card + Reset Progress), `Study` (`StudySession`
@@ -116,7 +119,7 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
 
 ## Storage (no database, no iCloud sync)
 
-Each deck is a human-readable `.deck` JSON file in `~/Documents/Flashcards` (Mac, visible in
+Each deck is a human-readable `.cards` JSON file in `~/Documents/Flashcards` (Mac, visible in
 Finder) / the app's Files-visible Documents folder (iOS, via `UIFileSharingEnabled` +
 `LSSupportsOpeningDocumentsInPlace` in a generated `Info.plist`). There is **no on-disk
 database and no iCloud sync**. The app keeps an in-memory SwiftData working copy and persists

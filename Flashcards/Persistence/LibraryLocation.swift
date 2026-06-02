@@ -42,13 +42,16 @@ final class LibraryLocation {
     /// keeps security-scoped access open for the session. Returns whether it stuck.
     @discardableResult
     func setCustom(_ url: URL) -> Bool {
-        _ = url.startAccessingSecurityScopedResource()
-        guard let data = try? url.bookmarkData() else { return false }
+        let accessing = url.startAccessingSecurityScopedResource()
+        guard let data = try? url.bookmarkData() else {
+            if accessing { url.stopAccessingSecurityScopedResource() }   // don't leak on failure
+            return false
+        }
         UserDefaults.standard.set(data, forKey: Self.bookmarkKey)
         Self.ensureExists(url)
         current = url
         isCustom = true
-        return true
+        return true   // access is kept open for the session (the library folder stays in use)
     }
 
     /// Return to `~/Documents/Flashcards`.

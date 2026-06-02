@@ -341,6 +341,30 @@ import SwiftData
         #expect(try Data(contentsOf: dir.appendingPathComponent("Keep.cards")) == originalData)
     }
 
+    @Test func persistKeepsUndecodableFileButStillPrunesDecodableOrphans() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Mine"); container.mainContext.insert(deck)
+        try container.mainContext.save()
+
+        // A .cards file the app can't decode (corrupt / truncated / a newer format) that
+        // loadAll skipped, plus a decodable file for a deck that's no longer present.
+        let foreign = dir.appendingPathComponent("Foreign.cards")
+        try Data("not valid deck json".utf8).write(to: foreign)
+        let orphanSource = DeckStore.makeContainer()
+        let gone = Deck(name: "Gone"); orphanSource.mainContext.insert(gone)
+        try orphanSource.mainContext.save()
+        let orphan = dir.appendingPathComponent("Gone.cards")
+        try DeckCodec.encode(gone).write(to: orphan)
+
+        // A completely ordinary, fully successful save.
+        #expect(DeckStore.persist(container.mainContext, to: dir).isSuccess)
+
+        // The unreadable file is kept (never silently lost); the decodable orphan is pruned.
+        #expect(FileManager.default.fileExists(atPath: foreign.path))
+        #expect(!FileManager.default.fileExists(atPath: orphan.path))
+    }
+
     @Test func reconcileKeepsUnsavedDeckAfterFailedWrite() throws {
         let dir = try tempDir()
         let container = DeckStore.makeContainer()
