@@ -19,9 +19,9 @@ enum AIProvider: String, CaseIterable, Identifiable, Sendable {
 
     var defaultModel: String {
         switch self {
-        case .openAI:    "gpt-4o-mini"
-        case .google:    "gemini-2.0-flash"
-        case .anthropic: "claude-3-5-haiku-latest"
+        case .openAI:    "gpt-4.1-mini"
+        case .google:    "gemini-2.5-flash"
+        case .anthropic: "claude-haiku-4-5"
         }
     }
 
