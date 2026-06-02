@@ -27,6 +27,10 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Flashcards
+        # Source the app version from the build settings (MARKETING_VERSION / CURRENT_PROJECT_VERSION)
+        # rather than xcodegen's static 1.0/1 default, so a version bump actually reaches the app.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.education
         UILaunchScreen: {}
