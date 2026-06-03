@@ -1,16 +1,18 @@
 import SwiftUI
 
 /// The document icon for `.cards` deck files — a native-style white page with a folded top-right
-/// corner, carrying the app's three-card stack as a clean black-and-white glyph. Drawn in SwiftUI
-/// and rendered to the asset catalog + `DeckDocument.icns` by `IconGenerator` in the test target.
+/// corner and a blue "CARDS" type banner near the bottom, the way macOS labels document types.
+/// Drawn in SwiftUI and rendered to the asset catalog + `DeckDocument.icns` by `IconGenerator`.
 struct DeckFileIconArtwork: View {
+    private let accent = Color(red: 0.20, green: 0.47, blue: 0.96)
+
     var body: some View {
         GeometryReader { geo in
             let s = min(geo.size.width, geo.size.height)
             let pageW = s * 0.64
             let pageH = s * 0.82
             ZStack {
-                page(s)
+                page(pageW, pageH, s: s)
                     .frame(width: pageW, height: pageH)
                     .shadow(color: .black.opacity(0.16), radius: s * 0.02, x: 0, y: s * 0.012)
             }
@@ -18,49 +20,40 @@ struct DeckFileIconArtwork: View {
         }
     }
 
-    private func page(_ s: CGFloat) -> some View {
+    private func page(_ pw: CGFloat, _ ph: CGFloat, s: CGFloat) -> some View {
         let fold: CGFloat = 0.24
+        let bannerW = pw * 0.78
+        let bannerH = ph * 0.155
         return ZStack {
             DocPage(fold: fold).fill(.white)
-            DocFold(fold: fold).fill(Color.black.opacity(0.07))                 // folded-corner underside
+            DocFold(fold: fold).fill(Color.black.opacity(0.07))                  // folded-corner underside
             DocPage(fold: fold).stroke(Color.black.opacity(0.10), lineWidth: max(s * 0.0035, 1))
-            GeometryReader { g in
-                let w = min(g.size.width, g.size.height)
-                monoCards(w * 0.62)
-                    .frame(width: g.size.width, height: g.size.height, alignment: .center)
-                    .offset(y: g.size.height * 0.06)
+
+            // Faint lines near the top, so the page reads as a sheet of content.
+            VStack(alignment: .leading, spacing: ph * 0.045) {
+                contentLine(pw * 0.52, ph)
+                contentLine(pw * 0.64, ph)
+                contentLine(pw * 0.46, ph)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.top, ph * 0.14)
+            .padding(.leading, pw * 0.16)
+
+            Text("CARDS")
+                .font(.system(size: bannerH * 0.5, weight: .heavy, design: .rounded))
+                .tracking(bannerH * 0.05)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(width: bannerW, height: bannerH)
+                .background(accent, in: RoundedRectangle(cornerRadius: bannerH * 0.26, style: .continuous))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, ph * 0.18)
         }
     }
 
-    /// The three-card stack as a black-and-white glyph: faded back cards, a defined front card
-    /// with two ink lines.
-    private func monoCards(_ g: CGFloat) -> some View {
-        let d = g * 0.045
-        let w = g * 0.66, h = g * 0.52
-        return ZStack {
-            glyphCard(g, w, h, fill: .black.opacity(0.05), stroke: .black.opacity(0.16), lines: false)
-                .offset(x: 2 * d, y: -2 * d)
-            glyphCard(g, w, h, fill: .black.opacity(0.07), stroke: .black.opacity(0.22), lines: false)
-                .offset(x: d, y: -d)
-            glyphCard(g, w, h, fill: .white, stroke: .black.opacity(0.45), lines: true)
-        }
-        .offset(x: -d, y: d)
-        .frame(width: g, height: g, alignment: .center)
-    }
-
-    private func glyphCard(_ g: CGFloat, _ w: CGFloat, _ h: CGFloat, fill: Color, stroke: Color, lines: Bool) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: g * 0.07, style: .continuous).fill(fill)
-            RoundedRectangle(cornerRadius: g * 0.07, style: .continuous).strokeBorder(stroke, lineWidth: max(g * 0.014, 1))
-            if lines {
-                VStack(spacing: g * 0.06) {
-                    Capsule().fill(Color.black.opacity(0.62)).frame(width: w * 0.42, height: g * 0.05)
-                    Capsule().fill(Color.black.opacity(0.28)).frame(width: w * 0.54, height: g * 0.04)
-                }
-            }
-        }
-        .frame(width: w, height: h)
+    private func contentLine(_ w: CGFloat, _ ph: CGFloat) -> some View {
+        Capsule().fill(Color.black.opacity(0.09)).frame(width: w, height: ph * 0.022)
     }
 }
 
