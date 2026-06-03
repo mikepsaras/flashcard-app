@@ -171,6 +171,8 @@ struct ActivityHeatmap: View {
             }
         }
         .frame(height: 7 * cell + 6 * gap + 30)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Activity heatmap of daily reviews over the past year")
     }
 
     private func grid(weeks: Int, firstDay: Date, today: Date) -> some View {

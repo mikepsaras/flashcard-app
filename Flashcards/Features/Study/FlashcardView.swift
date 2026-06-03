@@ -10,6 +10,9 @@ struct FlashcardView: View {
     var onShuffle: (() -> Void)?
     var onTap: () -> Void
 
+    /// Card text scales with the user's Dynamic Type setting (40pt at the default size).
+    @ScaledMetric(relativeTo: .largeTitle) private var termSize: CGFloat = 40
+
     var body: some View {
         ZStack {
             face(text: term, label: nil)
@@ -21,6 +24,14 @@ struct FlashcardView: View {
         }
         .rotation3DEffect(.degrees(isShowingDefinition ? 180 : 0), axis: (x: 0, y: 1, z: 0))
         .animation(.spring(response: 0.5, dampingFraction: 0.82), value: isShowingDefinition)
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .onTapGesture(perform: onTap)
+        // Combine only the card faces so VoiceOver reads the card as one element and flips on
+        // double-tap; the shuffle button is added on top as a separate, reachable element.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(isShowingDefinition ? "Definition: \(definition)" : "Term: \(term)")
+        .accessibilityHint("Double-tap to flip")
         .overlay(alignment: .bottomTrailing) {
             if let onShuffle {
                 Button(action: onShuffle) {
@@ -31,13 +42,9 @@ struct FlashcardView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Shuffle remaining cards")
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .onTapGesture(perform: onTap)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(isShowingDefinition ? "Definition: \(definition)" : "Term: \(term)")
-        .accessibilityHint("Double-tap to flip")
     }
 
     private func face(text: String, label: String?) -> some View {
@@ -53,11 +60,10 @@ struct FlashcardView: View {
                         .foregroundStyle(accent)
                 }
                 Text(text.isEmpty ? "—" : text)
-                    .font(Typography.cardTerm)
+                    .font(.system(size: termSize, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.4)
-                    .lineLimit(8)
+                    .minimumScaleFactor(0.5)
             }
             .padding(40)
         }

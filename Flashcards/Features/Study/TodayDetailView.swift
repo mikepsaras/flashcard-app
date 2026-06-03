@@ -65,6 +65,7 @@ struct TodayDetailView: View {
                         .foregroundStyle(.orange)
                         .monospacedDigit()
                         .help("\(streak)-day study streak")
+                        .accessibilityLabel("\(streak)-day study streak")
                 }
             }
 

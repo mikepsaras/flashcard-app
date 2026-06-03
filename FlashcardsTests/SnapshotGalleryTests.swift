@@ -114,5 +114,19 @@ struct SnapshotGalleryTests {
             size: CGSize(width: 700, height: 700), name: "11_insights_mac")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/11_insights_mac.png"))
     }
+
+    @Test func renderLargeDynamicTypeCard() throws {
+        // Smoke test that the card renders under an accessibility Dynamic Type environment
+        // without trapping. NOTE: ImageRenderer doesn't apply dynamicTypeSize to @ScaledMetric,
+        // so the output is default-sized — actual scaling must be verified on a device.
+        let term = "User Stories"
+        let def = "Short, simple descriptions of a feature told from the perspective of the user who desires it."
+        try Snapshot.write(
+            FlashcardView(term: term, definition: def, isShowingDefinition: false, onShuffle: {}, onTap: {})
+                .padding(28).background(Theme.windowBackground)
+                .environment(\.dynamicTypeSize, .accessibility2),
+            size: CGSize(width: 620, height: 600), name: "13_card_large_type")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/13_card_large_type.png"))
+    }
 }
 #endif

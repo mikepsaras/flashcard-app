@@ -20,6 +20,7 @@ struct DeckDetailView: View {
     @State private var showingAI = false
     @State private var showingResetConfirm = false
     @State private var cardSearch = ""
+    @State private var cardPendingDeletion: Card?
 
     private var sortedCards: [Card] {
         deck.cardArray.sorted { $0.createdAt < $1.createdAt }
@@ -145,6 +146,17 @@ struct DeckDetailView: View {
         } message: {
             Text("Every card becomes due again and its spaced-repetition history is cleared. This can’t be undone.")
         }
+        .confirmationDialog(
+            "Delete this card?",
+            isPresented: Binding(get: { cardPendingDeletion != nil }, set: { if !$0 { cardPendingDeletion = nil } }),
+            titleVisibility: .visible,
+            presenting: cardPendingDeletion
+        ) { card in
+            Button("Delete", role: .destructive) { deleteCard(card) }
+            Button("Cancel", role: .cancel) {}
+        } message: { card in
+            Text("“\(card.term.isEmpty ? "This card" : card.term)” will be permanently deleted. This can’t be undone.")
+        }
     }
 
     private func resetProgress() {
@@ -265,7 +277,7 @@ struct DeckDetailView: View {
                                 }
                             }
                         }
-                        Button(role: .destructive) { deleteCard(card) } label: { Label("Delete", systemImage: "trash") }
+                        Button(role: .destructive) { cardPendingDeletion = card } label: { Label("Delete", systemImage: "trash") }
                     }
                 }
                 .onDelete(perform: deleteCards)
@@ -351,6 +363,7 @@ private struct CardRowView: View {
             .font(.system(.caption2, design: .rounded, weight: .semibold))
             .foregroundStyle(.secondary)
             .help("Next review \(nextDue.formatted(date: .abbreviated, time: .omitted))")
+            .accessibilityLabel("Next review in \(daysUntilDue) \(daysUntilDue == 1 ? "day" : "days")")
         }
     }
 

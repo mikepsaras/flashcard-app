@@ -191,6 +191,7 @@ struct DeckEditorView: View {
                     .overlay(
                         Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
                     )
+                    .frame(width: 44, height: 44)          // ≥44pt hit target (visual stays 32pt)
                     .contentShape(Circle())
                     .onTapGesture { colorHex = hex }
                     .accessibilityLabel(Text(DeckPalette.name(for: hex)))
