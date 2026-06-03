@@ -40,7 +40,10 @@ struct FlashcardsApp: App {
         .modelContainer(container)
         #if os(macOS)
         .defaultSize(width: 1100, height: 820)
-        .windowResizability(.contentMinSize)
+        // Not `.contentMinSize`: that derived the window's min from the content, which used to be
+        // pinned by a `.frame(minWidth:)` around the NavigationSplitView — and that frame broke the
+        // sidebar reveal animation. The minimum size is now set via `window.minSize` in WindowConfigurator.
+        .windowResizability(.automatic)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Deck") { AppActions.shared.newDeckTick += 1 }

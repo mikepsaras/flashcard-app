@@ -86,6 +86,11 @@ struct RootView: View {
     private var content: some View {
         #if os(macOS)
         // Study fills the whole window (replaces the split view) rather than a sheet.
+        //
+        // Do NOT wrap this in `.frame(minWidth:…, minHeight:…)`. A min-frame around a
+        // NavigationSplitView breaks its sidebar reveal animation — on expand the column
+        // snaps and the toolbar (incl. the search field) re-lays-out mid-animation. The
+        // window's minimum size is enforced via `window.minSize` in WindowConfigurator instead.
         Group {
             if let plan = studyPlan {
                 // .id ties the session's @State to the plan, so switching plans always
@@ -96,7 +101,6 @@ struct RootView: View {
                 splitView
             }
         }
-        .frame(minWidth: 900, minHeight: 680)
         .background(WindowConfigurator(fullSizeContent: studyPlan != nil))
         #else
         splitView

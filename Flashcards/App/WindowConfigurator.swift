@@ -28,6 +28,12 @@ struct WindowConfigurator: NSViewRepresentable {
     private func apply(to window: NSWindow?, _ coordinator: Coordinator) {
         guard let window else { return }
 
+        // Enforce the window's minimum size here, at the AppKit level — NOT via a SwiftUI
+        // `.frame(minWidth:…)` wrapped around the NavigationSplitView. That frame breaks the
+        // sidebar reveal animation (the column snaps and the toolbar/search field re-lays-out
+        // mid-animation). `window.minSize` is decoupled from the split view's layout.
+        window.minSize = NSSize(width: 900, height: 680)
+
         if coordinator.original == nil {
             coordinator.original = (
                 window.titlebarAppearsTransparent,
