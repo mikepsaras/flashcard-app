@@ -139,32 +139,34 @@ struct AIGenerationView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 if isExpanding {
-                    Label("New cards are added to this deck — anything it already has is skipped.", systemImage: "rectangle.stack.badge.plus")
+                    // Expanding a deck that already has cards: the only setting is how many to
+                    // add. The deck's cards are sent as context so the AI continues it in the
+                    // same format (no notes/topic, no file import, no auto count).
+                    Label("New cards in the same style are added to this deck; anything it already has is skipped.", systemImage: "rectangle.stack.badge.plus")
                         .font(Typography.callout)
                         .foregroundStyle(.secondary)
-                }
-                if showsNameField {
-                    LabeledField(label: "Deck name", placeholder: "e.g. Spanish Basics", text: $deckName)
-                }
-
-                VStack(alignment: .leading, spacing: 7) {
-                    fieldLabel(isExpanding ? "Notes or topic (optional)" : "Notes or topic")
-                    TextEditor(text: $prompt)
-                        .font(Typography.body)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 150)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .fieldBox()
-                    Button { showingFileImporter = true } label: {
-                        Label("Import from file…", systemImage: "doc.badge.plus").font(Typography.callout)
+                } else {
+                    if showsNameField {
+                        LabeledField(label: "Deck name", placeholder: "e.g. Spanish Basics", text: $deckName)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Theme.accent)
-                    .padding(.top, 2)
-                    caption(isExpanding
-                        ? "Optional — the AI already sees this deck's cards and will add new ones. Add notes to steer the topic."
-                        : "Type or paste text, or import a .txt / .md file to use as the source.")
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        fieldLabel("Notes or topic")
+                        TextEditor(text: $prompt)
+                            .font(Typography.body)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 150)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .fieldBox()
+                        Button { showingFileImporter = true } label: {
+                            Label("Import from file…", systemImage: "doc.badge.plus").font(Typography.callout)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.accent)
+                        .padding(.top, 2)
+                        caption("Type or paste text, or import a .txt / .md file to use as the source.")
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 7) {
@@ -186,10 +188,12 @@ struct AIGenerationView: View {
                                 .labelsHidden()
                             #endif
                         }
-                        Text("Auto").foregroundStyle(.secondary)
-                        Toggle("Auto", isOn: $autoCount.animation())
-                            .labelsHidden()
-                            .toggleStyle(.switch)
+                        if !isExpanding {
+                            Text("Auto").foregroundStyle(.secondary)
+                            Toggle("Auto", isOn: $autoCount.animation())
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)

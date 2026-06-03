@@ -18,7 +18,6 @@ struct DeckDetailView: View {
     @State private var exportText = ""
     @State private var importMessage: String?
     @State private var showingAI = false
-    @State private var showingPaste = false
     @State private var showingResetConfirm = false
     @State private var cardSearch = ""
 
@@ -67,7 +66,7 @@ struct DeckDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { cardEditor = .new } label: { Label("New Card", systemImage: "plus") }
-                    Button { showingPaste = true } label: { Label("Paste Cards…", systemImage: "doc.on.clipboard") }
+                    Button { showingImporter = true } label: { Label("Import from File…", systemImage: "square.and.arrow.down") }
                     Button { showingAI = true } label: { Label("Generate Cards with AI…", systemImage: "sparkles") }
                 } label: {
                     Label("Add Card", systemImage: "plus")
@@ -79,7 +78,6 @@ struct DeckDetailView: View {
                         ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
                     }
                     Divider()
-                    Button { showingImporter = true } label: { Label("Import Cards…", systemImage: "square.and.arrow.down") }
                     Menu {
                         Button {
                             exportText = CSVCodec.export(sortedCards)   // build once, on demand
@@ -112,9 +110,6 @@ struct DeckDetailView: View {
         }
         .sheet(isPresented: $showingAI) {
             AIGenerationView(target: .existing(deck))
-        }
-        .sheet(isPresented: $showingPaste) {
-            PasteCardsView(deck: deck)
         }
         .fileExporter(
             isPresented: $showingExporter,
