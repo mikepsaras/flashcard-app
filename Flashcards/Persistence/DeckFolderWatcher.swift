@@ -13,6 +13,7 @@ final class DeckFolderWatcher {
     private var source: DispatchSourceFileSystemObject?
     private let queue = DispatchQueue(label: "com.mike.Flashcards.folderwatch")
     private var debounce: Task<Void, Never>?
+    private var reopenAttempt = 0
     private var onChange: (() -> Void)?
     private var directory: URL = DeckStore.libraryURL()
 
@@ -52,7 +53,19 @@ final class DeckFolderWatcher {
         // executor-assertion when libdispatch invokes them off-main. Real work hops back
         // to the main actor via a Task.
         src.setEventHandler { @Sendable [weak self] in
-            Task { @MainActor in self?.scheduleReconcile() }
+            let flags = src.data
+            Task { @MainActor in
+                guard let self else { return }
+                // `.delete`/`.rename` here mean the watched directory *itself* was removed or
+                // replaced (some sync clients swap it atomically) — the fd now points at the dead
+                // inode, so re-establish the watch on the path. Adds/removes of files *inside* the
+                // directory arrive as `.write` and just reconcile.
+                if flags.contains(.delete) || flags.contains(.rename) {
+                    self.reopenAfterReplacement()
+                } else {
+                    self.scheduleReconcile()
+                }
+            }
         }
         src.setCancelHandler { @Sendable in close(fd) }
         source = src
@@ -66,6 +79,29 @@ final class DeckFolderWatcher {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled, let self, !self.isPaused else { return }
             self.onChange?()
+        }
+    }
+
+    /// Re-establish the watch after the directory was replaced, retrying briefly while it may not
+    /// yet exist (during an atomic swap), then reconcile to catch anything missed.
+    private func reopenAfterReplacement() {
+        guard onChange != nil else { return }   // stopped
+        reopenAttempt = 0
+        attemptReopen()
+    }
+
+    private func attemptReopen() {
+        guard onChange != nil else { return }   // stopped between retries
+        if FileManager.default.fileExists(atPath: directory.path) {
+            openSource()
+            scheduleReconcile()
+            return
+        }
+        guard reopenAttempt < 5 else { openSource(); return }   // give up re-arming the watch
+        reopenAttempt += 1
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            self?.attemptReopen()
         }
     }
 }
