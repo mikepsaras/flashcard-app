@@ -11,13 +11,13 @@ struct StudySessionView: View {
     let onClose: () -> Void
 
     @Environment(\.modelContext) private var context
-    @AppStorage("trackLearning") private var trackLearning = true
+    @AppStorage(DefaultsKey.trackLearning) private var trackLearning = true
     @State private var session: StudySession
 
     init(plan: StudyPlan, onClose: @escaping () -> Void) {
         self.plan = plan
         self.onClose = onClose
-        let track = UserDefaults.standard.object(forKey: "trackLearning") as? Bool ?? true
+        let track = UserDefaults.standard.object(forKey: DefaultsKey.trackLearning) as? Bool ?? true
         _session = State(initialValue: StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: track))
     }
 
@@ -218,7 +218,7 @@ struct StudySessionView: View {
     /// Applies the "cards per session" setting (0 ⇒ unlimited). The cap logic lives on
     /// `StudySession` (unit-tested); this just supplies the stored limit.
     private static func cappedItems(_ items: [ReviewItem]) -> [ReviewItem] {
-        StudySession.cap(items, limit: UserDefaults.standard.integer(forKey: "studySessionLimit"))
+        StudySession.cap(items, limit: UserDefaults.standard.integer(forKey: DefaultsKey.studySessionLimit))
     }
 
     // MARK: Keyboard

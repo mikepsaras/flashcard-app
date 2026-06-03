@@ -1,0 +1,86 @@
+import Testing
+import Foundation
+@testable import Flashcards
+
+@MainActor
+@Suite struct CardListCodecTests {
+
+    // MARK: Parse — JSON
+
+    @Test func parsesJSONEnvelope() {
+        let parsed = CardListCodec.parse(#"{"cards":[{"term":"A","definition":"B"},{"term":"C","definition":"D"}]}"#)
+        #expect(parsed.cards.count == 2)
+        #expect(parsed.cards[0].term == "A")
+        #expect(parsed.name == nil)
+    }
+
+    @Test func parsesBareJSONArray() {
+        let parsed = CardListCodec.parse(#"[{"term":"A","definition":"B"}]"#)
+        #expect(parsed.cards.count == 1)
+        #expect(parsed.cards[0].definition == "B")
+    }
+
+    @Test func capturesDeckMetadataFromEnvelope() {
+        let json = #"{"name":"Spanish","section":"Languages","description":"basics","cards":[{"term":"hola","definition":"hello"}]}"#
+        let parsed = CardListCodec.parse(json)
+        #expect(parsed.name == "Spanish")
+        #expect(parsed.section == "Languages")
+        #expect(parsed.deckDescription == "basics")
+        #expect(parsed.cards.count == 1)
+    }
+
+    @Test func toleratesFencesAndProse() {
+        let messy = "Sure!\n```json\n{\"cards\":[{\"term\":\"A\",\"definition\":\"B\"}]}\n```\nEnjoy"
+        let parsed = CardListCodec.parse(messy)
+        #expect(parsed.cards.count == 1)
+        #expect(parsed.cards[0].term == "A")
+    }
+
+    // MARK: Parse — CSV
+
+    @Test func parsesCSV() {
+        let parsed = CardListCodec.parse("Term,Definition\nSprint,A time-box\nScrum,A framework\n")
+        #expect(parsed.cards.count == 2)
+        #expect(parsed.cards[0].term == "Sprint")
+        #expect(parsed.name == nil)
+    }
+
+    @Test func emptyOrBlankYieldsNoCards() {
+        #expect(CardListCodec.parse("").cards.isEmpty)
+        #expect(CardListCodec.parse("   \n  \n").cards.isEmpty)
+    }
+
+    @Test func plainLinesBecomeTermOnlyCards() {
+        // A bare list of lines (no JSON, no commas) is read as term-only cards — handy for
+        // pasting a list of prompts to fill in the answers later.
+        let parsed = CardListCodec.parse("Tokyo\nParis\nLondon")
+        #expect(parsed.cards.map(\.term) == ["Tokyo", "Paris", "London"])
+        #expect(parsed.cards.allSatisfy { $0.definition.isEmpty })
+    }
+
+    // MARK: Export
+
+    @Test func exportJSONRoundTrips() {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Round"); container.mainContext.insert(deck)
+        let c1 = Card(term: "a", definition: "b", deck: deck)
+        let c2 = Card(term: "c", definition: "d, with comma", deck: deck)
+        container.mainContext.insert(c1); container.mainContext.insert(c2)
+
+        let parsed = CardListCodec.parse(CardListCodec.exportJSON([c1, c2], name: "Round"))
+        #expect(parsed.name == "Round")
+        #expect(parsed.cards.map(\.term) == ["a", "c"])
+        #expect(parsed.cards[1].definition == "d, with comma")   // commas survive JSON round-trip
+    }
+
+    @Test func exportOmitsNameWhenNil() {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "X"); container.mainContext.insert(deck)
+        let card = Card(term: "Set", definition: "Written as {1, 2, 3}", deck: deck)
+        container.mainContext.insert(card)
+        let json = CardListCodec.exportJSON([card])
+        #expect(!json.contains("\"name\""))
+        // Braces inside a value don't confuse the round-trip.
+        #expect(CardListCodec.parse(json).cards.first?.definition == "Written as {1, 2, 3}")
+    }
+}

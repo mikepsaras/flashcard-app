@@ -31,7 +31,7 @@ struct DeckLibraryView: View {
     @State private var showingCardsImporter = false
     @State private var search = ""
     @State private var deckPendingDeletion: Deck?
-    @AppStorage("deckSort") private var deckSortRaw = DeckSort.recent.rawValue
+    @AppStorage(DefaultsKey.deckSort) private var deckSortRaw = DeckSort.recent.rawValue
 
     private var deckSort: DeckSort { DeckSort(rawValue: deckSortRaw) ?? .recent }
     private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }

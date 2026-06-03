@@ -5,10 +5,10 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @AppStorage(AIProvider.selectedProviderKey) private var aiProviderRaw = AIProvider.openAI.rawValue
-    @AppStorage("studySessionLimit") private var sessionLimit = 0
-    @AppStorage("remindersEnabled") private var remindersEnabled = false
-    @AppStorage("reminderHour") private var reminderHour = 19
-    @AppStorage("reminderMinute") private var reminderMinute = 0
+    @AppStorage(DefaultsKey.studySessionLimit) private var sessionLimit = 0
+    @AppStorage(DefaultsKey.remindersEnabled) private var remindersEnabled = false
+    @AppStorage(DefaultsKey.reminderHour) private var reminderHour = 19
+    @AppStorage(DefaultsKey.reminderMinute) private var reminderMinute = 0
     @State private var apiKey = ""
     @State private var model = ""
     @State private var testStatus: TestStatus = .idle

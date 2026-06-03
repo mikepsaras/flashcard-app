@@ -127,4 +127,29 @@ import Foundation
             _ = try await CardGenerator().generate(prompt: "x", count: 5, provider: .openAI, model: "m", apiKey: "  ")
         }
     }
+
+    // MARK: De-duplication (deck expansion)
+
+    @Test func removingDuplicatesDropsExistingTerms() {
+        let existing = [GeneratedCard(term: "Sprint", definition: "x")]
+        let generated = [
+            GeneratedCard(term: "sprint", definition: "dup — case-insensitive"),
+            GeneratedCard(term: "Velocity", definition: "new"),
+        ]
+        #expect(CardGenerator.removingDuplicates(generated, of: existing).map(\.term) == ["Velocity"])
+    }
+
+    @Test func removingDuplicatesDropsWithinBatchRepeats() {
+        let generated = [
+            GeneratedCard(term: "A", definition: "1"),
+            GeneratedCard(term: " a ", definition: "2"),   // same term, trimmed + cased
+            GeneratedCard(term: "B", definition: "3"),
+        ]
+        #expect(CardGenerator.removingDuplicates(generated, of: []).map(\.term) == ["A", "B"])
+    }
+
+    @Test func removingDuplicatesKeepsAllWhenNoOverlap() {
+        let generated = [GeneratedCard(term: "A", definition: "1"), GeneratedCard(term: "B", definition: "2")]
+        #expect(CardGenerator.removingDuplicates(generated, of: [GeneratedCard(term: "C", definition: "3")]).count == 2)
+    }
 }

@@ -648,4 +648,55 @@ import SwiftData
         // library. Asserting it here keeps that guarantee from silently regressing.
         #expect(DeckStore.isHostingTests)
     }
+
+    // MARK: Filename sanitization + migrate failure
+
+    @Test func persistSanitizesIllegalFilenameCharacters() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        container.mainContext.insert(Deck(name: "a/b:c?d*e"))
+        try container.mainContext.save()
+        store.persist(container.mainContext, to: dir)
+        let names = try deckFilenames(dir)
+        #expect(names.count == 1)
+        #expect(!names[0].contains("/"))
+        #expect(!names[0].contains(":"))
+        #expect(names[0].hasSuffix(".cards"))
+    }
+
+    @Test func persistTruncatesVeryLongNames() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        container.mainContext.insert(Deck(name: String(repeating: "x", count: 150)))
+        try container.mainContext.save()
+        store.persist(container.mainContext, to: dir)
+        let name = try #require(try deckFilenames(dir).first)
+        #expect(name.replacingOccurrences(of: ".cards", with: "").count <= 80)
+    }
+
+    @Test func persistNamesEmptyDeckUntitled() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        container.mainContext.insert(Deck(name: ""))
+        try container.mainContext.save()
+        store.persist(container.mainContext, to: dir)
+        #expect(try deckFilenames(dir) == ["Untitled Deck.cards"])
+    }
+
+    @Test func migrateFailureKeepsDeckAndOldFile() throws {
+        let oldDir = try tempDir(); let newDir = try tempDir()
+        let container = DeckStore.makeContainer()
+        container.mainContext.insert(Deck(name: "A"))
+        try container.mainContext.save()
+        store.persist(container.mainContext, to: oldDir)
+
+        // New folder unwritable → the move can't write there.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: newDir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: newDir.path) }
+        store.migrate(from: oldDir, to: newDir, context: container.mainContext)
+
+        // The deck survives in memory and its old file isn't removed before a safe write.
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)
+        #expect(try deckFilenames(oldDir) == ["A.cards"])
+    }
 }
