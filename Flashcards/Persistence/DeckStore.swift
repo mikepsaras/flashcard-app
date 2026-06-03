@@ -35,7 +35,12 @@ final class PersistenceMonitor {
 /// (`Documents/Flashcards`). The on-disk files are the source of truth; the app
 /// keeps an in-memory SwiftData working copy that's rebuilt from the files at launch.
 @MainActor
-enum DeckStore {
+final class DeckStore {
+    /// The app's shared store instance, holding the on-disk caches (`urlByDeckID`,
+    /// `unsavedDeckIDs`). The app persists/loads/reconciles through it; tests create their own
+    /// `DeckStore()` so one test's cache state can't leak into the next.
+    static let shared = DeckStore()
+
     /// Current deck-file extension. `.cards` is ours alone — the old `.deck` collided with
     /// another app's document type on some systems, so deck files couldn't pick up our icon.
     static let fileExtension = "cards"
@@ -65,12 +70,15 @@ enum DeckStore {
     /// Cache of deck id → on-disk file URL, kept warm by `loadAll`/`persist` so the
     /// share / reveal-in-Finder lookups don't rescan and re-decode every `.deck` file
     /// on the main thread each time a menu is built.
-    private static var urlByDeckID: [UUID: URL] = [:]
+    private var urlByDeckID: [UUID: URL] = [:]
 
     /// Decks whose most recent write failed — they hold unsaved changes the on-disk file
     /// doesn't have, so `reconcile` must not revert or delete them from disk until a save
-    /// succeeds. Recomputed on every `persist`.
-    private static var unsavedDeckIDs: Set<UUID> = []
+    /// succeeds. Recomputed on every `persist`. Caveat: it's cleared only by a later *successful*
+    /// persist, so if a write fails and the user then makes only *external* edits to that deck,
+    /// reconcile keeps ignoring them until the next in-app change re-persists. Narrow in practice
+    /// (a failed write means a disk problem), so left as-is rather than adding a recovery path.
+    private var unsavedDeckIDs: Set<UUID> = []
 
     // MARK: Container (no database on disk)
 
@@ -105,12 +113,12 @@ enum DeckStore {
     /// already live in `newURL` — used when the user changes the library folder. Non-destructive
     /// to files already in `newURL`; an original in `oldURL` is removed only after it's safely
     /// written to `newURL`.
-    static func migrate(from oldURL: URL, to newURL: URL, context: ModelContext) {
+    func migrate(from oldURL: URL, to newURL: URL, context: ModelContext) {
         guard oldURL.standardizedFileURL != newURL.standardizedFileURL else { return }
 
         // Remember the originals so we can remove them after a successful move.
         var oldFileByID: [UUID: URL] = [:]
-        for url in deckFiles(in: oldURL) {
+        for url in Self.deckFiles(in: oldURL) {
             if let data = try? Data(contentsOf: url), let dto = try? DeckCodec.decodeDTO(data) {
                 oldFileByID[dto.id] = url
             }
@@ -122,7 +130,7 @@ enum DeckStore {
         var movedIDs = Set<UUID>()
         var failedNames: [String] = []
         for deck in decks {
-            let filename = uniqueFilename(for: deck, used: &usedNames)
+            let filename = Self.uniqueFilename(for: deck, used: &usedNames)
             let dest = newURL.appendingPathComponent(filename)
             if let data = try? DeckCodec.encode(deck),
                (try? data.write(to: dest, options: .atomic)) != nil {
@@ -138,7 +146,7 @@ enum DeckStore {
         unsavedDeckIDs.subtract(movedIDs)   // moved decks are now saved in the new folder
 
         // Convert any legacy .deck files already in the new folder, then merge them in.
-        migrateLegacyExtension(in: newURL)
+        Self.migrateLegacyExtension(in: newURL)
         reconcile(into: context, from: newURL)
 
         // Remove the originals we successfully moved (true move).
@@ -154,7 +162,7 @@ enum DeckStore {
     /// "Use the decks already here": replaces the in-memory library with the decks in
     /// `newURL`, leaving the previous folder's files untouched on disk — the current decks
     /// aren't moved, just dropped from view until you switch back to that folder.
-    static func switchFolder(to newURL: URL, context: ModelContext) {
+    func switchFolder(to newURL: URL, context: ModelContext) {
         let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
         for deck in existing {
             context.delete(deck)
@@ -162,7 +170,7 @@ enum DeckStore {
         }
         unsavedDeckIDs.removeAll()
         try? context.save()
-        migrateLegacyExtension(in: newURL)
+        Self.migrateLegacyExtension(in: newURL)
         loadAll(into: context, from: newURL)
     }
 
@@ -209,10 +217,10 @@ enum DeckStore {
 
     /// Decodes every `.deck` file in `directory` into `context`. Returns the count loaded.
     @discardableResult
-    static func loadAll(into context: ModelContext, from directory: URL = libraryURL()) -> Int {
+    func loadAll(into context: ModelContext, from directory: URL = DeckStore.libraryURL()) -> Int {
         var seen = Set<UUID>()
         var loaded = 0
-        for url in deckFiles(in: directory) {
+        for url in Self.deckFiles(in: directory) {
             guard let data = try? Data(contentsOf: url),
                   let dto = try? DeckCodec.decodeDTO(data),
                   !seen.contains(dto.id)
@@ -234,10 +242,10 @@ enum DeckStore {
     /// Returns whether anything actually changed. Does **not** call `persist` (disk is
     /// already the source of truth here).
     @discardableResult
-    static func reconcile(into context: ModelContext, from directory: URL = libraryURL()) -> Bool {
+    func reconcile(into context: ModelContext, from directory: URL = DeckStore.libraryURL()) -> Bool {
         var diskDTOs: [UUID: DeckCodec.DeckDTO] = [:]
         var order: [UUID] = []
-        for url in deckFiles(in: directory) {
+        for url in Self.deckFiles(in: directory) {
             guard let data = try? Data(contentsOf: url),
                   let dto = try? DeckCodec.decodeDTO(data),
                   diskDTOs[dto.id] == nil
@@ -292,7 +300,7 @@ enum DeckStore {
     /// that no longer exist (covers deletes and renames). Returns which decks, if any,
     /// failed to write and notifies `PersistenceMonitor` so the failure is surfaced.
     @discardableResult
-    static func persist(_ context: ModelContext, to directory: URL = libraryURL()) -> PersistResult {
+    func persist(_ context: ModelContext, to directory: URL = DeckStore.libraryURL()) -> PersistResult {
         let decks = (try? context.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
         var usedNames = Set<String>()
         var written = Set<String>()
@@ -300,7 +308,7 @@ enum DeckStore {
         var failedNames: [String] = []
 
         for deck in decks {
-            let filename = uniqueFilename(for: deck, used: &usedNames)
+            let filename = Self.uniqueFilename(for: deck, used: &usedNames)
             let fileURL = directory.appendingPathComponent(filename)
             guard let data = try? DeckCodec.encode(deck) else {
                 failedIDs.insert(deck.id)
@@ -329,8 +337,8 @@ enum DeckStore {
         // Only prune files with the current extension; legacy `.deck` files are converted by
         // `migrateLegacyExtension` (write-then-delete) and never deleted out from under an
         // unloaded deck here.
-        for url in deckFiles(in: directory)
-        where url.pathExtension == fileExtension && !written.contains(url.lastPathComponent) {
+        for url in Self.deckFiles(in: directory)
+        where url.pathExtension == Self.fileExtension && !written.contains(url.lastPathComponent) {
             // Never delete a file we can't read AND decode: it isn't provably an orphan of
             // ours — it may be corrupt, a half-finished external write, or a newer format we
             // didn't load — and pruning it would silently lose data. Only a file that decodes
@@ -339,6 +347,10 @@ enum DeckStore {
             guard let data = try? Data(contentsOf: url),
                   let dto = try? DeckCodec.decodeDTO(data) else { continue }   // unreadable → keep
             if failedIDs.contains(dto.id) { continue }                          // write just failed → keep
+            // A decodable file whose name isn't the canonical one we just wrote is treated as an
+            // orphan and removed — this is what cleans up the old file after a deck *rename*. The
+            // trade-off: a copy of a deck file kept in the same folder (same id, different name)
+            // is removed on the next save. Duplicate a deck in-app (it gets a fresh id) instead.
             try? FileManager.default.removeItem(at: url)
         }
 
@@ -353,12 +365,12 @@ enum DeckStore {
 
     /// Deletes every deck from the context and removes all deck files in `directory` — the
     /// "delete all data" reset. Destructive; the caller confirms first.
-    static func deleteAllDecks(_ context: ModelContext, in directory: URL = libraryURL()) {
+    func deleteAllDecks(_ context: ModelContext, in directory: URL = DeckStore.libraryURL()) {
         let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
         for deck in existing { context.delete(deck) }
         try? context.save()
         if let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
-            for url in urls where isDeckFile(url) { try? FileManager.default.removeItem(at: url) }
+            for url in urls where Self.isDeckFile(url) { try? FileManager.default.removeItem(at: url) }
         }
         urlByDeckID.removeAll()
         unsavedDeckIDs.removeAll()
@@ -382,11 +394,11 @@ enum DeckStore {
     /// The on-disk file URL for a deck (for sharing / reveal). Served from the warm
     /// id→URL cache; only falls back to scanning + decoding files on a cache miss
     /// (and rewarms the cache as it goes).
-    static func fileURL(for deck: Deck, in directory: URL = libraryURL()) -> URL? {
+    func fileURL(for deck: Deck, in directory: URL = DeckStore.libraryURL()) -> URL? {
         if let cached = urlByDeckID[deck.id], FileManager.default.fileExists(atPath: cached.path) {
             return cached
         }
-        for url in deckFiles(in: directory) {
+        for url in Self.deckFiles(in: directory) {
             if let data = try? Data(contentsOf: url), let dto = try? DeckCodec.decodeDTO(data) {
                 urlByDeckID[dto.id] = url
                 if dto.id == deck.id { return url }

@@ -293,7 +293,7 @@ struct DeckLibraryView: View {
 
     #if os(macOS)
     private func revealInFinder(_ deck: Deck) {
-        if let url = DeckStore.fileURL(for: deck) {
+        if let url = DeckStore.shared.fileURL(for: deck) {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
     }

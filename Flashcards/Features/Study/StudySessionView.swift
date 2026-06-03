@@ -207,7 +207,7 @@ struct StudySessionView: View {
         // so they have to be current first. (No onDisappear persist — finish, or a scene-
         // background while studying, always covers it, without rewriting every deck twice.)
         try? context.save()
-        DeckStore.persist(context)
+        DeckStore.shared.persist(context)
         onClose()
     }
 

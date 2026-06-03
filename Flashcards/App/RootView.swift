@@ -39,7 +39,7 @@ struct RootView: View {
             .task {
                 // Reflect external edits to the .deck files live; pause while studying.
                 watcher.isPaused = studyPlan != nil
-                watcher.start { DeckStore.reconcile(into: context) }
+                watcher.start { DeckStore.shared.reconcile(into: context) }
             }
             .onChange(of: decks.count) { _, _ in
                 // If the selected deck vanished (Delete All Decks, or an external file removal),
@@ -50,24 +50,24 @@ struct RootView: View {
             }
             .onChange(of: studyPlan != nil) { _, studying in
                 watcher.isPaused = studying
-                if !studying { DeckStore.reconcile(into: context) }
+                if !studying { DeckStore.shared.reconcile(into: context) }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     // Not while studying: a reconcile can delete cards the live
                     // StudySession still references (the watcher is paused for the same
                     // reason). The study-end handler above reconciles when it finishes.
-                    if studyPlan == nil { DeckStore.reconcile(into: context) }
+                    if studyPlan == nil { DeckStore.shared.reconcile(into: context) }
                 } else {
-                    DeckStore.persist(context)
+                    DeckStore.shared.persist(context)
                 }
             }
             .onChange(of: LibraryLocation.shared.current) { _, _ in
                 // The library folder changed (in Settings): re-point the watcher and reload.
                 watcher.stop()
                 watcher.isPaused = studyPlan != nil
-                watcher.start { DeckStore.reconcile(into: context) }
-                if studyPlan == nil { DeckStore.reconcile(into: context) }
+                watcher.start { DeckStore.shared.reconcile(into: context) }
+                if studyPlan == nil { DeckStore.shared.reconcile(into: context) }
             }
             .alert(
                 "Couldn’t Save",

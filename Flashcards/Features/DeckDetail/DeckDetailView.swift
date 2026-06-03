@@ -74,7 +74,7 @@ struct DeckDetailView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Menu {
-                    if let fileURL = DeckStore.fileURL(for: deck) {
+                    if let fileURL = DeckStore.shared.fileURL(for: deck) {
                         ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
                     }
                     Divider()

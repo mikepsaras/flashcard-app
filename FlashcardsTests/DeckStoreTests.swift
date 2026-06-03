@@ -213,6 +213,9 @@ import SwiftData
 
 @MainActor
 @Suite struct DeckStoreTests {
+    /// A fresh store per test (Swift Testing makes a new suite instance per `@Test`), so the
+    /// on-disk caches can't leak between tests.
+    let store = DeckStore()
 
     private func tempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -235,12 +238,12 @@ import SwiftData
         first.mainContext.insert(Card(term: "hola", definition: "hello", deck: deck))
         first.mainContext.insert(Card(term: "adiós", definition: "bye", deck: deck))
         try first.mainContext.save()
-        DeckStore.persist(first.mainContext, to: dir)
+        store.persist(first.mainContext, to: dir)
 
         #expect(try deckFilenames(dir) == ["Spanish.cards"])
 
         let second = DeckStore.makeContainer()
-        #expect(DeckStore.loadAll(into: second.mainContext, from: dir) == 1)
+        #expect(store.loadAll(into: second.mainContext, from: dir) == 1)
         let decks = try second.mainContext.fetch(FetchDescriptor<Deck>())
         #expect(decks.first?.name == "Spanish")
         #expect(decks.first?.cardArray.count == 2)
@@ -252,12 +255,12 @@ import SwiftData
         let alpha = Deck(name: "Alpha"); container.mainContext.insert(alpha)
         let beta = Deck(name: "Beta"); container.mainContext.insert(beta)
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         #expect(try deckFilenames(dir) == ["Alpha.cards", "Beta.cards"])
 
         container.mainContext.delete(beta)
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         #expect(try deckFilenames(dir) == ["Alpha.cards"])
     }
 
@@ -266,12 +269,12 @@ import SwiftData
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "Old Name"); container.mainContext.insert(deck)
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         #expect(try deckFilenames(dir) == ["Old Name.cards"])
 
         deck.name = "New Name"
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         #expect(try deckFilenames(dir) == ["New Name.cards"])
     }
 
@@ -281,7 +284,7 @@ import SwiftData
         container.mainContext.insert(Deck(name: "Dup"))
         container.mainContext.insert(Deck(name: "Dup"))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         #expect(try deckFilenames(dir) == ["Dup 2.cards", "Dup.cards"])
     }
 
@@ -291,21 +294,21 @@ import SwiftData
         let deck = Deck(name: "Stable"); container.mainContext.insert(deck)
         container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         let url = dir.appendingPathComponent("Stable.cards")
 
         // Backdate the file, then persist again with no changes: an unchanged deck must not be
         // rewritten, so the backdated timestamp survives (a rewrite would reset it to ~now).
         let past = Date(timeIntervalSince1970: 1_600_000_000)
         try FileManager.default.setAttributes([.modificationDate: past], ofItemAtPath: url.path)
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         #expect(try modificationDate(url) == past)
 
         // A real change DOES rewrite the file.
         deck.cardArray.first?.term = "changed"
         try container.mainContext.save()
         try FileManager.default.setAttributes([.modificationDate: past], ofItemAtPath: url.path)
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         #expect(try modificationDate(url) != past)
     }
 
@@ -323,9 +326,9 @@ import SwiftData
         let deck = Deck(name: "Mine"); container.mainContext.insert(deck)
         container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
 
-        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == false)
+        #expect(store.reconcile(into: container.mainContext, from: dir) == false)
     }
 
     @Test func reconcileAddsExternallyCreatedDeck() throws {
@@ -335,10 +338,10 @@ import SwiftData
         let deck = Deck(name: "External"); source.mainContext.insert(deck)
         source.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try source.mainContext.save()
-        DeckStore.persist(source.mainContext, to: dir)
+        store.persist(source.mainContext, to: dir)
 
         let container = DeckStore.makeContainer()   // starts empty
-        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == true)
+        #expect(store.reconcile(into: container.mainContext, from: dir) == true)
         let decks = try container.mainContext.fetch(FetchDescriptor<Deck>())
         #expect(decks.count == 1)
         #expect(decks.first?.name == "External")
@@ -351,10 +354,10 @@ import SwiftData
         container.mainContext.insert(Deck(name: "A"))
         container.mainContext.insert(Deck(name: "B"))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
 
         try FileManager.default.removeItem(at: dir.appendingPathComponent("B.cards"))
-        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == true)
+        #expect(store.reconcile(into: container.mainContext, from: dir) == true)
         let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
         #expect(names == ["A"])
     }
@@ -364,19 +367,19 @@ import SwiftData
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "Orig"); container.mainContext.insert(deck)
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         let idBefore = deck.persistentModelID
 
         // External edit: load the file elsewhere, rename + add a card, write it back.
         let ext = DeckStore.makeContainer()
-        DeckStore.loadAll(into: ext.mainContext, from: dir)
+        store.loadAll(into: ext.mainContext, from: dir)
         let extDeck = try #require(try ext.mainContext.fetch(FetchDescriptor<Deck>()).first)
         extDeck.name = "Edited"
         ext.mainContext.insert(Card(term: "new", definition: "card", deck: extDeck))
         try ext.mainContext.save()
-        DeckStore.persist(ext.mainContext, to: dir)
+        store.persist(ext.mainContext, to: dir)
 
-        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == true)
+        #expect(store.reconcile(into: container.mainContext, from: dir) == true)
         #expect(deck.name == "Edited")
         #expect(deck.persistentModelID == idBefore)   // same object, updated in place
         #expect(deck.cardArray.count == 1)
@@ -390,7 +393,7 @@ import SwiftData
         let deck = Deck(name: "Keep"); container.mainContext.insert(deck)
         container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try container.mainContext.save()
-        #expect(DeckStore.persist(container.mainContext, to: dir).isSuccess)
+        #expect(store.persist(container.mainContext, to: dir).isSuccess)
         let originalData = try Data(contentsOf: dir.appendingPathComponent("Keep.cards"))
 
         // Make the folder unwritable so the next atomic write fails.
@@ -400,7 +403,7 @@ import SwiftData
         deck.name = "Changed"
         deck.cardArray.first?.term = "changed"
         try? container.mainContext.save()
-        let result = DeckStore.persist(container.mainContext, to: dir)
+        let result = store.persist(container.mainContext, to: dir)
 
         #expect(!result.isSuccess)
         #expect(result.failedDeckNames == ["Changed"])
@@ -426,7 +429,7 @@ import SwiftData
         try DeckCodec.encode(gone).write(to: orphan)
 
         // A completely ordinary, fully successful save.
-        #expect(DeckStore.persist(container.mainContext, to: dir).isSuccess)
+        #expect(store.persist(container.mainContext, to: dir).isSuccess)
 
         // The unreadable file is kept (never silently lost); the decodable orphan is pruned.
         #expect(FileManager.default.fileExists(atPath: foreign.path))
@@ -438,18 +441,18 @@ import SwiftData
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "Draft"); container.mainContext.insert(deck)
         try container.mainContext.save()
-        #expect(DeckStore.persist(container.mainContext, to: dir).isSuccess)   // file on disk
+        #expect(store.persist(container.mainContext, to: dir).isSuccess)   // file on disk
 
         // Make the folder unwritable, edit the deck, persist (fails).
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path) }
         deck.name = "Draft (edited)"
         try? container.mainContext.save()
-        #expect(!DeckStore.persist(container.mainContext, to: dir).isSuccess)
+        #expect(!store.persist(container.mainContext, to: dir).isSuccess)
 
         // Reconcile must NOT revert the in-memory edit from the stale disk file, nor
         // delete the deck whose write just failed.
-        DeckStore.reconcile(into: container.mainContext, from: dir)
+        store.reconcile(into: container.mainContext, from: dir)
         #expect(deck.name == "Draft (edited)")
         #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)
     }
@@ -460,7 +463,7 @@ import SwiftData
         let deck = Deck(name: "Orig"); container.mainContext.insert(deck)
         container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         let originalID = deck.id
 
         // Re-importing the same file into the same context must clone it under a new id.
@@ -480,15 +483,15 @@ import SwiftData
         let a = Deck(name: "A"); container.mainContext.insert(a)
         container.mainContext.insert(Card(term: "a", definition: "b", deck: a))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: oldDir)
+        store.persist(container.mainContext, to: oldDir)
 
         // The new folder already contains deck B (e.g. from a sync service).
         let src = DeckStore.makeContainer()
         let b = Deck(name: "B"); src.mainContext.insert(b)
         try src.mainContext.save()
-        DeckStore.persist(src.mainContext, to: newDir)
+        store.persist(src.mainContext, to: newDir)
 
-        DeckStore.migrate(from: oldDir, to: newDir, context: container.mainContext)
+        store.migrate(from: oldDir, to: newDir, context: container.mainContext)
 
         // New folder has both; the old folder's A.deck was moved away.
         let newNames = try deckFilenames(newDir)
@@ -507,14 +510,14 @@ import SwiftData
         let container = DeckStore.makeContainer()
         let a = Deck(name: "A"); container.mainContext.insert(a)
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: oldDir)   // A in oldDir + memory
+        store.persist(container.mainContext, to: oldDir)   // A in oldDir + memory
 
         let src = DeckStore.makeContainer()
         let b = Deck(name: "B"); src.mainContext.insert(b)
         try src.mainContext.save()
-        DeckStore.persist(src.mainContext, to: newDir)         // B in newDir
+        store.persist(src.mainContext, to: newDir)         // B in newDir
 
-        DeckStore.switchFolder(to: newDir, context: container.mainContext)
+        store.switchFolder(to: newDir, context: container.mainContext)
 
         // In-memory shows only the new folder's decks; the old decks are NOT moved.
         let names = try container.mainContext.fetch(FetchDescriptor<Deck>()).map(\.name).sorted()
@@ -541,7 +544,7 @@ import SwiftData
 
         // Loads like any deck, and a second pass is a no-op.
         let loaded = DeckStore.makeContainer()
-        #expect(DeckStore.loadAll(into: loaded.mainContext, from: dir) == 1)
+        #expect(store.loadAll(into: loaded.mainContext, from: dir) == 1)
         #expect(DeckStore.migrateLegacyExtension(in: dir) == 0)
     }
 
@@ -554,7 +557,7 @@ import SwiftData
 
         // A bare .deck file still loads even if it hasn't been renamed yet (backward compatible).
         let loaded = DeckStore.makeContainer()
-        #expect(DeckStore.loadAll(into: loaded.mainContext, from: dir) == 1)
+        #expect(store.loadAll(into: loaded.mainContext, from: dir) == 1)
         #expect(try loaded.mainContext.fetch(FetchDescriptor<Deck>()).first?.name == "Old")
     }
 
@@ -589,10 +592,10 @@ import SwiftData
         container.mainContext.insert(Deck(name: "A"))
         container.mainContext.insert(Deck(name: "B"))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
         #expect(try deckFilenames(dir).count == 2)
 
-        DeckStore.deleteAllDecks(container.mainContext, in: dir)
+        store.deleteAllDecks(container.mainContext, in: dir)
         #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 0)
         #expect(try deckFilenames(dir).isEmpty)
     }
@@ -603,11 +606,11 @@ import SwiftData
         container.mainContext.insert(Deck(name: "A"))
         container.mainContext.insert(Deck(name: "B"))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
 
-        DeckStore.deleteAllDecks(container.mainContext, in: dir)
+        store.deleteAllDecks(container.mainContext, in: dir)
         // The watcher-driven reconcile that fires after a delete must not bring decks back.
-        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == false)
+        #expect(store.reconcile(into: container.mainContext, from: dir) == false)
         #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 0)
     }
 
@@ -632,9 +635,9 @@ import SwiftData
         container.mainContext.insert(deck)
         container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
         try container.mainContext.save()
-        DeckStore.persist(container.mainContext, to: dir)
+        store.persist(container.mainContext, to: dir)
 
-        #expect(DeckStore.reconcile(into: container.mainContext, from: dir) == false)
+        #expect(store.reconcile(into: container.mainContext, from: dir) == false)
     }
 
     // MARK: Test-host safety (the app must not touch the real library while hosting tests)

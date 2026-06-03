@@ -64,7 +64,7 @@ struct SettingsView: View {
         }
         .confirmationDialog("Delete all decks?", isPresented: $showingDeleteAll, titleVisibility: .visible) {
             Button("Delete Everything", role: .destructive) {
-                DeckStore.deleteAllDecks(context)
+                DeckStore.shared.deleteAllDecks(context)
                 StudyStats.reset()
             }
             Button("Cancel", role: .cancel) {}
@@ -248,9 +248,9 @@ struct SettingsView: View {
         if move {
             // Move the decks in (merging any already there) so the new folder is populated
             // before any reconcile can run against it.
-            DeckStore.migrate(from: old, to: url, context: context)
+            DeckStore.shared.migrate(from: old, to: url, context: context)
         } else {
-            DeckStore.switchFolder(to: url, context: context)
+            DeckStore.shared.switchFolder(to: url, context: context)
         }
         pendingFolderURL = nil
     }
@@ -262,7 +262,7 @@ struct SettingsView: View {
 
     private func useDefaultFolder() {
         // Revert to ~/Documents/Flashcards and load its decks (the custom folder is left intact).
-        DeckStore.switchFolder(to: LibraryLocation.defaultFolder(), context: context)
+        DeckStore.shared.switchFolder(to: LibraryLocation.defaultFolder(), context: context)
         LibraryLocation.shared.resetToDefault()
     }
 
