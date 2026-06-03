@@ -699,4 +699,37 @@ import SwiftData
         #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 1)
         #expect(try deckFilenames(oldDir) == ["A.cards"])
     }
+
+    // MARK: Case-insensitive filenames (macOS default FS)
+
+    @Test func renamingDeckByCaseOnlyDoesNotLoseIt() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Spanish"); container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+        store.persist(container.mainContext, to: dir)
+
+        deck.name = "spanish"   // rename by case only
+        try container.mainContext.save()
+        store.persist(container.mainContext, to: dir)
+
+        // The just-written file must NOT be pruned as a stale orphan — the deck still loads.
+        let reloaded = DeckStore.makeContainer()
+        #expect(DeckStore().loadAll(into: reloaded.mainContext, from: dir) >= 1)
+        #expect(try reloaded.mainContext.fetch(FetchDescriptor<Deck>()).contains { $0.name == "spanish" })
+    }
+
+    @Test func twoDecksDifferingOnlyByCaseGetDistinctFiles() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        container.mainContext.insert(Deck(name: "Spanish"))
+        container.mainContext.insert(Deck(name: "spanish"))
+        try container.mainContext.save()
+        store.persist(container.mainContext, to: dir)
+        // On a case-insensitive filesystem these collide to one file without case-insensitive
+        // unique naming, silently losing a deck.
+        let reloaded = DeckStore.makeContainer()
+        #expect(DeckStore().loadAll(into: reloaded.mainContext, from: dir) == 2)
+    }
 }

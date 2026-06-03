@@ -320,14 +320,14 @@ final class DeckStore {
             // full reconcile — so a one-card edit re-encodes and re-reads the entire library.
             // The file still counts as "written" so the prune step below won't remove it.
             if let existing = try? Data(contentsOf: fileURL), existing == data {
-                written.insert(filename)
+                written.insert(filename.lowercased())
                 urlByDeckID[deck.id] = fileURL
                 continue
             }
             // Only count a file as "written" after the atomic write succeeds — otherwise the
             // prune step could delete a deck's last good file on a transient failure.
             if (try? data.write(to: fileURL, options: .atomic)) != nil {
-                written.insert(filename)
+                written.insert(filename.lowercased())
                 urlByDeckID[deck.id] = fileURL
             } else {
                 failedIDs.insert(deck.id)
@@ -337,8 +337,11 @@ final class DeckStore {
         // Only prune files with the current extension; legacy `.deck` files are converted by
         // `migrateLegacyExtension` (write-then-delete) and never deleted out from under an
         // unloaded deck here.
+        // Compare names case-insensitively: on the case-insensitive macOS filesystem, a rename
+        // that only changes case leaves the file we just wrote and the old directory entry as the
+        // same physical file under two spellings — a case-sensitive check would prune the live one.
         for url in Self.deckFiles(in: directory)
-        where url.pathExtension == Self.fileExtension && !written.contains(url.lastPathComponent) {
+        where url.pathExtension == Self.fileExtension && !written.contains(url.lastPathComponent.lowercased()) {
             // Never delete a file we can't read AND decode: it isn't provably an orphan of
             // ours — it may be corrupt, a half-finished external write, or a newer format we
             // didn't load — and pruning it would silently lose data. Only a file that decodes
@@ -413,11 +416,13 @@ final class DeckStore {
         let base = sanitize(deck.name)
         var filename = "\(base).\(fileExtension)"
         var counter = 2
-        while used.contains(filename) {
+        // Dedupe case-insensitively: the macOS default filesystem is case-insensitive, so
+        // "Spanish.cards" and "spanish.cards" are the same file and must not both be assigned.
+        while used.contains(filename.lowercased()) {
             filename = "\(base) \(counter).\(fileExtension)"
             counter += 1
         }
-        used.insert(filename)
+        used.insert(filename.lowercased())
         return filename
     }
 
