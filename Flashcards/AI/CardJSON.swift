@@ -13,10 +13,11 @@ enum CardJSON {
     /// `count == nil` lets the model choose how many cards to create ("auto"). `expanding`
     /// switches the instructions to "add new cards that don't duplicate the existing ones".
     static func system(count: Int?, expanding: Bool = false) -> String {
-        let instruction = count.map { "Produce exactly \($0) flashcards." }
-            ?? "Produce as many flashcards as the material warrants."
+        // Only constrain the count when an exact number is requested; in auto mode say nothing
+        // about quantity, so the model decides how many cards to create with no bias.
+        let countSentence = count.map { " Produce exactly \($0) flashcards." } ?? ""
         let base = """
-        You are a flashcard generator. \(instruction) From the user's notes or topic, \
+        You are a flashcard generator.\(countSentence) From the user's notes or topic, \
         create high-quality study cards. Respond with ONLY a JSON object of the form \
         {"cards":[{"term":"...","definition":"..."}]}. Each "term" is a concise prompt \
         (a word, concept, or question); each "definition" is a clear, accurate answer. \
@@ -31,12 +32,13 @@ enum CardJSON {
     }
 
     static func user(_ prompt: String, count: Int?, existing: [GeneratedCard] = []) -> String {
-        let amount = count.map { "\($0)" } ?? "an appropriate number of"
+        // A leading count only when an exact number is requested; empty in auto mode.
+        let amount = count.map { "\($0) " } ?? ""
         let notes = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !existing.isEmpty else {
             return """
-            Create \(amount) flashcards from the following. If it is a topic, cover the most \
+            Create \(amount)flashcards from the following. If it is a topic, cover the most \
             important points; if it is notes, extract the key facts.
 
             \(notes)
@@ -52,7 +54,7 @@ enum CardJSON {
 
         \(list)
 
-        Create \(amount) NEW flashcards that complement them without duplicating any existing term.
+        Create \(amount)NEW flashcards that complement them without duplicating any existing term.
         """
         if !notes.isEmpty {
             out += "\n\nFocus on or draw from the following notes/topic:\n\n\(notes)"

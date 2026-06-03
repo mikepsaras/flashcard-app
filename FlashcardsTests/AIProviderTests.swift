@@ -25,13 +25,24 @@ import Foundation
         #expect(req.value(forHTTPHeaderField: "x-goog-api-key") == "AIza-test")
     }
 
-    @Test func autoCountUsesFlexiblePhrasing() throws {
+    @Test func autoModeOmitsAnyCountInstruction() throws {
         let req = OpenAIProvider.makeRequest(prompt: "x", count: nil, model: "gpt-4o-mini", apiKey: "k")
         let body = try JSONSerialization.jsonObject(with: req.httpBody ?? Data()) as? [String: Any]
         let messages = body?["messages"] as? [[String: Any]]
-        let system = messages?.first?["content"] as? String ?? ""
-        #expect(system.contains("as many"))
+        let system = (messages?.first?["content"] as? String ?? "")
+        let user = (messages?.last?["content"] as? String ?? "")
+        // Auto mode hints at no count anywhere — the model decides freely.
         #expect(!system.contains("exactly"))
+        #expect(!system.contains("as many"))
+        #expect(!system.contains("warrants"))
+        #expect(!user.contains("appropriate number"))
+    }
+
+    @Test func explicitCountAsksForExactNumber() throws {
+        let req = OpenAIProvider.makeRequest(prompt: "x", count: 8, model: "gpt-4o-mini", apiKey: "k")
+        let body = try JSONSerialization.jsonObject(with: req.httpBody ?? Data()) as? [String: Any]
+        let system = (body?["messages"] as? [[String: Any]])?.first?["content"] as? String ?? ""
+        #expect(system.contains("exactly 8"))
     }
 
     @Test func anthropicRequestHasVersionAndKeyHeaders() {
