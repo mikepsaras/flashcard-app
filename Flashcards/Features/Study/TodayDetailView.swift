@@ -85,7 +85,7 @@ struct TodayDetailView: View {
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .fill(Color(hex: entry.deck.colorHex))
                             .frame(width: 26, height: 26)
-                        Text(entry.deck.name.isEmpty ? "Untitled Deck" : entry.deck.name)
+                        Text(entry.deck.displayName)
                             .font(Typography.body)
                         Spacer()
                         Text("\(entry.count)")

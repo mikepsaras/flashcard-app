@@ -15,7 +15,7 @@ struct DeckRowView: View {
             )
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(deck.name.isEmpty ? "Untitled Deck" : deck.name)
+                Text(deck.displayName)
                     .font(Typography.headline)
                     .lineLimit(1)
                 Text("\(deck.cardCount) \(deck.cardCount == 1 ? "card" : "cards")")

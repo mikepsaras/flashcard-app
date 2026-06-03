@@ -14,8 +14,11 @@ struct DeckDetailView: View {
     @State private var showingDeckEditor = false
     @State private var showingImporter = false
     @State private var showingExporter = false
+    @State private var showingJSONExporter = false
     @State private var exportText = ""
+    @State private var importMessage: String?
     @State private var showingAI = false
+    @State private var showingPaste = false
     @State private var showingResetConfirm = false
     @State private var cardSearch = ""
 
@@ -51,7 +54,7 @@ struct DeckDetailView: View {
             cardList
         }
         .background(Theme.groupedBackground)
-        .navigationTitle(deck.name.isEmpty ? "Untitled Deck" : deck.name)
+        .navigationTitle(deck.displayName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         // macOS allows only one search field per window toolbar, and the deck library
@@ -64,6 +67,7 @@ struct DeckDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { cardEditor = .new } label: { Label("New Card", systemImage: "plus") }
+                    Button { showingPaste = true } label: { Label("Paste Cards…", systemImage: "doc.on.clipboard") }
                     Button { showingAI = true } label: { Label("Generate Cards with AI…", systemImage: "sparkles") }
                 } label: {
                     Label("Add Card", systemImage: "plus")
@@ -75,12 +79,20 @@ struct DeckDetailView: View {
                         ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
                     }
                     Divider()
-                    Button { showingImporter = true } label: { Label("Import CSV…", systemImage: "square.and.arrow.down") }
-                    Button {
-                        exportText = CSVCodec.export(sortedCards)   // build once, on demand
-                        showingExporter = true
-                    } label: { Label("Export CSV…", systemImage: "square.and.arrow.up") }
-                        .disabled(sortedCards.isEmpty)
+                    Button { showingImporter = true } label: { Label("Import Cards…", systemImage: "square.and.arrow.down") }
+                    Menu {
+                        Button {
+                            exportText = CSVCodec.export(sortedCards)   // build once, on demand
+                            showingExporter = true
+                        } label: { Label("CSV", systemImage: "tablecells") }
+                        Button {
+                            exportText = CardListCodec.exportJSON(sortedCards, name: deck.name)
+                            showingJSONExporter = true
+                        } label: { Label("JSON", systemImage: "curlybraces") }
+                    } label: {
+                        Label("Export Cards", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(sortedCards.isEmpty)
                     Divider()
                     Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
                     Button(role: .destructive) { showingResetConfirm = true } label: {
@@ -101,18 +113,32 @@ struct DeckDetailView: View {
         .sheet(isPresented: $showingAI) {
             AIGenerationView(target: .existing(deck))
         }
+        .sheet(isPresented: $showingPaste) {
+            PasteCardsView(deck: deck)
+        }
         .fileExporter(
             isPresented: $showingExporter,
             document: CSVDocument(text: exportText),
             contentType: .commaSeparatedText,
-            defaultFilename: deck.name.isEmpty ? "Flashcards" : deck.name
+            defaultFilename: deck.displayName
+        ) { _ in }
+        .fileExporter(
+            isPresented: $showingJSONExporter,
+            document: JSONTextDocument(text: exportText),
+            contentType: .json,
+            defaultFilename: deck.displayName
         ) { _ in }
         .fileImporter(
             isPresented: $showingImporter,
-            allowedContentTypes: [.commaSeparatedText, .plainText, .text],
+            allowedContentTypes: [.commaSeparatedText, .plainText, .text, .json],
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
+        }
+        .alert("Import", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importMessage ?? "")
         }
         .confirmationDialog(
             "Reset progress for this deck?",
@@ -128,9 +154,7 @@ struct DeckDetailView: View {
 
     private func resetProgress() {
         for card in deck.cardArray { card.resetSchedule() }
-        deck.modifiedAt = .now
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist(touching: deck)
     }
 
     private func handleImport(_ result: Result<[URL], Error>) {
@@ -138,12 +162,16 @@ struct DeckDetailView: View {
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
-        for row in CSVCodec.parse(text) where !row.term.isEmpty {
-            context.insert(Card(term: row.term, definition: row.definition, deck: deck))
+        // Sniff JSON vs CSV — the importer accepts either.
+        let parsed = CardListCodec.parse(text)
+        for card in parsed.cards {
+            context.insert(Card(term: card.term, definition: card.definition, deck: deck))
         }
-        deck.modifiedAt = .now
-        try? context.save()
-        DeckStore.persist(context)
+        if !parsed.cards.isEmpty { context.saveAndPersist(touching: deck) }
+        let n = parsed.cards.count
+        importMessage = n > 0
+            ? "Added \(n) card\(n == 1 ? "" : "s") to “\(deck.displayName)”."
+            : "No cards found in that file. Use JSON or CSV with term/definition pairs."
     }
 
     // MARK: Header
@@ -210,7 +238,7 @@ struct DeckDetailView: View {
             MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
             HStack(spacing: Theme.Spacing.m) {
                 maturityLegend("New", Theme.accent, insights.newCount)
-                maturityLegend("Learning", Color(hex: "#FF9500"), insights.learningCount)
+                maturityLegend("Learning", Theme.learning, insights.learningCount)
                 maturityLegend("Mature", Theme.success, insights.matureCount)
                 Spacer(minLength: 0)
             }
@@ -238,7 +266,7 @@ struct DeckDetailView: View {
                         if !otherDecks.isEmpty {
                             Menu("Move to") {
                                 ForEach(otherDecks) { target in
-                                    Button(target.name.isEmpty ? "Untitled Deck" : target.name) { move(card, to: target) }
+                                    Button(target.displayName) { move(card, to: target) }
                                 }
                             }
                         }
@@ -268,25 +296,18 @@ struct DeckDetailView: View {
     private func deleteCards(_ offsets: IndexSet) {
         let cards = visibleCards
         for index in offsets { context.delete(cards[index]) }
-        deck.modifiedAt = .now
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist(touching: deck)
     }
 
     private func deleteCard(_ card: Card) {
         context.delete(card)
-        deck.modifiedAt = .now
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist(touching: deck)
     }
 
     private func move(_ card: Card, to target: Deck) {
         card.deck = target
         card.modifiedAt = .now
-        deck.modifiedAt = .now
-        target.modifiedAt = .now
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist(touching: deck, target)
     }
 }
 

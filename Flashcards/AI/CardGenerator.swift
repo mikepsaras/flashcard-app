@@ -10,11 +10,12 @@ struct CardGenerator: Sendable {
         count: Int?,
         provider: AIProvider,
         model: String,
-        apiKey: String
+        apiKey: String,
+        existing: [GeneratedCard] = []
     ) async throws -> [GeneratedCard] {
         guard !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else { throw AIError.missingKey }
 
-        var request = Self.request(for: provider, prompt: prompt, count: count, model: model, apiKey: apiKey)
+        var request = Self.request(for: provider, prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing)
         // Don't let a hung connection spin the "Generating…" UI for the default 60s.
         request.timeoutInterval = 30
 
@@ -31,15 +32,18 @@ struct CardGenerator: Sendable {
         }
 
         let cards = try Self.parse(provider: provider, data: data)
-        guard !cards.isEmpty else { throw AIError.empty }
-        return cards
+        // Drop any card that duplicates an existing deck term (when expanding) or repeats within
+        // the batch, so the review list never offers a card the deck already has.
+        let deduped = Self.removingDuplicates(cards, of: existing)
+        guard !deduped.isEmpty else { throw AIError.empty }
+        return deduped
     }
 
-    static func request(for provider: AIProvider, prompt: String, count: Int?, model: String, apiKey: String) -> URLRequest {
+    static func request(for provider: AIProvider, prompt: String, count: Int?, model: String, apiKey: String, existing: [GeneratedCard] = []) -> URLRequest {
         switch provider {
-        case .openAI:    OpenAIProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey)
-        case .google:    GeminiProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey)
-        case .anthropic: AnthropicProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey)
+        case .openAI:    OpenAIProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing)
+        case .google:    GeminiProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing)
+        case .anthropic: AnthropicProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing)
         }
     }
 
@@ -60,5 +64,21 @@ struct CardGenerator: Sendable {
             if let message = object["error"] as? String { return message }
         }
         return String(data: data.prefix(200), encoding: .utf8) ?? "Unknown error"
+    }
+
+    /// Removes cards whose term duplicates an existing deck term, or repeats an earlier card in
+    /// the batch (case-insensitive). Pure + static so it's unit-testable.
+    static func removingDuplicates(_ cards: [GeneratedCard], of existing: [GeneratedCard]) -> [GeneratedCard] {
+        func key(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        let existingTerms = Set(existing.map { key($0.term) })
+        var seen = Set<String>()
+        var out: [GeneratedCard] = []
+        for card in cards {
+            let k = key(card.term)
+            guard !existingTerms.contains(k), !seen.contains(k) else { continue }
+            seen.insert(k)
+            out.append(card)
+        }
+        return out
     }
 }

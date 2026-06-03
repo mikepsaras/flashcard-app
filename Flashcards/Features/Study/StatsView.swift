@@ -48,7 +48,7 @@ struct StatsContentView: View {
     let reviewsByDay: [String: Int]
     var now: Date = .now
 
-    private let learningColor = Color(hex: "#FF9500")
+    private let learningColor = Theme.learning
 
     private struct Stat: Identifiable {
         var id: String { label }
@@ -266,7 +266,7 @@ struct MaturityBar: View {
         GeometryReader { geo in
             HStack(spacing: 0) {
                 segment(Theme.accent, new, geo.size.width)
-                segment(Color(hex: "#FF9500"), learning, geo.size.width)
+                segment(Theme.learning, learning, geo.size.width)
                 segment(Theme.success, mature, geo.size.width)
             }
         }

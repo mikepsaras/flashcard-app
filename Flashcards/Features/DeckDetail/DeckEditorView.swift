@@ -28,6 +28,7 @@ struct DeckEditorView: View {
     @State private var gradingMode: GradingMode
     @State private var section: String
     @State private var showingAI = false
+    @State private var showAdvanced: Bool
 
     init(mode: DeckEditorMode) {
         self.mode = mode
@@ -41,6 +42,7 @@ struct DeckEditorView: View {
             _studyReversed = State(initialValue: false)
             _gradingMode = State(initialValue: .twoButton)
             _section = State(initialValue: "")
+            _showAdvanced = State(initialValue: false)
         case .edit(let deck):
             _name = State(initialValue: deck.name)
             _deckDescription = State(initialValue: deck.deckDescription)
@@ -52,6 +54,7 @@ struct DeckEditorView: View {
             _studyReversed = State(initialValue: deck.studyReversed)
             _gradingMode = State(initialValue: deck.gradingMode)
             _section = State(initialValue: deck.section)
+            _showAdvanced = State(initialValue: true)
         }
     }
 
@@ -71,37 +74,47 @@ struct DeckEditorView: View {
                     LabeledField(label: "Name", placeholder: "Deck name", text: $name)
                     LabeledField(label: "Description", placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        LabeledField(label: "Section", placeholder: "e.g. Languages", text: $section)
-                        caption("Groups decks in the library. Each deck belongs to one section; leave blank for Uncategorized.")
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        toggleRow("Show answer label", $showLabel.animation())
-                        if showLabel {
-                            LabeledField(label: "Answer label", placeholder: "Definition", text: $backLabel)
-                        }
-                        caption(showLabel
-                            ? "The small label above the answer side of each card — e.g. Definition, Capital, Translation."
-                            : "No label is shown above the answer side.")
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        toggleRow("Study both directions", $studyReversed)
-                        caption("Also quiz the answer back to the term, scheduled separately. A card then counts as two reviews — one each way.")
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        gradingRow
-                        caption("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler a finer signal.")
-                    }
-
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Color")
                             .font(.system(.subheadline, weight: .medium))
                             .foregroundStyle(.secondary)
                         colorGrid
                     }
+
+                    // Advanced settings are collapsed by default for a new deck (a clean,
+                    // name-and-color create flow) and expanded when editing an existing one.
+                    DisclosureGroup(isExpanded: $showAdvanced) {
+                        VStack(alignment: .leading, spacing: 22) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                LabeledField(label: "Section", placeholder: "e.g. Languages", text: $section)
+                                caption("Groups decks in the library. Each deck belongs to one section; leave blank for Uncategorized.")
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                toggleRow("Show answer label", $showLabel.animation())
+                                if showLabel {
+                                    LabeledField(label: "Answer label", placeholder: "Definition", text: $backLabel)
+                                }
+                                caption(showLabel
+                                    ? "The small label above the answer side of each card — e.g. Definition, Capital, Translation."
+                                    : "No label is shown above the answer side.")
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                toggleRow("Study both directions", $studyReversed)
+                                caption("Also quiz the answer back to the term, scheduled separately. A card then counts as two reviews — one each way.")
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                gradingRow
+                                caption("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler a finer signal.")
+                            }
+                        }
+                        .padding(.top, 12)
+                    } label: {
+                        Text("Advanced options").font(Typography.headline)
+                    }
+                    .tint(.secondary)
 
                     if case .new = mode {
                         Button { showingAI = true } label: {
@@ -114,6 +127,7 @@ struct DeckEditorView: View {
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .animation(.snappy, value: showAdvanced)
             }
             .background(Theme.groupedBackground)
             .navigationTitle(isEditing ? "Edit Deck" : "New Deck")
@@ -219,8 +233,7 @@ struct DeckEditorView: View {
             deck.section = trimmedSection
             deck.modifiedAt = .now
         }
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist()
         dismiss()
     }
 }

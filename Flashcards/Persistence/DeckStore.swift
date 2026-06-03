@@ -132,7 +132,7 @@ enum DeckStore {
                 // Couldn't write this deck to the new folder — keep it in memory and don't
                 // let the reconcile below delete it (it isn't on disk in the new folder).
                 unsavedDeckIDs.insert(deck.id)
-                failedNames.append(deck.name.isEmpty ? "Untitled Deck" : deck.name)
+                failedNames.append(deck.displayName)
             }
         }
         unsavedDeckIDs.subtract(movedIDs)   // moved decks are now saved in the new folder
@@ -311,7 +311,7 @@ enum DeckStore {
                 urlByDeckID[deck.id] = fileURL
             } else {
                 failedIDs.insert(deck.id)
-                failedNames.append(deck.name.isEmpty ? "Untitled Deck" : deck.name)
+                failedNames.append(deck.displayName)
             }
         }
         // Only prune files with the current extension; legacy `.deck` files are converted by

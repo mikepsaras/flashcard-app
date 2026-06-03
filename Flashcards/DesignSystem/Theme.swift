@@ -13,6 +13,9 @@ enum Theme {
     static let accent  = Color.accentColor
     static let success = Color.adaptive(light: (0.20, 0.78, 0.35), dark: (0.30, 0.85, 0.45)) // ~system green
     static let danger  = Color.adaptive(light: (1.00, 0.23, 0.19), dark: (1.00, 0.42, 0.38)) // ~system red
+    /// "Learning"/Hard amber — shared by the card-maturity UI and the Hard grade, so the one
+    /// accent color lives in a single place instead of a scattered `Color(hex: "#FF9500")`.
+    static let learning = Color(hex: "#FF9500")
 
     /// The soft, light surface used for the big study card and tiles.
     static let cardSurface = Color.adaptive(
@@ -56,6 +59,13 @@ enum Theme {
         static let m: CGFloat = 20
         static let l: CGFloat = 32
         static let xl: CGFloat = 48
+    }
+
+    /// Standard alphas for tinted "chip" backgrounds, so every pill/badge/tag uses the same
+    /// fill weight instead of a scatter of near-identical values.
+    enum Opacity {
+        static let fillSubtle: Double = 0.14   // resting tinted chip (pills, badges, tags)
+        static let fillTint: Double = 0.16     // emphasized tinted background (e.g. grade buttons)
     }
 }
 

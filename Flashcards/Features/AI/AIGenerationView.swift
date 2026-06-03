@@ -39,7 +39,18 @@ struct AIGenerationView: View {
     private var apiKey: String { KeychainStore.get(account: provider.keychainAccount) ?? "" }
     private var hasKey: Bool { !apiKey.trimmingCharacters(in: .whitespaces).isEmpty }
     private var selectedCount: Int { cards.filter { included.contains($0.id) }.count }
-    private var canGenerate: Bool { !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var canGenerate: Bool { isExpanding || !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// The deck being expanded, as generation context (empty for a new deck or an empty deck).
+    private var existingCards: [GeneratedCard] {
+        guard case .existing(let deck) = target else { return [] }
+        return deck.cardArray
+            .sorted { $0.createdAt < $1.createdAt }
+            .map { GeneratedCard(term: $0.term, definition: $0.definition) }
+    }
+    /// True when adding to a deck that already has cards — the AI gets them as context and the
+    /// notes field becomes optional ("just add more like these").
+    private var isExpanding: Bool { !existingCards.isEmpty }
 
     /// Show the deck-name field only for a bare new-deck flow (not when a `deckFactory` supplies it).
     private var showsNameField: Bool {
@@ -127,12 +138,17 @@ struct AIGenerationView: View {
     private var inputForm: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                if isExpanding {
+                    Label("New cards are added to this deck — anything it already has is skipped.", systemImage: "rectangle.stack.badge.plus")
+                        .font(Typography.callout)
+                        .foregroundStyle(.secondary)
+                }
                 if showsNameField {
                     LabeledField(label: "Deck name", placeholder: "e.g. Spanish Basics", text: $deckName)
                 }
 
                 VStack(alignment: .leading, spacing: 7) {
-                    fieldLabel("Notes or topic")
+                    fieldLabel(isExpanding ? "Notes or topic (optional)" : "Notes or topic")
                     TextEditor(text: $prompt)
                         .font(Typography.body)
                         .scrollContentBackground(.hidden)
@@ -146,7 +162,9 @@ struct AIGenerationView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(Theme.accent)
                     .padding(.top, 2)
-                    caption("Type or paste text, or import a .txt / .md file to use as the source.")
+                    caption(isExpanding
+                        ? "Optional — the AI already sees this deck's cards and will add new ones. Add notes to steer the topic."
+                        : "Type or paste text, or import a .txt / .md file to use as the source.")
                 }
 
                 VStack(alignment: .leading, spacing: 7) {
@@ -244,42 +262,10 @@ struct AIGenerationView: View {
     }
 
     private var reviewList: some View {
-        List {
-            Section {
-                ForEach($cards) { $card in
-                    HStack(alignment: .top, spacing: 12) {
-                        Button { toggle(card.id) } label: {
-                            Image(systemName: included.contains(card.id) ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 20))
-                                .foregroundStyle(included.contains(card.id) ? Theme.accent : .secondary)
-                        }
-                        .buttonStyle(.plain)
-                        VStack(alignment: .leading, spacing: 4) {
-                            TextField("Term", text: $card.term)
-                                .font(Typography.headline)
-                            TextField("Definition", text: $card.definition, axis: .vertical)
-                                .font(Typography.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-            } header: {
-                Text("\(selectedCount) of \(cards.count) selected")
-            }
-        }
-        #if os(iOS)
-        .listStyle(.insetGrouped)
-        #else
-        .listStyle(.inset)
-        #endif
+        CardReviewList(cards: $cards, included: $included)
     }
 
     // MARK: Actions
-
-    private func toggle(_ id: UUID) {
-        if included.contains(id) { included.remove(id) } else { included.insert(id) }
-    }
 
     private func importFile(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let url = urls.first else { return }
@@ -298,13 +284,14 @@ struct AIGenerationView: View {
         let key = apiKey
         let model = UserDefaults.standard.string(forKey: provider.modelDefaultsKey) ?? provider.defaultModel
         let prompt = prompt, provider = provider
+        let existing = existingCards
         let requestedCount: Int? = autoCount ? nil : count
         errorText = nil
         phase = .generating
         Task {
             do {
                 let result = try await CardGenerator().generate(
-                    prompt: prompt, count: requestedCount, provider: provider, model: model, apiKey: key
+                    prompt: prompt, count: requestedCount, provider: provider, model: model, apiKey: key, existing: existing
                 )
                 cards = result
                 included = Set(result.map(\.id))
@@ -336,9 +323,7 @@ struct AIGenerationView: View {
             && !card.term.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             context.insert(Card(term: card.term, definition: card.definition, deck: deck))
         }
-        deck.modifiedAt = .now
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist(touching: deck)
         if let onAdded { onAdded() } else { dismiss() }
     }
 }

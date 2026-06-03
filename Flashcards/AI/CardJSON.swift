@@ -6,31 +6,62 @@ enum CardJSON {
 
     // MARK: Prompt
 
-    /// `count == nil` lets the model choose how many cards to create ("auto").
-    static func system(count: Int?) -> String {
+    /// How many existing cards to send as context when expanding a deck — enough to steer style
+    /// and avoid duplicates without blowing up the request size.
+    static let maxContextCards = 60
+
+    /// `count == nil` lets the model choose how many cards to create ("auto"). `expanding`
+    /// switches the instructions to "add new cards that don't duplicate the existing ones".
+    static func system(count: Int?, expanding: Bool = false) -> String {
         let instruction = count.map { "Produce exactly \($0) flashcards." }
             ?? "Produce as many flashcards as the material warrants (typically 8–20)."
-        return """
+        let base = """
         You are a flashcard generator. \(instruction) From the user's notes or topic, \
         create high-quality study cards. Respond with ONLY a JSON object of the form \
         {"cards":[{"term":"...","definition":"..."}]}. Each "term" is a concise prompt \
         (a word, concept, or question); each "definition" is a clear, accurate answer. \
         Do not include markdown, code fences, or commentary.
         """
-    }
-
-    static func user(_ prompt: String, count: Int?) -> String {
-        let amount = count.map { "\($0)" } ?? "an appropriate number of"
-        return """
-        Create \(amount) flashcards from the following. If it is a topic, cover the most \
-        important points; if it is notes, extract the key facts.
-
-        \(prompt)
+        guard expanding else { return base }
+        return base + " " + """
+        The user is EXPANDING an existing deck. Create only NEW cards that complement the ones \
+        listed in the message — cover gaps, related subtopics, and deeper detail. Do not duplicate \
+        or merely rephrase an existing term, and match the existing cards' style and difficulty.
         """
     }
 
-    static func combined(_ prompt: String, count: Int?) -> String {
-        system(count: count) + "\n\n" + user(prompt, count: count)
+    static func user(_ prompt: String, count: Int?, existing: [GeneratedCard] = []) -> String {
+        let amount = count.map { "\($0)" } ?? "an appropriate number of"
+        let notes = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !existing.isEmpty else {
+            return """
+            Create \(amount) flashcards from the following. If it is a topic, cover the most \
+            important points; if it is notes, extract the key facts.
+
+            \(notes)
+            """
+        }
+
+        // Expanding: send the current cards so the model avoids duplicates and matches style.
+        let list = existing.prefix(maxContextCards)
+            .map { "- \($0.term): \($0.definition)" }
+            .joined(separator: "\n")
+        var out = """
+        The deck already contains these flashcards:
+
+        \(list)
+
+        Create \(amount) NEW flashcards that complement them without duplicating any existing term.
+        """
+        if !notes.isEmpty {
+            out += "\n\nFocus on or draw from the following notes/topic:\n\n\(notes)"
+        }
+        return out
+    }
+
+    static func combined(_ prompt: String, count: Int?, existing: [GeneratedCard] = []) -> String {
+        system(count: count, expanding: !existing.isEmpty) + "\n\n" + user(prompt, count: count, existing: existing)
     }
 
     // MARK: Parse

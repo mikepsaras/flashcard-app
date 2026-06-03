@@ -59,6 +59,10 @@ extension Deck {
     var cardArray: [Card] { cards ?? [] }
     var cardCount: Int { cardArray.count }
 
+    /// The deck's name for display, with a placeholder when it's blank. Centralizes the
+    /// "Untitled Deck" fallback the UI would otherwise repeat at every call site.
+    var displayName: String { name.isEmpty ? "Untitled Deck" : name }
+
     /// The deck's grading controls (2- or 4-button), backed by `gradingModeRaw`. An empty raw
     /// value (a deck file predating this setting) resolves to the legacy global default, so
     /// existing decks don't silently change.

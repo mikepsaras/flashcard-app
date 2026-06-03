@@ -2,7 +2,7 @@ import Foundation
 
 /// Google Gemini generateContent with JSON response MIME type.
 enum GeminiProvider {
-    static func makeRequest(prompt: String, count: Int?, model: String, apiKey: String) -> URLRequest {
+    static func makeRequest(prompt: String, count: Int?, model: String, apiKey: String, existing: [GeneratedCard] = []) -> URLRequest {
         let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -12,7 +12,7 @@ enum GeminiProvider {
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
 
         let body: [String: Any] = [
-            "contents": [["parts": [["text": CardJSON.combined(prompt, count: count)]]]],
+            "contents": [["parts": [["text": CardJSON.combined(prompt, count: count, existing: existing)]]]],
             "generationConfig": [
                 "responseMimeType": "application/json",
                 "temperature": 0.4,

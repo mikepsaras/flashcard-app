@@ -122,7 +122,7 @@ extension Grade {
     var studyColor: Color {
         switch self {
         case .again: Theme.danger
-        case .hard:  Color(hex: "#FF9500")
+        case .hard:  Theme.learning
         case .good:  Theme.success
         case .easy:  Theme.accent
         }

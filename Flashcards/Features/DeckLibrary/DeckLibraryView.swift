@@ -28,6 +28,7 @@ struct DeckLibraryView: View {
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
     @State private var showingDeckImporter = false
+    @State private var showingCardsImporter = false
     @State private var search = ""
     @State private var deckPendingDeletion: Deck?
     @AppStorage("deckSort") private var deckSortRaw = DeckSort.recent.rawValue
@@ -121,6 +122,11 @@ struct DeckLibraryView: View {
             allowedContentTypes: DeckStore.importContentTypes,
             allowsMultipleSelection: true
         ) { result in openDeckFiles(result) }
+        .fileImporter(
+            isPresented: $showingCardsImporter,
+            allowedContentTypes: [.json, .commaSeparatedText, .plainText, .text],
+            allowsMultipleSelection: false
+        ) { result in importCardsAsDeck(result) }
         .confirmationDialog(
             "Delete this deck?",
             isPresented: Binding(
@@ -130,7 +136,7 @@ struct DeckLibraryView: View {
             titleVisibility: .visible,
             presenting: deckPendingDeletion
         ) { deck in
-            Button("Delete “\(deck.name.isEmpty ? "Untitled Deck" : deck.name)”", role: .destructive) {
+            Button("Delete “\(deck.displayName)”", role: .destructive) {
                 delete(deck)
             }
             Button("Cancel", role: .cancel) {}
@@ -160,6 +166,8 @@ struct DeckLibraryView: View {
     @ViewBuilder private var addMenu: some View {
         Menu {
             Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
+            Button { showingCardsImporter = true } label: { Label("New Deck from JSON…", systemImage: "curlybraces") }
+            Divider()
             Button { showingDeckImporter = true } label: { Label("Open Deck File…", systemImage: "folder") }
         } label: {
             Label("New Deck", systemImage: "plus")
@@ -179,8 +187,7 @@ struct DeckLibraryView: View {
     private func delete(_ deck: Deck) {
         if selection == .deck(deck.persistentModelID) { selection = .today }
         context.delete(deck)
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist()
     }
 
     /// Whether any visible deck has a section — drives grouping vs a single flat "Decks" section.
@@ -230,8 +237,7 @@ struct DeckLibraryView: View {
         for url in urls {
             if let deck = DeckStore.importDeck(from: url, into: context) { imported = deck }
         }
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist()
         if let imported { selection = .deck(imported.persistentModelID) }
     }
 
@@ -243,15 +249,33 @@ struct DeckLibraryView: View {
         for url in deckURLs {
             if let deck = DeckStore.importDeck(from: url, into: context) { imported = deck }
         }
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist()
         if let imported { selection = .deck(imported.persistentModelID) }
         return imported != nil
     }
 
+    private func importCardsAsDeck(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let parsed = CardListCodec.parse(text)
+        guard !parsed.cards.isEmpty else { return }   // nothing to build a deck from
+
+        // Name from the JSON envelope if present, else the file's own name.
+        let name = parsed.name ?? url.deletingPathExtension().lastPathComponent
+        let deck = Deck(name: name, deckDescription: parsed.deckDescription ?? "", section: parsed.section ?? "")
+        context.insert(deck)
+        for card in parsed.cards {
+            context.insert(Card(term: card.term, definition: card.definition, deck: deck))
+        }
+        context.saveAndPersist(touching: deck)
+        selection = .deck(deck.persistentModelID)
+    }
+
     private func duplicate(_ deck: Deck) {
         let copy = Deck(
-            name: deck.name.isEmpty ? "Untitled Deck Copy" : "\(deck.name) Copy",
+            name: "\(deck.displayName) Copy",
             deckDescription: deck.deckDescription,
             colorHex: deck.colorHex,
             backLabel: deck.backLabel,
@@ -263,8 +287,7 @@ struct DeckLibraryView: View {
         for card in deck.cardArray.sorted(by: { $0.createdAt < $1.createdAt }) {
             context.insert(Card(term: card.term, definition: card.definition, deck: copy))
         }
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist()
         selection = .deck(copy.persistentModelID)
     }
 

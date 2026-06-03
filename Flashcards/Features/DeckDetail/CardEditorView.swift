@@ -81,9 +81,7 @@ struct CardEditorView: View {
             card.definition = definition
             card.modifiedAt = .now
         }
-        deck.modifiedAt = .now
-        try? context.save()
-        DeckStore.persist(context)
+        context.saveAndPersist(touching: deck)
         dismiss()
     }
 }
