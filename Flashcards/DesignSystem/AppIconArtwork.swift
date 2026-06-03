@@ -1,17 +1,17 @@
 import SwiftUI
 
 /// The app icon, drawn in SwiftUI and rendered into the asset catalog (see `IconGenerator` in the
-/// test target). A stack of three identical cards — two faded duplicates behind a solid front card
-/// with a centered term/definition — on a blue gradient.
+/// test target). A flat vertical stack of three cards receding upward — two smaller, tinted cards
+/// behind a white front card with two equal content lines — on a solid blue field, no shadows.
 ///
 /// `squircle` controls the container: macOS icons sit in a rounded "squircle" with a margin and a
 /// soft ground shadow; iOS icons are full-bleed (the system masks them).
 struct AppIconArtwork: View {
     var squircle: Bool = false
 
-    private let blueBottom = Color(red: 0.16, green: 0.42, blue: 0.96)
     private let cardW: CGFloat = 0.56
     private let cardH: CGFloat = 0.46
+    private let line = Color(red: 0.22, green: 0.47, blue: 0.96)   // flat blue for the card's content lines
 
     var body: some View {
         GeometryReader { geo in
@@ -43,43 +43,36 @@ struct AppIconArtwork: View {
     }
 
     private func background(_ s: CGFloat) -> some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.37, green: 0.63, blue: 1.00), Color(red: 0.13, green: 0.40, blue: 0.95)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-            RadialGradient(colors: [.white.opacity(0.16), .clear], center: .topLeading, startRadius: 0, endRadius: s * 0.95)
-        }
+        Color(red: 0.20, green: 0.45, blue: 0.95)   // flat, solid field — no gradient
     }
 
     private func stack(_ s: CGFloat) -> some View {
-        let d = s * 0.034
-        return ZStack {
-            dupCard(s, 0.26).offset(x: 2 * d, y: -2 * d)
-            dupCard(s, 0.48).offset(x: d, y: -d)
+        ZStack {
+            dupCard(s, scale: 0.73, fill: Color(red: 0.67, green: 0.78, blue: 0.97)).offset(y: -s * 0.148)
+            dupCard(s, scale: 0.86, fill: Color(red: 0.82, green: 0.88, blue: 0.99)).offset(y: -s * 0.073)
             frontCard(s)
         }
-        .offset(x: -d, y: d)   // recenter the whole stack within the canvas
+        .offset(y: s * 0.050)   // sit the receding stack in the optical centre
     }
 
-    /// A faded duplicate of the front card, with a subtle shadow so the stack reads as discrete cards.
-    private func dupCard(_ s: CGFloat, _ opacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: s * 0.09, style: .continuous)
-            .fill(.white.opacity(opacity))
-            .frame(width: s * cardW, height: s * cardH)
-            .shadow(color: .black.opacity(0.10), radius: s * 0.018, x: 0, y: s * 0.012)
+    /// A smaller, flat-tinted card sitting behind and above the front one, so the stack recedes
+    /// vertically — each card further back is shorter, narrower, and a step deeper in tint. Flat
+    /// fills, no shadows; the cards read as distinct by colour alone.
+    private func dupCard(_ s: CGFloat, scale: CGFloat, fill: Color) -> some View {
+        RoundedRectangle(cornerRadius: s * 0.075 * scale, style: .continuous)
+            .fill(fill)
+            .frame(width: s * cardW * scale, height: s * cardH * scale)
     }
 
     private func frontCard(_ s: CGFloat) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: s * 0.09, style: .continuous).fill(.white)
-            VStack(spacing: s * 0.052) {
-                Capsule().fill(blueBottom).frame(width: s * 0.24, height: s * 0.044)
-                Capsule().fill(blueBottom.opacity(0.30)).frame(width: s * 0.30, height: s * 0.034)
+            RoundedRectangle(cornerRadius: s * 0.075, style: .continuous).fill(.white)
+            VStack(spacing: s * 0.055) {
+                Capsule().fill(line).frame(width: s * 0.28, height: s * 0.040)
+                Capsule().fill(line).frame(width: s * 0.28, height: s * 0.040)
             }
         }
         .frame(width: s * cardW, height: s * cardH)
-        .shadow(color: .black.opacity(0.18), radius: s * 0.03, x: 0, y: s * 0.02)
     }
 }
 
