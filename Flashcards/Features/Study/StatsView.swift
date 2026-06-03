@@ -60,6 +60,10 @@ struct StatsContentView: View {
         var delta: Int? = nil
     }
 
+    private var maturePercent: String {
+        insights.totalCards > 0 ? "\(insights.matureCount * 100 / insights.totalCards)%" : "—"
+    }
+
     private var stats: [Stat] {
         [
             Stat(label: "Day streak", value: "\(insights.currentStreak)", icon: "flame.fill", tint: .orange),
@@ -67,9 +71,8 @@ struct StatsContentView: View {
             Stat(label: "This week", value: "\(insights.reviewsThisWeek)", icon: "calendar",
                  tint: Theme.accent, delta: insights.reviewsThisWeek - insights.reviewsLastWeek),
             Stat(label: "Reviewed today", value: "\(insights.reviewsToday)", icon: "checkmark.circle.fill", tint: Theme.success),
-            Stat(label: "Accuracy", value: percent(insights.accuracyAllTime), icon: "target", tint: Theme.success),
-            Stat(label: "Daily average", value: "\(insights.dailyAverage)", icon: "chart.bar.fill", tint: Theme.accent),
-            Stat(label: "Cards", value: "\(insights.totalCards)", icon: "rectangle.on.rectangle.angled", tint: Theme.accent),
+            Stat(label: "Accuracy", value: percent(insights.accuracyAllTime), icon: "target", tint: Theme.accent),
+            Stat(label: "Mature", value: maturePercent, icon: "checkmark.seal.fill", tint: Theme.success),
             Stat(label: "Due now", value: "\(insights.dueNow)", icon: "clock.fill", tint: insights.dueNow > 0 ? .orange : .secondary),
             Stat(label: "Due in 7 days", value: "\(insights.dueThisWeek)", icon: "calendar.badge.clock",
                  tint: insights.dueThisWeek > 0 ? .orange : .secondary),
@@ -89,6 +92,8 @@ struct StatsContentView: View {
             if !insights.perDeck.isEmpty { perDeckCard }
             maturityCard
         }
+        .frame(maxWidth: 940)          // keep the dashboard readable instead of stretching edge-to-edge
+        .frame(maxWidth: .infinity)    // ...and centered in wide / fullscreen windows
     }
 
     // MARK: Tiles
@@ -152,7 +157,8 @@ struct StatsContentView: View {
     }
 
     private func deckRow(_ deck: StudyInsights.DeckStat) -> some View {
-        HStack(spacing: 10) {
+        let maturePct = deck.totalCards > 0 ? deck.matureCount * 100 / deck.totalCards : 0
+        return HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color(hex: deck.colorHex)).frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 5) {
@@ -168,12 +174,18 @@ struct StatsContentView: View {
                     }
                     Text("\(deck.totalCards)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
                 }
-                MaturityBar(new: deck.newCount, learning: deck.learningCount, mature: deck.matureCount)
-                    .frame(height: 6)
+                HStack(spacing: 8) {
+                    MaturityBar(new: deck.newCount, learning: deck.learningCount, mature: deck.matureCount)
+                        .frame(height: 6)
+                    Text("\(maturePct)%")
+                        .font(.system(.caption2, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.secondary).monospacedDigit()
+                        .frame(width: 34, alignment: .trailing)
+                }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(deck.name): \(deck.totalCards) cards, \(deck.due) due, \(deck.matureCount) mature")
+        .accessibilityLabel("\(deck.name): \(deck.totalCards) cards, \(deck.due) due, \(maturePct) percent mature")
     }
 
     private var maturityCard: some View {
