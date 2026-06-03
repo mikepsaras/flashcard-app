@@ -88,9 +88,23 @@ struct AIGenerationView: View {
                 ) { result in importFile(result) }
         }
         #if os(macOS)
-        .frame(width: 560, height: 540)
+        .frame(width: 560, height: macWindowHeight)
         #endif
     }
+
+    #if os(macOS)
+    /// The macOS sheet shrinks to fit the count-only expand input (otherwise it's a big empty
+    /// box) and grows for the notes form and the review list.
+    private var macWindowHeight: CGFloat {
+        guard hasKey else { return 420 }
+        switch phase {
+        case .input:      return isExpanding ? 300 : 540
+        case .generating: return 380
+        case .failed:     return 440
+        case .review:     return 540
+        }
+    }
+    #endif
 
     private var navTitle: String {
         switch phase {

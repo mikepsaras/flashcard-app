@@ -166,7 +166,7 @@ struct DeckLibraryView: View {
     @ViewBuilder private var addMenu: some View {
         Menu {
             Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
-            Button { showingCardsImporter = true } label: { Label("New Deck from JSON…", systemImage: "curlybraces") }
+            Button { showingCardsImporter = true } label: { Label("New Deck from JSON or CSV…", systemImage: "curlybraces") }
             Divider()
             Button { showingDeckImporter = true } label: { Label("Open Deck File…", systemImage: "folder") }
         } label: {

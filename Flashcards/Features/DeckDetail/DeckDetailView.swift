@@ -66,7 +66,7 @@ struct DeckDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { cardEditor = .new } label: { Label("New Card", systemImage: "plus") }
-                    Button { showingImporter = true } label: { Label("Import from File…", systemImage: "square.and.arrow.down") }
+                    Button { showingImporter = true } label: { Label("Import JSON or CSV…", systemImage: "square.and.arrow.down") }
                     Button { showingAI = true } label: { Label("Generate Cards with AI…", systemImage: "sparkles") }
                 } label: {
                     Label("Add Card", systemImage: "plus")
