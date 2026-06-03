@@ -202,12 +202,10 @@ struct AIGenerationView: View {
                                 .labelsHidden()
                             #endif
                         }
-                        if !isExpanding {
-                            Text("Auto").foregroundStyle(.secondary)
-                            Toggle("Auto", isOn: $autoCount.animation())
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-                        }
+                        Text("Auto").foregroundStyle(.secondary)
+                        Toggle("Auto", isOn: $autoCount.animation())
+                            .labelsHidden()
+                            .toggleStyle(.switch)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
