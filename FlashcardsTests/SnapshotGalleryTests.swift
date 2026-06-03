@@ -104,6 +104,16 @@ struct SnapshotGalleryTests {
             correct[day] = max(0, n - (offset % 3))
         }
         let decks = try container.mainContext.fetch(FetchDescriptor<Deck>())
+        // Spread the cards' due dates over the next two weeks and give them a mix of review
+        // intervals (relative to the fixture `now`) so the forecast, per-deck "due", and the
+        // maturity bars actually have data to render.
+        for (i, card) in decks.flatMap({ $0.cardArray }).enumerated() {
+            card.dueDate = cal.date(byAdding: .day, value: i % 10, to: now) ?? now
+            if i % 3 != 0 {
+                card.lastReviewedAt = now
+                card.interval = [2, 8, 25, 40][i % 4]
+            }
+        }
         let insights = StudyInsights.make(decks: decks, reviewsByDay: reviews, correctByDay: correct, now: now)
         try Snapshot.write(
             StatsContentView(insights: insights, reviewsByDay: reviews, now: now)
@@ -111,7 +121,7 @@ struct SnapshotGalleryTests {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(Theme.groupedBackground)
                 .environment(\.colorScheme, .dark),
-            size: CGSize(width: 700, height: 700), name: "11_insights_mac")
+            size: CGSize(width: 740, height: 1180), name: "11_insights_mac")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/11_insights_mac.png"))
     }
 

@@ -103,4 +103,46 @@ final class StudyInsightsTests {
         #expect(s.dueNow == 1)
         #expect(s.dueThisWeek == 2)   // overdue + due-in-3-days
     }
+
+    @Test func dueForecastBucketsByDayWithOverdueFoldedIntoToday() {
+        let deck = makeDeck()
+        addCard(to: deck, reviewed: true, interval: 1, due: now.addingTimeInterval(-86_400))      // overdue → today
+        addCard(to: deck, reviewed: true, interval: 1, due: now)                                   // today
+        addCard(to: deck, reviewed: true, interval: 3, due: now.addingTimeInterval(3 * 86_400))    // +3 days
+        addCard(to: deck, reviewed: true, interval: 30, due: now.addingTimeInterval(30 * 86_400))  // beyond the window
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.dueForecast.count == StudyInsights.forecastDays)
+        #expect(s.dueForecast[0] == 2)              // overdue + today
+        #expect(s.dueForecast[3] == 1)              // due in 3 days
+        #expect(s.dueForecast.reduce(0, +) == 3)    // the 30-day-out card falls outside the 14-day window
+    }
+
+    @Test func perDeckBreakdownCountsEachDeck() {
+        let a = makeDeck(); a.name = "A"
+        addCard(to: a, reviewed: false, due: now.addingTimeInterval(10 * 86_400))                  // new, not due
+        addCard(to: a, reviewed: true, interval: 40, due: now.addingTimeInterval(40 * 86_400))     // mature, not due
+        let b = makeDeck(); b.name = "B"
+        addCard(to: b, reviewed: true, interval: 5, due: now.addingTimeInterval(-86_400))          // learning + overdue
+        let s = StudyInsights.make(decks: [a, b], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.perDeck.count == 2)
+        let statA = s.perDeck.first { $0.name == "A" }!
+        #expect(statA.totalCards == 2)
+        #expect(statA.newCount == 1)
+        #expect(statA.matureCount == 1)
+        #expect(statA.due == 0)
+        let statB = s.perDeck.first { $0.name == "B" }!
+        #expect(statB.learningCount == 1)
+        #expect(statB.due == 1)
+    }
+
+    @Test func lastWeekTrendFromPriorSevenDays() {
+        let deck = makeDeck()
+        let reviews = [key(0): 5, key(-3): 5, key(-8): 4, key(-10): 6]   // this week 10, last week 10
+        let correct = [key(0): 5, key(-3): 4, key(-8): 2, key(-10): 6]   // this 9/10, last 8/10
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: reviews, correctByDay: correct, now: now, calendar: cal)
+        #expect(s.reviewsThisWeek == 10)
+        #expect(s.reviewsLastWeek == 10)
+        #expect(s.accuracyThisWeek == 0.9)
+        #expect(s.accuracyLastWeek == 0.8)
+    }
 }

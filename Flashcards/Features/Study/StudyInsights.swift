@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// A pure snapshot of study + library statistics for the Insights screen. Built from the decks
 /// plus the `StudyStats` day logs; deterministic given its inputs, so the aggregation is
@@ -6,6 +7,7 @@ import Foundation
 struct StudyInsights: Equatable {
     var reviewsToday = 0
     var reviewsThisWeek = 0
+    var reviewsLastWeek = 0
     var reviewsAllTime = 0
     /// Mean reviews across days that had at least one review (0 when none).
     var dailyAverage = 0
@@ -14,6 +16,7 @@ struct StudyInsights: Equatable {
     /// correct / reviews; `nil` when there are no reviews to divide by.
     var accuracyAllTime: Double?
     var accuracyThisWeek: Double?
+    var accuracyLastWeek: Double?
     /// Total correct reviews all-time (the numerator behind accuracyAllTime).
     var correctAllTime = 0
     var totalCards = 0
@@ -23,9 +26,27 @@ struct StudyInsights: Equatable {
     var dueNow = 0
     /// Review units due within the next 7 days (includes anything overdue).
     var dueThisWeek = 0
+    /// Reviews coming due each day for the next two weeks; index 0 is today and folds in overdue.
+    var dueForecast: [Int] = []
+    /// Per-deck breakdown for the "where to focus" table, in deck order.
+    var perDeck: [DeckStat] = []
+
+    /// One deck's at-a-glance composition for the per-deck breakdown.
+    struct DeckStat: Equatable, Identifiable {
+        var id: UUID
+        var name: String
+        var colorHex: String
+        var totalCards: Int
+        var due: Int
+        var newCount: Int
+        var learningCount: Int
+        var matureCount: Int
+    }
 
     /// An interval ≥ this many days is considered "mature" (Anki's convention).
     static let matureIntervalDays = 21
+    /// How many days of upcoming due cards the forecast covers.
+    static let forecastDays = 14
 
     @MainActor
     static func make(
@@ -43,45 +64,60 @@ struct StudyInsights: Equatable {
         insights.currentStreak = StudyStats.streak(in: reviewsByDay, asOf: now, calendar: calendar)
         insights.longestStreak = StudyStats.longestStreak(in: reviewsByDay, calendar: calendar)
 
-        let weekKeys = Set((0..<7).compactMap { offset in
-            calendar.date(byAdding: .day, value: -offset, to: now)
-                .map { StudyStats.dayKey($0, calendar: calendar) }
-        })
-        insights.reviewsThisWeek = weekKeys.reduce(0) { $0 + (reviewsByDay[$1] ?? 0) }
-        let correctThisWeek = weekKeys.reduce(0) { $0 + (correctByDay[$1] ?? 0) }
-        let correctAllTime = correctByDay.values.reduce(0, +)
+        // Rolling 7-day windows for this week vs last week.
+        func windowKeys(_ range: Range<Int>) -> Set<String> {
+            Set(range.compactMap { offset in
+                calendar.date(byAdding: .day, value: -offset, to: now)
+                    .map { StudyStats.dayKey($0, calendar: calendar) }
+            })
+        }
+        func sum(_ log: [String: Int], _ keys: Set<String>) -> Int { keys.reduce(0) { $0 + (log[$1] ?? 0) } }
+        func ratio(_ correct: Int, _ reviews: Int) -> Double? { reviews > 0 ? Double(correct) / Double(reviews) : nil }
+        let thisWeek = windowKeys(0..<7)
+        let lastWeek = windowKeys(7..<14)
 
-        insights.accuracyAllTime = insights.reviewsAllTime > 0
-            ? Double(correctAllTime) / Double(insights.reviewsAllTime) : nil
-        insights.accuracyThisWeek = insights.reviewsThisWeek > 0
-            ? Double(correctThisWeek) / Double(insights.reviewsThisWeek) : nil
-        insights.correctAllTime = correctAllTime
+        insights.reviewsThisWeek = sum(reviewsByDay, thisWeek)
+        insights.reviewsLastWeek = sum(reviewsByDay, lastWeek)
+        insights.correctAllTime = correctByDay.values.reduce(0, +)
+        insights.accuracyAllTime = ratio(insights.correctAllTime, insights.reviewsAllTime)
+        insights.accuracyThisWeek = ratio(sum(correctByDay, thisWeek), insights.reviewsThisWeek)
+        insights.accuracyLastWeek = ratio(sum(correctByDay, lastWeek), insights.reviewsLastWeek)
 
         let activeDays = reviewsByDay.values.filter { $0 > 0 }.count
         insights.dailyAverage = activeDays > 0
             ? Int((Double(insights.reviewsAllTime) / Double(activeDays)).rounded()) : 0
 
-        // Library composition + due windows (from the cards).
+        // Library composition, due windows, per-deck breakdown, and the due forecast.
         let weekAhead = calendar.date(byAdding: .day, value: 7, to: now) ?? now
+        let startToday = calendar.startOfDay(for: now)
+        var forecast = Array(repeating: 0, count: forecastDays)
         for deck in decks {
+            var stat = DeckStat(id: deck.id, name: deck.displayName, colorHex: deck.colorHex,
+                                totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
             for card in deck.cardArray {
                 insights.totalCards += 1
+                stat.totalCards += 1
                 if !card.hasBeenReviewed {
-                    insights.newCount += 1
+                    insights.newCount += 1; stat.newCount += 1
                 } else {
                     // Best interval the card earned in any direction — independent of the deck's
-                    // current `studyReversed` toggle, so maturity isn't lost if reverse study is
-                    // turned off after the reverse side was already learned.
+                    // current `studyReversed` toggle.
                     let interval = max(card.interval, card.reverseInterval)
-                    if interval >= matureIntervalDays { insights.matureCount += 1 }
-                    else { insights.learningCount += 1 }
+                    if interval >= matureIntervalDays { insights.matureCount += 1; stat.matureCount += 1 }
+                    else { insights.learningCount += 1; stat.learningCount += 1 }
                 }
             }
             for item in deck.allReviewItems {
-                if item.dueDate <= now { insights.dueNow += 1 }
+                if item.dueDate <= now { insights.dueNow += 1; stat.due += 1 }
                 if item.dueDate <= weekAhead { insights.dueThisWeek += 1 }
+                // Bucket into the forecast; overdue folds into today (index 0).
+                let dueDay = calendar.startOfDay(for: item.dueDate)
+                let offset = max(0, calendar.dateComponents([.day], from: startToday, to: dueDay).day ?? 0)
+                if offset < forecastDays { forecast[offset] += 1 }
             }
+            insights.perDeck.append(stat)
         }
+        insights.dueForecast = forecast
         return insights
     }
 }

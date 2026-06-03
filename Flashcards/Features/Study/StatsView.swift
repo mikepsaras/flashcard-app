@@ -56,18 +56,23 @@ struct StatsContentView: View {
         let value: String
         let icon: String
         let tint: Color
+        /// Week-over-week change, shown as a small ▲/▼ badge when non-nil and non-zero.
+        var delta: Int? = nil
     }
 
     private var stats: [Stat] {
         [
             Stat(label: "Day streak", value: "\(insights.currentStreak)", icon: "flame.fill", tint: .orange),
             Stat(label: "Longest streak", value: "\(insights.longestStreak)", icon: "trophy.fill", tint: Theme.accent),
+            Stat(label: "This week", value: "\(insights.reviewsThisWeek)", icon: "calendar",
+                 tint: Theme.accent, delta: insights.reviewsThisWeek - insights.reviewsLastWeek),
             Stat(label: "Reviewed today", value: "\(insights.reviewsToday)", icon: "checkmark.circle.fill", tint: Theme.success),
             Stat(label: "Accuracy", value: percent(insights.accuracyAllTime), icon: "target", tint: Theme.success),
-            Stat(label: "Reviews all-time", value: "\(insights.reviewsAllTime)", icon: "tray.full.fill", tint: Theme.accent),
             Stat(label: "Daily average", value: "\(insights.dailyAverage)", icon: "chart.bar.fill", tint: Theme.accent),
             Stat(label: "Cards", value: "\(insights.totalCards)", icon: "rectangle.on.rectangle.angled", tint: Theme.accent),
             Stat(label: "Due now", value: "\(insights.dueNow)", icon: "clock.fill", tint: insights.dueNow > 0 ? .orange : .secondary),
+            Stat(label: "Due in 7 days", value: "\(insights.dueThisWeek)", icon: "calendar.badge.clock",
+                 tint: insights.dueThisWeek > 0 ? .orange : .secondary),
         ]
     }
 
@@ -79,12 +84,14 @@ struct StatsContentView: View {
             ) {
                 ForEach(stats) { tile($0) }
             }
+            forecastCard
             heatmapCard
+            if !insights.perDeck.isEmpty { perDeckCard }
             maturityCard
         }
     }
 
-    // MARK: Pieces
+    // MARK: Tiles
 
     private func tile(_ stat: Stat) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -92,17 +99,81 @@ struct StatsContentView: View {
             Text(stat.value)
                 .font(.system(size: 26, weight: .bold, design: .rounded))
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-            Text(stat.label).font(Typography.caption).foregroundStyle(.secondary).lineLimit(1)
+            HStack(spacing: 4) {
+                Text(stat.label).font(Typography.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+                if let delta = stat.delta, delta != 0 { trendBadge(delta) }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .cardSurface(cornerRadius: Theme.Radius.tile)
     }
 
-    private var heatmapCard: some View {
-        card("Activity") {
-            ActivityHeatmap(reviewsByDay: reviewsByDay, now: now)
+    /// A ▲/▼ change indicator vs. the previous week.
+    private func trendBadge(_ delta: Int) -> some View {
+        let up = delta > 0
+        return HStack(spacing: 1) {
+            Image(systemName: up ? "arrow.up" : "arrow.down").font(.system(size: 8, weight: .bold))
+            Text("\(abs(delta))").font(.system(size: 10, weight: .semibold, design: .rounded)).monospacedDigit()
         }
+        .foregroundStyle(up ? Theme.success : Theme.danger)
+        .accessibilityLabel("\(up ? "up" : "down") \(abs(delta)) versus last week")
+    }
+
+    // MARK: Cards
+
+    private var forecastCard: some View {
+        card("Due forecast", subtitle: forecastSubtitle) {
+            DueForecastChart(forecast: insights.dueForecast, now: now)
+        }
+    }
+
+    private var forecastSubtitle: String {
+        insights.dueThisWeek > 0
+            ? "\(insights.dueThisWeek) review\(insights.dueThisWeek == 1 ? "" : "s") due in the next 7 days"
+            : "Nothing due in the next 7 days"
+    }
+
+    private var heatmapCard: some View {
+        card("Activity") { ActivityHeatmap(reviewsByDay: reviewsByDay, now: now) }
+    }
+
+    private var perDeckCard: some View {
+        card("By deck") {
+            VStack(spacing: Theme.Spacing.s) {
+                ForEach(sortedDecks) { deckRow($0) }
+            }
+        }
+    }
+
+    /// Most actionable first: most due, then largest.
+    private var sortedDecks: [StudyInsights.DeckStat] {
+        insights.perDeck.sorted { ($0.due, $0.totalCards) > ($1.due, $1.totalCards) }
+    }
+
+    private func deckRow(_ deck: StudyInsights.DeckStat) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(hex: deck.colorHex)).frame(width: 22, height: 22)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(deck.name).font(Typography.body).lineLimit(1)
+                    Spacer(minLength: 4)
+                    if deck.due > 0 {
+                        Text("\(deck.due) due")
+                            .font(.system(.caption2, design: .rounded, weight: .bold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(.orange.opacity(Theme.Opacity.fillSubtle), in: Capsule())
+                    }
+                    Text("\(deck.totalCards)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+                MaturityBar(new: deck.newCount, learning: deck.learningCount, mature: deck.matureCount)
+                    .frame(height: 6)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(deck.name): \(deck.totalCards) cards, \(deck.due) due, \(deck.matureCount) mature")
     }
 
     private var maturityCard: some View {
@@ -119,9 +190,14 @@ struct StatsContentView: View {
         }
     }
 
-    private func card<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func card<Content: View>(_ title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Text(title).font(Typography.headline).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(Typography.headline).foregroundStyle(.secondary)
+                if let subtitle {
+                    Text(subtitle).font(Typography.caption).foregroundStyle(.secondary)
+                }
+            }
             content()
         }
         .padding(Theme.Spacing.m)
@@ -139,6 +215,64 @@ struct StatsContentView: View {
     private func percent(_ value: Double?) -> String {
         guard let value else { return "—" }
         return "\(Int((value * 100).rounded()))%"
+    }
+}
+
+/// A hand-drawn bar chart of reviews coming due over the next two weeks (overdue folds into the
+/// first bar, "Now"). Plain SwiftUI — no Charts dependency — so it renders under `ImageRenderer`.
+struct DueForecastChart: View {
+    let forecast: [Int]
+    var now: Date = .now
+    var calendar: Calendar = .current
+
+    private var maxCount: Int { max(forecast.max() ?? 0, 1) }
+
+    var body: some View {
+        GeometryReader { geo in
+            let n = max(forecast.count, 1)
+            let spacing: CGFloat = 5
+            let barWidth = max((geo.size.width - spacing * CGFloat(n - 1)) / CGFloat(n), 1)
+            let areaHeight = geo.size.height - 28   // room for the value + day labels
+            HStack(alignment: .bottom, spacing: spacing) {
+                ForEach(forecast.indices, id: \.self) { i in
+                    column(i, width: barWidth, areaHeight: areaHeight)
+                }
+            }
+        }
+        .frame(height: 126)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(summary)
+    }
+
+    private func column(_ i: Int, width: CGFloat, areaHeight: CGFloat) -> some View {
+        let count = forecast[i]
+        let height = count > 0 ? max(areaHeight * CGFloat(count) / CGFloat(maxCount), 4) : 0
+        let isToday = i == 0
+        return VStack(spacing: 3) {
+            Spacer(minLength: 0)
+            Text(count > 0 ? "\(count)" : " ")
+                .font(.system(size: 8, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary).lineLimit(1)
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(isToday ? Color.orange : Theme.accent.opacity(0.55))
+                .frame(width: width, height: height)
+            Text(label(i))
+                .font(.system(size: 8, weight: isToday ? .bold : .regular))
+                .foregroundStyle(isToday ? .primary : .secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private func label(_ i: Int) -> String {
+        guard i > 0 else { return "Now" }
+        let date = calendar.date(byAdding: .day, value: i, to: now) ?? now
+        let weekday = calendar.component(.weekday, from: date)
+        return String(calendar.veryShortWeekdaySymbols[weekday - 1])
+    }
+
+    private var summary: String {
+        let total = forecast.reduce(0, +)
+        return "Due forecast: \(total) review\(total == 1 ? "" : "s") over the next \(forecast.count) days."
     }
 }
 
