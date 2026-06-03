@@ -14,7 +14,7 @@ enum CardJSON {
     /// switches the instructions to "add new cards that don't duplicate the existing ones".
     static func system(count: Int?, expanding: Bool = false) -> String {
         let instruction = count.map { "Produce exactly \($0) flashcards." }
-            ?? "Produce as many flashcards as the material warrants (typically 8–20)."
+            ?? "Produce as many flashcards as the material warrants."
         let base = """
         You are a flashcard generator. \(instruction) From the user's notes or topic, \
         create high-quality study cards. Respond with ONLY a JSON object of the form \
