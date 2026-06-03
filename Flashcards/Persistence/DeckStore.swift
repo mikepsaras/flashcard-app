@@ -302,11 +302,23 @@ enum DeckStore {
         for deck in decks {
             let filename = uniqueFilename(for: deck, used: &usedNames)
             let fileURL = directory.appendingPathComponent(filename)
-            // Only count a file as "written" after the encode AND atomic write both
-            // succeed — otherwise the prune step below could delete a deck's last good
-            // file on a transient failure and silently lose data.
-            if let data = try? DeckCodec.encode(deck),
-               (try? data.write(to: fileURL, options: .atomic)) != nil {
+            guard let data = try? DeckCodec.encode(deck) else {
+                failedIDs.insert(deck.id)
+                failedNames.append(deck.displayName)
+                continue
+            }
+            // Skip the write when the file already holds identical bytes. Without this, every
+            // change rewrites *all* deck files, and each rewrite wakes the folder watcher into a
+            // full reconcile — so a one-card edit re-encodes and re-reads the entire library.
+            // The file still counts as "written" so the prune step below won't remove it.
+            if let existing = try? Data(contentsOf: fileURL), existing == data {
+                written.insert(filename)
+                urlByDeckID[deck.id] = fileURL
+                continue
+            }
+            // Only count a file as "written" after the atomic write succeeds — otherwise the
+            // prune step could delete a deck's last good file on a transient failure.
+            if (try? data.write(to: fileURL, options: .atomic)) != nil {
                 written.insert(filename)
                 urlByDeckID[deck.id] = fileURL
             } else {

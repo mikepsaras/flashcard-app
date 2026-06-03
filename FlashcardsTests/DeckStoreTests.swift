@@ -285,6 +285,34 @@ import SwiftData
         #expect(try deckFilenames(dir) == ["Dup 2.cards", "Dup.cards"])
     }
 
+    @Test func persistSkipsRewritingUnchangedDecks() throws {
+        let dir = try tempDir()
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Stable"); container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+        DeckStore.persist(container.mainContext, to: dir)
+        let url = dir.appendingPathComponent("Stable.cards")
+
+        // Backdate the file, then persist again with no changes: an unchanged deck must not be
+        // rewritten, so the backdated timestamp survives (a rewrite would reset it to ~now).
+        let past = Date(timeIntervalSince1970: 1_600_000_000)
+        try FileManager.default.setAttributes([.modificationDate: past], ofItemAtPath: url.path)
+        DeckStore.persist(container.mainContext, to: dir)
+        #expect(try modificationDate(url) == past)
+
+        // A real change DOES rewrite the file.
+        deck.cardArray.first?.term = "changed"
+        try container.mainContext.save()
+        try FileManager.default.setAttributes([.modificationDate: past], ofItemAtPath: url.path)
+        DeckStore.persist(container.mainContext, to: dir)
+        #expect(try modificationDate(url) != past)
+    }
+
+    private func modificationDate(_ url: URL) throws -> Date? {
+        try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
+    }
+
     // MARK: Reconcile (external edits)
 
     @Test func reconcileIsNoOpForOwnWrites() throws {
