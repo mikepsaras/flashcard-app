@@ -70,8 +70,15 @@ struct DeckLibraryView: View {
                     if group.section == nil && decks.isEmpty {
                         Button { editorMode = .new } label: {
                             Label("Create your first deck", systemImage: "plus")
+                                .font(.system(.callout, design: .rounded, weight: .medium))
+                                .foregroundStyle(Theme.accent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
                         }
-                        .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
+                        .listRowBackground(Color.clear)
                     }
                 }
             }
