@@ -566,7 +566,14 @@ struct DeckDetailView: View {
     /// native drag into both within- and cross-section moves.
     private func moveFlat(from source: IndexSet, to destination: Int) {
         guard cardSearch.isEmpty else { return }   // order is ambiguous while filtering
-        var rows = flatRows
+        let rowsBefore = flatRows
+        // The card(s) actually being dragged (header/hint rows can't move) — re-selected after the
+        // drop so the selection follows the moved card instead of leaving a stale highlight behind.
+        let draggedIDs = Set(source.compactMap { index -> UUID? in
+            guard rowsBefore.indices.contains(index), case .card(let card) = rowsBefore[index] else { return nil }
+            return card.id
+        })
+        var rows = rowsBefore
         rows.move(fromOffsets: source, toOffset: destination)
         var currentSection = ""
         var orderInSection: [String: Int] = [:]
@@ -587,6 +594,7 @@ struct DeckDetailView: View {
                     }
                 }
             }
+            if !draggedIDs.isEmpty { selection = draggedIDs }
         }
         context.saveAndPersist(touching: deck)
     }

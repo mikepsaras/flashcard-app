@@ -73,6 +73,7 @@ struct MultilineField: View {
                 .focused(ifPresent: focus)
                 .font(Typography.body)
                 .scrollContentBackground(.hidden)
+                .scrollIndicators(.hidden)
                 .frame(minHeight: minHeight)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
