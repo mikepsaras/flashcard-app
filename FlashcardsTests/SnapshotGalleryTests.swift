@@ -114,6 +114,19 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/22_insights_by_section.png"))
     }
 
+    @Test func renderRetentionGraphs() throws {
+        let charts = VStack(spacing: 18) {
+            RecallSpreadChart(buckets: [3, 8, 20, 45]).frame(height: 130)
+            RetentionTrendChart(trend: [nil, 0.82, 0.86, 0.90, nil, 0.88, 0.92, 0.95, 0.90, 0.93, 0.97, 0.94]).frame(height: 130)
+            ForgettingCurveChart(averageInterval: 18).frame(height: 130)
+        }
+        .padding(Theme.Spacing.m)
+        .frame(width: 680)
+        .background(Theme.groupedBackground)
+        try Snapshot.write(charts, size: CGSize(width: 680, height: 470), name: "23_retention_graphs")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/23_retention_graphs.png"))
+    }
+
     @Test func renderFourButtonStudyScreen() throws {
         let (container, _, plan) = try makeContext(fourButton: true)
         try Snapshot.write(

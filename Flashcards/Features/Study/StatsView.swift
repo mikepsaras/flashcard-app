@@ -53,6 +53,9 @@ struct StatsContentView: View {
     @AppStorage(DefaultsKey.heatmapRange) private var heatmapRangeRaw = HeatmapRange.year.rawValue
     private var heatmapRange: HeatmapRange { HeatmapRange(rawValue: heatmapRangeRaw) ?? .year }
 
+    @AppStorage(DefaultsKey.retentionGraph) private var retentionGraphRaw = RetentionGraph.spread.rawValue
+    private var retentionGraph: RetentionGraph { RetentionGraph(rawValue: retentionGraphRaw) ?? .spread }
+
     private struct Stat: Identifiable {
         var id: String { label }
         let label: String
@@ -144,42 +147,56 @@ struct StatsContentView: View {
             : "Nothing due in the next 7 days"
     }
 
-    /// Predicted recall *now* (estimated from each card's schedule) beside measured *mature*
-    /// retention (Anki's "true retention"). They answer different questions — "how much would I
-    /// recall right now" vs. "when a graduated card comes due, how often do I still get it" — so
-    /// they sit together, clearly labeled, rather than being mistaken for the Accuracy tile.
+    /// The two retention numbers — predicted recall *now* (estimated from each card's schedule) and
+    /// measured *mature* retention (Anki's "true retention") — sit as a legend under a graph the user
+    /// picks: the recall Spread, the mature-retention Trend, or the forgetting Curve.
     private var retentionCard: some View {
-        card("Memory retention") {
-            HStack(alignment: .top, spacing: Theme.Spacing.l) {
-                retentionStat(
-                    percent(insights.predictedRetention), "Predicted recall now",
-                    insights.scheduledUnits > 0
-                        ? "across \(insights.scheduledUnits) scheduled card\(insights.scheduledUnits == 1 ? "" : "s")"
-                        : "no cards scheduled yet",
-                    insights.predictedRetention)
-                Divider().frame(height: 48)
-                retentionStat(
-                    percent(insights.trueRetention), "Mature retention",
-                    insights.matureReviewCount > 0
-                        ? "\(insights.matureCorrectCount) / \(insights.matureReviewCount) mature reviews correct"
-                        : "study mature cards to see this",
-                    insights.trueRetention)
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            HStack(spacing: Theme.Spacing.s) {
+                Text("Memory retention").font(Typography.headline).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Picker("Graph", selection: $retentionGraphRaw) {
+                    ForEach(RetentionGraph.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                #if os(macOS)
+                .controlSize(.small)
+                #endif
             }
+            retentionGraphView.frame(height: 140)
+            retentionLegend
+        }
+        .padding(Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: Theme.Radius.tile)
+    }
+
+    @ViewBuilder private var retentionGraphView: some View {
+        switch retentionGraph {
+        case .spread: RecallSpreadChart(buckets: insights.recallBuckets)
+        case .trend:  RetentionTrendChart(trend: insights.retentionTrend)
+        case .curve:  ForgettingCurveChart(averageInterval: insights.averageIntervalDays)
         }
     }
 
-    private func retentionStat(_ value: String, _ label: String, _ detail: String, _ source: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value)
-                .font(.system(size: 30, weight: .bold, design: .rounded))
-                .monospacedDigit().foregroundStyle(retentionTint(source))
-                .lineLimit(1).minimumScaleFactor(0.6)
-            Text(label).font(Typography.caption).foregroundStyle(.primary)
-            Text(detail).font(.system(size: 11, design: .rounded)).foregroundStyle(.secondary)
+    private var retentionLegend: some View {
+        HStack(spacing: Theme.Spacing.l) {
+            retentionLegendItem(percent(insights.predictedRetention), "recall now", insights.predictedRetention)
+            retentionLegendItem(percent(insights.trueRetention), "mature retention", insights.trueRetention)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func retentionLegendItem(_ value: String, _ label: String, _ source: Double?) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(retentionTint(source)).frame(width: 9, height: 9)
+            Text(value).font(.system(.callout, design: .rounded, weight: .bold)).monospacedDigit().foregroundStyle(retentionTint(source))
+            Text(label).font(Typography.caption).foregroundStyle(.secondary)
+        }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value). \(detail).")
+        .accessibilityLabel("\(value) \(label)")
     }
 
     /// Green when retention is strong, amber when it's slipping — a quick read on memory health.
@@ -549,6 +566,139 @@ struct ActivityHeatmap: View {
         case 4:  Theme.accent
         default: Color.primary.opacity(0.08)
         }
+    }
+}
+
+/// Which Memory-retention graph the Insights card shows, persisted via `@AppStorage`.
+enum RetentionGraph: Int, CaseIterable, Identifiable {
+    case spread = 0, trend = 1, curve = 2
+    var id: Int { rawValue }
+    var label: String {
+        switch self {
+        case .spread: "Spread"
+        case .trend:  "Trend"
+        case .curve:  "Curve"
+        }
+    }
+}
+
+/// Reviewed cards bucketed by predicted recall — a 4-bar histogram (<50 / 50–70 / 70–90 / 90+ %),
+/// single-hue so stronger recall reads darker. Plain SwiftUI, renders under `ImageRenderer`.
+struct RecallSpreadChart: View {
+    let buckets: [Int]
+    private let labels = ["<50", "50–70", "70–90", "90+"]
+    private var maxCount: Int { max(buckets.max() ?? 0, 1) }
+
+    var body: some View {
+        GeometryReader { geo in
+            let spacing: CGFloat = 10
+            let barWidth = max((geo.size.width - spacing * 3) / 4, 1)
+            let areaHeight = geo.size.height - 22
+            HStack(alignment: .bottom, spacing: spacing) {
+                ForEach(0..<4, id: \.self) { i in
+                    VStack(spacing: 4) {
+                        Spacer(minLength: 0)
+                        Text("\(count(i))")
+                            .font(.system(size: 9, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Theme.accent.opacity([0.30, 0.50, 0.72, 1.0][i]))
+                            .frame(width: barWidth, height: count(i) > 0 ? max(areaHeight * CGFloat(count(i)) / CGFloat(maxCount), 3) : 0)
+                        Text(labels[i]).font(.system(size: 9, design: .rounded)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Recall spread: " + zip(labels, buckets).map { "\($0.1) cards at \($0.0) percent" }.joined(separator: ", "))
+    }
+
+    private func count(_ i: Int) -> Int { buckets.indices.contains(i) ? buckets[i] : 0 }
+}
+
+/// Mature retention over recent weeks — an area + line, with weeks that had no mature reviews left
+/// as gaps. Plain SwiftUI (Path), renders under `ImageRenderer`.
+struct RetentionTrendChart: View {
+    let trend: [Double?]
+    private let floorY = 0.5   // retention rarely dips below 50%; gives the line room to vary
+
+    var body: some View {
+        let points: [(Int, Double)] = trend.enumerated().compactMap { i, v in v.map { (i, $0) } }
+        return GeometryReader { geo in
+            if points.count < 2 {
+                Text(points.isEmpty ? "No mature reviews yet" : "Not enough mature reviews yet")
+                    .font(Typography.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                let span = CGFloat(max(trend.count - 1, 1))
+                let pos: (Int, Double) -> CGPoint = { i, v in
+                    let clamped = min(max(v, floorY), 1)
+                    return CGPoint(x: geo.size.width * CGFloat(i) / span,
+                                   y: geo.size.height * (1 - CGFloat((clamped - floorY) / (1 - floorY))))
+                }
+                ZStack {
+                    Path { p in
+                        p.move(to: CGPoint(x: pos(points[0].0, points[0].1).x, y: geo.size.height))
+                        for (i, v) in points { p.addLine(to: pos(i, v)) }
+                        p.addLine(to: CGPoint(x: pos(points[points.count - 1].0, points[points.count - 1].1).x, y: geo.size.height))
+                        p.closeSubpath()
+                    }.fill(Theme.accent.opacity(0.15))
+                    Path { p in
+                        for (idx, point) in points.enumerated() {
+                            let cg = pos(point.0, point.1)
+                            if idx == 0 { p.move(to: cg) } else { p.addLine(to: cg) }
+                        }
+                    }.stroke(Theme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    ForEach(points.indices, id: \.self) { idx in
+                        Circle().fill(Theme.accent).frame(width: 5, height: 5).position(pos(points[idx].0, points[idx].1))
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Mature retention trend over the last \(trend.count) weeks")
+    }
+}
+
+/// The forgetting curve R = 0.9^(t / interval) out to ~2.5× the average interval, with a dashed
+/// marker at the due point (R = 90%). Plain SwiftUI (Path), renders under `ImageRenderer`.
+struct ForgettingCurveChart: View {
+    let averageInterval: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            let interval = max(averageInterval, 1)
+            let horizon = interval * 4          // show enough intervals for the exponential to bend
+            let steps = 60
+            let floorR = 0.5                    // map [50%, 100%] to the height so the curve isn't flat
+            let pos: (Double) -> CGPoint = { t in
+                let norm = (min(max(pow(0.9, t / interval), floorR), 1) - floorR) / (1 - floorR)
+                return CGPoint(x: geo.size.width * CGFloat(t / horizon),
+                               y: geo.size.height * (1 - CGFloat(norm)))
+            }
+            ZStack {
+                Path { p in
+                    p.move(to: CGPoint(x: 0, y: geo.size.height))
+                    for s in 0...steps { p.addLine(to: pos(horizon * Double(s) / Double(steps))) }
+                    p.addLine(to: CGPoint(x: geo.size.width, y: geo.size.height))
+                    p.closeSubpath()
+                }.fill(Theme.accent.opacity(0.15))
+                Path { p in
+                    for s in 0...steps {
+                        let cg = pos(horizon * Double(s) / Double(steps))
+                        if s == 0 { p.move(to: cg) } else { p.addLine(to: cg) }
+                    }
+                }.stroke(Theme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                let dueX = geo.size.width * CGFloat(interval / horizon)
+                Path { p in p.move(to: CGPoint(x: dueX, y: 0)); p.addLine(to: CGPoint(x: dueX, y: geo.size.height)) }
+                    .stroke(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            }
+            .overlay(alignment: .topTrailing) {
+                Text("avg interval \(Int(interval.rounded()))d")
+                    .font(.system(size: 9, design: .rounded)).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Forgetting curve; average interval \(Int(averageInterval.rounded())) days")
     }
 }
 

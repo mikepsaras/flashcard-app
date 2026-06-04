@@ -219,4 +219,29 @@ final class StudyInsightsTests {
         #expect(s.trueRetention == nil)
         #expect(s.matureReviewCount == 0)
     }
+
+    @Test func recallSpreadAndAverageInterval() {
+        let deck = makeDeck()
+        let fresh = addCard(to: deck, reviewed: true, interval: 5)
+        fresh.lastReviewedAt = now                                  // r = 0.9^0 = 1.0 → 90+
+        let due = addCard(to: deck, reviewed: true, interval: 10)
+        due.lastReviewedAt = now.addingTimeInterval(-10 * 86_400)   // r = 0.9 → 90+
+        let overdue = addCard(to: deck, reviewed: true, interval: 10)
+        overdue.lastReviewedAt = now.addingTimeInterval(-20 * 86_400)  // r = 0.81 → 70–90
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.recallBuckets == [0, 0, 1, 2])                    // one in 70–90, two in 90+
+        #expect(abs(s.averageIntervalDays - (5 + 10 + 10) / 3.0) < 0.0001)
+    }
+
+    @Test func retentionTrendBucketsMatureReviewsByWeek() {
+        let deck = makeDeck()
+        let s = StudyInsights.make(
+            decks: [deck], reviewsByDay: [:], correctByDay: [:],
+            matureByDay: [key(0): 10, key(-14): 4], matureCorrectByDay: [key(0): 9, key(-14): 2],
+            now: now, calendar: cal)
+        #expect(s.retentionTrend.count == StudyInsights.retentionTrendWeeks)
+        #expect(s.retentionTrend.last == 0.9)                                 // current week: 9/10
+        #expect(s.retentionTrend[s.retentionTrend.count - 3] == 0.5)          // 2 weeks ago: 2/4
+        #expect(s.retentionTrend[0] == nil)                                   // oldest week: no data
+    }
 }

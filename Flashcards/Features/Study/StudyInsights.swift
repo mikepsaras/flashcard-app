@@ -25,6 +25,14 @@ struct StudyInsights: Equatable {
     var predictedRetention: Double?
     /// Reviewed review-units (card × scheduled direction) backing `predictedRetention`.
     var scheduledUnits = 0
+    /// Reviewed units bucketed by predicted recall: [<50%, 50–70%, 70–90%, 90–100%] — the
+    /// "Spread" retention graph.
+    var recallBuckets: [Int] = [0, 0, 0, 0]
+    /// Mean scheduled interval (days) across reviewed units — anchors the forgetting-"Curve" graph.
+    var averageIntervalDays = 0.0
+    /// Mature retention per week over the recent past (oldest → newest), `nil` for weeks with no
+    /// mature reviews — the "Trend" retention graph.
+    var retentionTrend: [Double?] = []
     /// Measured pass rate on *mature* cards (Anki's "true retention"); `nil` until a mature card is
     /// reviewed (the log starts empty and fills as you study). All-time.
     var trueRetention: Double?
@@ -78,6 +86,8 @@ struct StudyInsights: Equatable {
     /// estimated recall decays as `targetRetentionAtDue^(daysSinceReview / interval)`, hitting this
     /// at the due date (and falling below it once overdue).
     static let targetRetentionAtDue = 0.9
+    /// How many weeks of mature-retention history the "Trend" graph covers.
+    static let retentionTrendWeeks = 12
 
     @MainActor
     static func make(
@@ -132,9 +142,12 @@ struct StudyInsights: Equatable {
         let weekAhead = calendar.date(byAdding: .day, value: 7, to: now) ?? now
         let startToday = calendar.startOfDay(for: now)
         var forecast = Array(repeating: 0, count: forecastDays)
-        // Predicted-recall accumulators (mean of 0.9^(elapsed/interval) over reviewed units).
+        // Predicted-recall accumulators (mean of 0.9^(elapsed/interval) over reviewed units), plus
+        // a recall histogram and an interval sum for the "Spread" / "Curve" graphs.
         var retentionSum = 0.0
         var retentionUnits = 0
+        var intervalSum = 0.0
+        var buckets = [0, 0, 0, 0]
         for deck in decks {
             var stat = DeckStat(id: deck.id, name: deck.displayName, colorHex: deck.colorHex,
                                 totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
@@ -180,8 +193,11 @@ struct StudyInsights: Equatable {
                     if let last = card.lastReviewedAt(direction) {
                         let intervalDays = Double(max(direction == .forward ? card.interval : card.reverseInterval, 1))
                         let elapsed = max(now.timeIntervalSince(last) / 86_400, 0)
-                        retentionSum += pow(targetRetentionAtDue, elapsed / intervalDays)
+                        let r = pow(targetRetentionAtDue, elapsed / intervalDays)
+                        retentionSum += r
                         retentionUnits += 1
+                        intervalSum += intervalDays
+                        buckets[r < 0.5 ? 0 : r < 0.7 ? 1 : r < 0.9 ? 2 : 3] += 1
                     }
                 }
 
@@ -206,6 +222,22 @@ struct StudyInsights: Equatable {
         insights.dueForecast = forecast
         insights.scheduledUnits = retentionUnits
         insights.predictedRetention = retentionUnits > 0 ? retentionSum / Double(retentionUnits) : nil
+        insights.recallBuckets = buckets
+        insights.averageIntervalDays = retentionUnits > 0 ? intervalSum / Double(retentionUnits) : 0
+
+        // Weekly mature retention over the recent past (oldest → newest), from the mature day-logs.
+        var trend: [Double?] = []
+        for week in stride(from: retentionTrendWeeks - 1, through: 0, by: -1) {
+            var rev = 0, cor = 0
+            for dayInWeek in 0..<7 {
+                guard let day = calendar.date(byAdding: .day, value: -(week * 7 + dayInWeek), to: now) else { continue }
+                let key = StudyStats.dayKey(day, calendar: calendar)
+                rev += matureByDay[key] ?? 0
+                cor += matureCorrectByDay[key] ?? 0
+            }
+            trend.append(rev > 0 ? Double(cor) / Double(rev) : nil)
+        }
+        insights.retentionTrend = trend
         return insights
     }
 }

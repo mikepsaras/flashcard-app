@@ -19,4 +19,6 @@ enum DefaultsKey {
     static let developerMode = "developerMode"
     /// Insights: the Activity heatmap's visible range (a `HeatmapRange` raw value, in weeks).
     static let heatmapRange = "heatmapRange"
+    /// Insights: which Memory-retention graph to show (a `RetentionGraph` raw value).
+    static let retentionGraph = "retentionGraph"
 }
