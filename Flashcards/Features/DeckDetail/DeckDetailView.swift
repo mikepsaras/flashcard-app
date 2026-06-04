@@ -22,6 +22,7 @@ struct DeckDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var deck: Deck
     @Query private var allDecks: [Deck]
+    @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
     var onStudy: () -> Void
 
     private var otherDecks: [Deck] { allDecks.filter { $0.id != deck.id } }
@@ -114,7 +115,9 @@ struct DeckDetailView: View {
                     Button { cardEditor = .new } label: { Label("New Card", systemImage: "plus") }
                     Button { startNewSection() } label: { Label("New Section", systemImage: "folder.badge.plus") }
                     Divider()
-                    Button { showingImporter = true } label: { Label("Import JSON or CSV…", systemImage: "square.and.arrow.down") }
+                    if showImportExport {
+                        Button { showingImporter = true } label: { Label("Import JSON or CSV…", systemImage: "square.and.arrow.down") }
+                    }
                     Button { showingAI = true } label: { Label("Generate Cards with AI…", systemImage: "sparkles") }
                 } label: {
                     Label("Add Card", systemImage: "plus")
@@ -125,20 +128,22 @@ struct DeckDetailView: View {
                     if let fileURL = DeckStore.shared.fileURL(for: deck) {
                         ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
                     }
-                    Divider()
-                    Menu {
-                        Button {
-                            exportText = CSVCodec.export(orderedCards)   // build once, on demand
-                            showingExporter = true
-                        } label: { Label("CSV", systemImage: "tablecells") }
-                        Button {
-                            exportText = CardListCodec.exportJSON(orderedCards, name: deck.name)
-                            showingJSONExporter = true
-                        } label: { Label("JSON", systemImage: "curlybraces") }
-                    } label: {
-                        Label("Export Cards", systemImage: "square.and.arrow.up")
+                    if showImportExport {
+                        Divider()
+                        Menu {
+                            Button {
+                                exportText = CSVCodec.export(orderedCards)   // build once, on demand
+                                showingExporter = true
+                            } label: { Label("CSV", systemImage: "tablecells") }
+                            Button {
+                                exportText = CardListCodec.exportJSON(orderedCards, name: deck.name)
+                                showingJSONExporter = true
+                            } label: { Label("JSON", systemImage: "curlybraces") }
+                        } label: {
+                            Label("Export Cards", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(orderedCards.isEmpty)
                     }
-                    .disabled(orderedCards.isEmpty)
                     Divider()
                     Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
                     Button(role: .destructive) { showingResetConfirm = true } label: {

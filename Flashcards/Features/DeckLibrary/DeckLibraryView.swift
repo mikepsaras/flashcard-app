@@ -32,6 +32,7 @@ struct DeckLibraryView: View {
     @State private var search = ""
     @State private var deckPendingDeletion: Deck?
     @AppStorage(DefaultsKey.deckSort) private var deckSortRaw = DeckSort.recent.rawValue
+    @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
 
     private var deckSort: DeckSort { DeckSort(rawValue: deckSortRaw) ?? .recent }
     private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }
@@ -166,7 +167,9 @@ struct DeckLibraryView: View {
     @ViewBuilder private var addMenu: some View {
         Menu {
             Button { editorMode = .new } label: { Label("New Deck", systemImage: "plus") }
-            Button { showingCardsImporter = true } label: { Label("New Deck from JSON or CSV…", systemImage: "curlybraces") }
+            if showImportExport {
+                Button { showingCardsImporter = true } label: { Label("New Deck from JSON or CSV…", systemImage: "curlybraces") }
+            }
             Divider()
             Button { showingDeckImporter = true } label: { Label("Open Deck File…", systemImage: "folder") }
         } label: {

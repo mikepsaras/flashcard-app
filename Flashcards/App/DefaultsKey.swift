@@ -19,4 +19,7 @@ enum DefaultsKey {
     static let heatmapRange = "heatmapRange"
     /// Insights: which Memory-retention graph to show (a `RetentionGraph` raw value).
     static let retentionGraph = "retentionGraph"
+    /// Advanced: show the card JSON/CSV import & export affordances (off by default). Opening and
+    /// sharing `.cards` deck files stays available regardless of this setting.
+    static let showImportExport = "showImportExport"
 }

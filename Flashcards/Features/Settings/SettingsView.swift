@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @AppStorage(AIProvider.selectedProviderKey) private var aiProviderRaw = AIProvider.openAI.rawValue
     @AppStorage(DefaultsKey.studySessionLimit) private var sessionLimit = 0
+    @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
     @AppStorage(DefaultsKey.remindersEnabled) private var remindersEnabled = false
     @AppStorage(DefaultsKey.reminderHour) private var reminderHour = 19
     @AppStorage(DefaultsKey.reminderMinute) private var reminderMinute = 0
@@ -48,6 +49,7 @@ struct SettingsView: View {
             aiSection
             storageSection
             dataSection
+            advancedSection
             if developerMode { developerSection }
             aboutSection
         }
@@ -223,6 +225,16 @@ struct SettingsView: View {
             Text("Data")
         } footer: {
             Text("Reset Statistics clears your streak and review history but keeps your decks. Delete All Decks permanently removes every deck and card, and clears statistics.")
+        }
+    }
+
+    private var advancedSection: some View {
+        Section {
+            Toggle("Show JSON / CSV import & export", isOn: $showImportExport)
+        } header: {
+            Text("Advanced")
+        } footer: {
+            Text("Adds buttons for importing cards from and exporting cards to JSON or CSV files — in a deck’s menus and when creating a deck. Opening and sharing .cards deck files stays available either way.")
         }
     }
 
