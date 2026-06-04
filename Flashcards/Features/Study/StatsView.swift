@@ -716,20 +716,25 @@ struct ForgettingCurveChart: View {
     }
 }
 
-/// A thin stacked bar showing the New / Learning / Mature proportions of the library.
+/// A thin stacked bar showing the New / Learning / Mature proportions of the library. On macOS,
+/// hovering a single colored segment pops up just that band's count.
 struct MaturityBar: View {
     let new: Int
     let learning: Int
     let mature: Int
+
+    #if os(macOS)
+    @State private var hovered: Int?   // which segment (0=New, 1=Learning, 2=Mature) is hovered
+    #endif
 
     private var total: Int { max(new + learning + mature, 1) }
 
     var body: some View {
         GeometryReader { geo in
             HStack(spacing: 0) {
-                segment(Theme.Maturity.new, new, "New", geo.size.width)
-                segment(Theme.Maturity.learning, learning, "Learning", geo.size.width)
-                segment(Theme.Maturity.mature, mature, "Mature", geo.size.width)
+                segment(Theme.Maturity.new, new, 0, "New", geo.size.width)
+                segment(Theme.Maturity.learning, learning, 1, "Learning", geo.size.width)
+                segment(Theme.Maturity.mature, mature, 2, "Mature", geo.size.width)
             }
         }
         .frame(height: 10)
@@ -737,15 +742,30 @@ struct MaturityBar: View {
         .clipShape(Capsule())
     }
 
-    /// One proportional segment. On macOS it carries a `.help` tooltip so hovering reveals that
-    /// band's count (e.g. "Learning: 12").
-    private func segment(_ color: Color, _ count: Int, _ label: String, _ width: CGFloat) -> some View {
+    private func segment(_ color: Color, _ count: Int, _ index: Int, _ label: String, _ width: CGFloat) -> some View {
         color
             .frame(width: width * CGFloat(count) / CGFloat(total))
             #if os(macOS)
-            .help("\(label): \(count)")
+            // Each segment is independently hoverable; the popover sits above it (cursor stays on
+            // the bar) and shows just this band's count.
+            .onHover { inside in
+                if inside { hovered = index } else if hovered == index { hovered = nil }
+            }
+            .popover(isPresented: valuePopover(index), arrowEdge: .top) {
+                VStack(spacing: 1) {
+                    Text("\(count)").font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit()
+                    Text(label).font(.caption2).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 9)
+            }
             #endif
     }
+
+    #if os(macOS)
+    private func valuePopover(_ index: Int) -> Binding<Bool> {
+        Binding(get: { hovered == index }, set: { if !$0 && hovered == index { hovered = nil } })
+    }
+    #endif
 }
 
 /// The "Insights" sidebar row (mirrors `TodayRow`).
