@@ -29,8 +29,8 @@ struct BulkAddView: View {
         var hint: String {
             switch self {
             case .pairs: "Each row becomes its own card."
-            case .sameBack: "Every card shares the back above; add a front per card."
-            case .sameFront: "Every card shares the front above; add a back per card."
+            case .sameBack: "Every card shares one back; add a front for each."
+            case .sameFront: "Every card shares one front; add a back for each."
             }
         }
     }
@@ -68,51 +68,14 @@ struct BulkAddView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Picker("Mode", selection: $mode.animation(.snappy)) {
-                        ForEach(Mode.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                } footer: {
-                    Text(mode.hint)
-                }
-
-                if mode == .sameBack {
-                    Section("Shared back") {
-                        TextField("Back of every card", text: $sharedBack, axis: .vertical)
-                            .font(Typography.body)
-                    }
-                } else if mode == .sameFront {
-                    Section("Shared front") {
-                        TextField("Front of every card", text: $sharedFront, axis: .vertical)
-                            .font(Typography.body)
-                    }
-                }
-
-                if !deck.sectionOrder.isEmpty {
-                    Section {
-                        Picker("Section", selection: $section) {
-                            Text("None").tag("")
-                            ForEach(deck.sectionOrder, id: \.self) { Text($0).tag($0) }
-                        }
-                    }
-                }
-
-                Section {
-                    ForEach($rows) { $row in rowField($row) }
-                        .onDelete { rows.remove(atOffsets: $0) }
-                    Button { addRow() } label: { Label("Add Row", systemImage: "plus") }
-                } header: {
-                    Text(entriesHeader)
-                }
+            VStack(spacing: 0) {
+                header
+                #if os(macOS)
+                Divider()
+                #endif
+                entriesList
             }
-            #if os(iOS)
-            .listStyle(.insetGrouped)
-            #else
-            .listStyle(.inset)
-            #endif
+            .background(Theme.groupedBackground)
             .navigationTitle("Add Cards")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -129,14 +92,61 @@ struct BulkAddView: View {
         #endif
     }
 
-    private var entriesHeader: String {
-        let label: String
-        switch mode {
-        case .pairs: label = "cards"
-        case .sameBack: label = "fronts"
-        case .sameFront: label = "backs"
+    /// Fixed top zone — mode toggle, the shared field (in the "same" modes), and the section picker.
+    /// Mirrors the deck-detail header band so the sheet reads as one header + one list rather than a
+    /// stack of grouped boxes.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Picker("Mode", selection: $mode.animation(.snappy)) {
+                ForEach(Mode.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            Text(mode.hint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if mode == .sameBack {
+                MultilineField(label: "Shared back", placeholder: "e.g. Germany", text: $sharedBack, minHeight: 54)
+            } else if mode == .sameFront {
+                MultilineField(label: "Shared front", placeholder: "Front of every card", text: $sharedFront, minHeight: 54)
+            }
+
+            if !deck.sectionOrder.isEmpty {
+                HStack(spacing: 8) {
+                    Text("Section").font(Typography.callout).foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Picker("Section", selection: $section) {
+                        Text("None").tag("")
+                        ForEach(deck.sectionOrder, id: \.self) { Text($0).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                }
+            }
         }
-        return "\(drafts.count) \(drafts.count == 1 ? String(label.dropLast()) : label)"
+        .padding(Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.windowBackground)
+    }
+
+    private var entriesList: some View {
+        List {
+            Section {
+                ForEach($rows) { $row in rowField($row) }
+                    .onDelete { rows.remove(atOffsets: $0) }
+                Button { addRow() } label: { Label("Add Row", systemImage: "plus") }
+            } header: {
+                Text(drafts.count == 1 ? "1 card" : "\(drafts.count) cards")
+            }
+        }
+        #if os(iOS)
+        .listStyle(.insetGrouped)
+        #else
+        .listStyle(.inset)
+        #endif
     }
 
     /// The per-row editor: two fields in Pairs, a single field in the shared modes. The varying
