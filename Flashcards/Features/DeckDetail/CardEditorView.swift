@@ -50,8 +50,8 @@ struct CardEditorView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    LabeledField(label: "Front", text: $term, axis: .vertical, lines: 1...4, focus: $frontFocused)
-                    LabeledField(label: "Back", text: $definition, axis: .vertical, lines: 3...10)
+                    MultilineField(label: "Front", placeholder: "Front of the card", text: $term, minHeight: 56, focus: $frontFocused)
+                    MultilineField(label: "Back", placeholder: "Back of the card", text: $definition, minHeight: 120)
 
                     if !term.isEmpty || !definition.isEmpty {
                         markdownPreview

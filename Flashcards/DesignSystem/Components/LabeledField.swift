@@ -53,6 +53,44 @@ extension View {
     }
 }
 
+/// A labeled multi-line text box backed by `TextEditor`, so Return reliably inserts a newline — a
+/// vertical-axis `TextField` commits instead on macOS, which blocks multi-line entry. `TextEditor`
+/// has no native placeholder, so it's drawn as an overlay. Optional external focus binding, like
+/// `LabeledField`.
+struct MultilineField: View {
+    let label: String
+    var placeholder: String = ""
+    @Binding var text: String
+    var minHeight: CGFloat = 96
+    var focus: FocusState<Bool>.Binding? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(label)
+                .font(.system(.subheadline, weight: .medium))
+                .foregroundStyle(.secondary)
+            TextEditor(text: $text)
+                .focused(ifPresent: focus)
+                .font(Typography.body)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: minHeight)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .fieldBox()
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty && !placeholder.isEmpty {
+                        Text(placeholder)
+                            .font(Typography.body)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 13)
+                            .padding(.top, 14)
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
+    }
+}
+
 #Preview {
     VStack(spacing: 22) {
         LabeledField(label: "Name", placeholder: "Deck name", text: .constant(""))

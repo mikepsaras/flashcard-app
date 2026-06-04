@@ -425,10 +425,13 @@ struct DeckDetailView: View {
                             .moveDisabled(true)
                             .deleteDisabled(true)
                     case .empty:
+                        // NOT moveDisabled: a trailing move-disabled row blocks dropping a card past
+                        // it, which made a newly-created (empty, last) section impossible to drag into.
+                        // Leaving it movable makes the empty section a valid drop target; moveFlat
+                        // ignores the hint itself, so dragging it is a harmless no-op after re-render.
                         Text("No cards yet — drag a card here, or use a card's ••• menu.")
                             .font(Typography.caption)
                             .foregroundStyle(.secondary)
-                            .moveDisabled(true)
                             .deleteDisabled(true)
                     case .card(let card):
                         cardRow(card)
@@ -496,9 +499,11 @@ struct DeckDetailView: View {
             row.onTapGesture { cardEditor = .edit(card) }
         }
         #else
-        // macOS: no tap gesture — a click is the list's native selection (which, unlike a tap
-        // gesture, coexists with the native onMove drag); Return opens the selection.
-        row
+        // macOS: a click is the list's native selection (it coexists with the native onMove drag);
+        // a DOUBLE-click opens the editor (a single click only selects), and Return opens too. The
+        // double-click is a *simultaneous* gesture so it runs alongside — rather than instead of —
+        // the list's press/drag, avoiding the FB7367473 trap that a plain tap gesture would hit.
+        row.simultaneousGesture(TapGesture(count: 2).onEnded { cardEditor = .edit(card) })
         #endif
     }
 
@@ -556,17 +561,21 @@ struct DeckDetailView: View {
         rows.move(fromOffsets: source, toOffset: destination)
         var currentSection = ""
         var orderInSection: [String: Int] = [:]
-        for row in rows {
-            switch row {
-            case .header(let name): currentSection = name
-            case .empty: break
-            case .card(let card):
-                let order = orderInSection[currentSection, default: 0]
-                orderInSection[currentSection] = order + 1
-                if card.section != currentSection || card.sortOrder != order {
-                    card.section = currentSection
-                    card.sortOrder = order
-                    card.modifiedAt = .now
+        // Animate the reassignment so the list settles into its new order instead of snapping
+        // (the rows are derived from the model, so the move isn't auto-animated by the List).
+        withAnimation(.snappy) {
+            for row in rows {
+                switch row {
+                case .header(let name): currentSection = name
+                case .empty: break
+                case .card(let card):
+                    let order = orderInSection[currentSection, default: 0]
+                    orderInSection[currentSection] = order + 1
+                    if card.section != currentSection || card.sortOrder != order {
+                        card.section = currentSection
+                        card.sortOrder = order
+                        card.modifiedAt = .now
+                    }
                 }
             }
         }
