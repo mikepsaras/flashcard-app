@@ -80,6 +80,32 @@ struct StudyInsights: Equatable {
         var matureCount: Int
     }
 
+    /// A plain-language reading of the retention numbers for the card's footer: the predicted-recall
+    /// level, plus a nudge based on mature retention vs. the 90% target — or, before there's enough
+    /// mature data, a pointer to the weakest cards. `nil` until something has been reviewed.
+    var retentionTakeaway: String? {
+        guard let predicted = predictedRetention else { return nil }
+        let recall = "You'd recall about \(Int((predicted * 100).rounded()))% of your cards right now."
+        // Mature retention needs a small sample before it's worth coaching on.
+        if let mature = trueRetention, matureReviewCount >= 10 {
+            let m = Int((mature * 100).rounded())
+            let note: String
+            if m >= 90 {
+                note = "Mature retention of \(m)% is at the 90% target — your schedule's working."
+            } else if m >= 80 {
+                note = "Mature retention of \(m)% is just under the 90% target; reviewing a little more often would lift it."
+            } else {
+                note = "Mature retention of \(m)% is below the 90% target — those cards are slipping, so study them more often."
+            }
+            return "\(recall) \(note)"
+        }
+        let weak = recallBuckets.prefix(2).reduce(0, +)   // cards under 70% predicted recall
+        if weak > 0 {
+            return "\(recall) \(weak) card\(weak == 1 ? " is" : "s are") under 70% recall — review those next."
+        }
+        return "\(recall) Keep reviewing cards as they mature (a 21+ day interval) to start tracking true retention."
+    }
+
     /// An interval ≥ this many days is considered "mature" (Anki's convention).
     static let matureIntervalDays = 21
     /// How many days of upcoming due cards the forecast covers.

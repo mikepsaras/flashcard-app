@@ -170,6 +170,19 @@ struct StatsContentView: View {
             }
             retentionGraphView.frame(height: 140)
             retentionLegend
+            if let takeaway = insights.retentionTakeaway {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.top, 1)
+                    Text(takeaway)
+                        .font(Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 2)
+            }
         }
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)

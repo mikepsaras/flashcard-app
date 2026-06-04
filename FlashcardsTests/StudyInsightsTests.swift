@@ -233,6 +233,33 @@ final class StudyInsightsTests {
         #expect(abs(s.averageIntervalDays - (5 + 10 + 10) / 3.0) < 0.0001)
     }
 
+    @Test func retentionTakeawayNilUntilSomethingReviewed() {
+        let deck = makeDeck()
+        addCard(to: deck, reviewed: false)
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.retentionTakeaway == nil)
+    }
+
+    @Test func retentionTakeawayCoachesOnMatureRetention() {
+        let deck = makeDeck()
+        addCard(to: deck, reviewed: true, interval: 5)   // gives a predicted-recall reading
+        // 85% mature retention over a 20-review sample → "just under the 90% target".
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:],
+                                   matureByDay: [key(0): 20], matureCorrectByDay: [key(0): 17],
+                                   now: now, calendar: cal)
+        let t = s.retentionTakeaway ?? ""
+        #expect(t.contains("recall about"))
+        #expect(t.contains("just under the 90%"))
+    }
+
+    @Test func retentionTakeawayPointsToWeakCardsBeforeMatureData() {
+        let deck = makeDeck()
+        let c = addCard(to: deck, reviewed: true, interval: 10)
+        c.lastReviewedAt = now.addingTimeInterval(-50 * 86_400)   // 0.9^5 ≈ 0.59 → under 70%
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect((s.retentionTakeaway ?? "").contains("under 70% recall"))
+    }
+
     @Test func retentionTrendBucketsMatureReviewsByWeek() {
         let deck = makeDeck()
         let s = StudyInsights.make(
