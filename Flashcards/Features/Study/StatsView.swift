@@ -462,18 +462,6 @@ struct ActivityHeatmap: View {
     private let gap: CGFloat = 3
     private let maxWeeks = 53
 
-    #if os(macOS)
-    /// One reused formatter for the per-day tooltips. `Date.formatted(...)` builds a fresh format
-    /// style on every call, which adds up across the ~371 cells that re-render together; a shared
-    /// `DateFormatter` is far cheaper and is thread-safe for formatting (macOS 10.9+). iOS skips the
-    /// tooltip entirely (`.help` doesn't surface on touch), so this is macOS-only.
-    nonisolated(unsafe) private static let tooltipDate: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        return f
-    }()
-    #endif
-
     var body: some View {
         GeometryReader { geo in
             let weeks = min(max(Int((geo.size.width + gap) / (cell + gap)), 1), min(maxWeeks, weekCap))
@@ -487,7 +475,7 @@ struct ActivityHeatmap: View {
             let gridWidth = CGFloat(weeks) * cell + CGFloat(weeks - 1) * gap
             VStack(alignment: .leading, spacing: 4) {
                 monthLabels(weeks: weeks, firstDay: firstDay)
-                grid(weeks: weeks, firstDay: firstDay, today: today, maxCount: maxCount)
+                grid(weeks: weeks, firstDay: firstDay, maxCount: maxCount, gridWidth: gridWidth)
                 legend
             }
             .frame(width: gridWidth, alignment: .leading)
@@ -498,28 +486,29 @@ struct ActivityHeatmap: View {
         .accessibilityLabel("Activity heatmap of daily reviews over the past year")
     }
 
-    private func grid(weeks: Int, firstDay: Date, today: Date, maxCount: Int) -> some View {
-        HStack(spacing: gap) {
-            ForEach(Array(0..<weeks), id: \.self) { col in
-                VStack(spacing: gap) {
-                    ForEach(0..<7, id: \.self) { row in
-                        cellView(firstDay: firstDay, today: today, index: col * 7 + row, maxCount: maxCount)
-                    }
-                }
+    /// The day grid, drawn in a single `Canvas` — one view and one draw pass instead of ~371
+    /// `RoundedRectangle` subviews, which was the bulk of the Insights render cost. Counts are placed
+    /// by integer day-number (no per-cell calendar call); cells after today are left blank.
+    private func grid(weeks: Int, firstDay: Date, maxCount: Int, gridWidth: CGFloat) -> some View {
+        let firstDayNumber = StudyStats.dayNumber(fromKey: StudyStats.dayKey(firstDay, calendar: calendar)) ?? 0
+        let cellCount = weeks * 7
+        var counts = [Int](repeating: 0, count: cellCount)
+        for (key, c) in reviewsByDay where c > 0 {
+            if let n = StudyStats.dayNumber(fromKey: key) {
+                let idx = n - firstDayNumber
+                if idx >= 0, idx < cellCount { counts[idx] = c }
             }
         }
-    }
-
-    @ViewBuilder private func cellView(firstDay: Date, today: Date, index: Int, maxCount: Int) -> some View {
-        let date = calendar.date(byAdding: .day, value: index, to: firstDay) ?? firstDay
-        let isFuture = date > today
-        let count = isFuture ? 0 : (reviewsByDay[StudyStats.dayKey(date, calendar: calendar)] ?? 0)
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-            .fill(isFuture ? Color.clear : color(count, max: maxCount))
-            .frame(width: cell, height: cell)
-            #if os(macOS)
-            .help(isFuture ? "" : "\(Self.tooltipDate.string(from: date)): \(count) review\(count == 1 ? "" : "s")")
-            #endif
+        let todayIndex = (StudyStats.dayNumber(fromKey: StudyStats.dayKey(now, calendar: calendar)) ?? firstDayNumber) - firstDayNumber
+        let step = cell + gap
+        return Canvas { context, _ in
+            for i in 0..<cellCount where i <= todayIndex {   // cells after today stay blank
+                let rect = CGRect(x: CGFloat(i / 7) * step, y: CGFloat(i % 7) * step, width: cell, height: cell)
+                context.fill(Path(roundedRect: rect, cornerRadius: 2, style: .continuous),
+                             with: .color(color(counts[i], max: maxCount)))
+            }
+        }
+        .frame(width: gridWidth, height: 7 * cell + 6 * gap)
     }
 
     /// Month abbreviations placed at the column where each new month begins (aligned to the grid).

@@ -146,8 +146,8 @@ enum StudyStats {
     }
 
     /// Julian Day Number for a Gregorian "YYYY-MM-DD" day-key (nil if malformed). Pure integer math,
-    /// no `Calendar`, so consecutive-day detection over a long log stays cheap.
-    private static func dayNumber(fromKey key: String) -> Int? {
+    /// no `Calendar` — used for cheap consecutive-day detection and to place heatmap cells by index.
+    static func dayNumber(fromKey key: String) -> Int? {
         let parts = key.split(separator: "-")
         guard parts.count == 3, let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
         let a = (14 - m) / 12
