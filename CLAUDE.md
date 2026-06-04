@@ -104,7 +104,8 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   import/export** via `CSVCodec` + move-card + Reset Progress), `Study` (`StudySession`
   `@Observable @MainActor` state machine over `ReviewItem`s — cards in a direction —
   full-screen UI driven by a `StudyPlan`, 2- or 4-button grading, keyboard shortcuts,
-  lapse-requeue, session-size cap; `StudyStats` tracks the daily streak), `AI`
+  single-pass review (a miss reschedules sooner, not re-queued), session-size cap;
+  `StudyStats` tracks the daily streak), `AI`
   (`AIGenerationView`), `Settings` (grading, session cap, opt-in `StudyReminders`).
 - `Flashcards/AI` — `CardGenerator` calls **OpenAI / Gemini / Anthropic** (per-provider
   `makeRequest` + `parse` in `Providers/`, tolerant JSON via `CardJSON`). API keys live in

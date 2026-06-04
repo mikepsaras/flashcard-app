@@ -19,10 +19,17 @@ final class LibraryLocation {
     /// Whether a custom (non-default) folder is in use.
     private(set) var isCustom: Bool
 
+    /// The security-scoped URL we currently hold access to (a custom folder), tracked so we can
+    /// release it before switching to another — otherwise repeatedly changing the library folder
+    /// leaks an access scope each time (matters on iOS; a no-op on unsandboxed macOS). nil when the
+    /// default in-container folder is active, which isn't security-scoped.
+    private var accessedURL: URL?
+
     private init() {
         if let url = Self.resolveStoredBookmark() {
             current = url
             isCustom = true
+            accessedURL = url   // resolveStoredBookmark already started access on it
         } else {
             current = Self.defaultFolder()
             isCustom = false
@@ -49,18 +56,29 @@ final class LibraryLocation {
         }
         UserDefaults.standard.set(data, forKey: Self.bookmarkKey)
         Self.ensureExists(url)
+        // Release the previously-held scope before switching, so changing the library folder
+        // repeatedly doesn't accumulate leaked access scopes.
+        releaseAccess()
         current = url
         isCustom = true
+        accessedURL = accessing ? url : nil
         return true   // access is kept open for the session (the library folder stays in use)
     }
 
     /// Return to `~/Documents/Flashcards`.
     func resetToDefault() {
         UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
+        releaseAccess()   // drop the custom folder's security scope before leaving it
         let url = Self.defaultFolder()
         Self.ensureExists(url)
         current = url
         isCustom = false
+    }
+
+    /// Stops security-scoped access on the currently-held custom folder, if any.
+    private func releaseAccess() {
+        accessedURL?.stopAccessingSecurityScopedResource()
+        accessedURL = nil
     }
 
     private static func resolveStoredBookmark() -> URL? {

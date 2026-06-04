@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Bottom study controls — grading + undo. (Shuffle and Track-learning live in the top toolbar.)
+/// Bottom study controls — grading + undo. (Shuffle lives in the top toolbar.)
 /// - Two-button: ✕ / ✓ icon pills centered, Undo bottom-left.
 /// - Four-button: an Undo row above an Again/Hard/Good/Easy pill row.
 struct StudyControlsBar: View {
