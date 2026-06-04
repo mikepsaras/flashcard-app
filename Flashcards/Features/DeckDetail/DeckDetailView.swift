@@ -45,6 +45,8 @@ struct DeckDetailView: View {
     @State private var newSectionCardTarget: Card?
     @State private var sectionPendingRename: String?
     @State private var renameSectionName = ""
+    @State private var showingBulkAdd = false
+    @State private var bulkAddSection = ""
     // Card selection drives bulk actions. macOS: click selects, Return opens, Delete removes the
     // selection. iOS: a tap opens; multi-select + bulk delete happen in Edit mode. The list uses
     // the *native* selection (never a tap gesture) so it can't break the native onMove drag —
@@ -104,6 +106,16 @@ struct DeckDetailView: View {
             cardList
         }
         .background(Theme.groupedBackground)
+        #if os(macOS)
+        .background {
+            // ⌘⇧N opens the multi-row add grid (plain ⌘N stays the app-global New Deck).
+            Button("") { bulkAddSection = ""; showingBulkAdd = true }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
+        #endif
         .navigationTitle(deck.displayName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -117,6 +129,7 @@ struct DeckDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { cardEditor = .new } label: { Label("New Card", systemImage: "plus") }
+                    Button { bulkAddSection = ""; showingBulkAdd = true } label: { Label("Add Multiple Cards…", systemImage: "rectangle.stack.badge.plus") }
                     Button { startNewSection() } label: { Label("New Section", systemImage: "folder.badge.plus") }
                     Divider()
                     if showImportExport {
@@ -188,6 +201,9 @@ struct DeckDetailView: View {
         }
         .sheet(isPresented: $showingAI) {
             AIGenerationView(target: .existing(deck))
+        }
+        .sheet(isPresented: $showingBulkAdd) {
+            BulkAddView(deck: deck, section: bulkAddSection)
         }
         .fileExporter(
             isPresented: $showingExporter,
@@ -374,7 +390,21 @@ struct DeckDetailView: View {
     private var cardList: some View {
         List(selection: $selection) {
             if deck.cardArray.isEmpty {
-                emptyRow("No cards yet. Tap + to add one.")
+                Section {
+                    VStack(spacing: 10) {
+                        Text("No cards yet.")
+                            .font(Typography.callout)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            Button { cardEditor = .new } label: { Label("Add a Card", systemImage: "plus") }
+                            Button { bulkAddSection = ""; showingBulkAdd = true } label: { Label("Add Several", systemImage: "rectangle.stack.badge.plus") }
+                        }
+                        .buttonStyle(.bordered)
+                        .font(Typography.callout)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                }
             } else if !cardSearch.isEmpty && displayGroups.isEmpty {
                 emptyRow("No cards match “\(cardSearch)”.")
             } else {
@@ -475,6 +505,8 @@ struct DeckDetailView: View {
             Spacer(minLength: 4)
             if !name.isEmpty {
                 Menu {
+                    Button { bulkAddSection = name; showingBulkAdd = true } label: { Label("Add Cards…", systemImage: "plus") }
+                    Divider()
                     Button { startRenameSection(name) } label: { Label("Rename", systemImage: "pencil") }
                     Button { moveSection(name, by: -1) } label: { Label("Move Up", systemImage: "arrow.up") }
                         .disabled(deck.sectionOrder.first == name)

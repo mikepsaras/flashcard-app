@@ -2,13 +2,15 @@ import SwiftUI
 
 /// A labeled editor field: a small caption above the field, with the text sitting in a
 /// clean rounded box (a step lighter than the page). The placeholder is native — it stays
-/// visible until you type. Supports a multi-line box via `lines` (a tidy text area).
+/// visible until you type. Supports a multi-line box via `lines` (a tidy text area), and an
+/// optional external focus binding so a form can drive focus (e.g. refocus after "Add & New").
 struct LabeledField: View {
     let label: String
     var placeholder: String = ""
     @Binding var text: String
     var axis: Axis = .horizontal
     var lines: ClosedRange<Int>? = nil
+    var focus: FocusState<Bool>.Binding? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -17,6 +19,7 @@ struct LabeledField: View {
                 .foregroundStyle(.secondary)
             field
                 .textFieldStyle(.plain)
+                .focused(ifPresent: focus)
                 .font(Typography.body)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -41,6 +44,12 @@ extension View {
     func fieldBox(cornerRadius: CGFloat = 10) -> some View {
         background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Theme.fieldSurface))
             .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).strokeBorder(Color.primary.opacity(0.10)))
+    }
+
+    /// Applies `.focused` only when a binding is supplied, so callers that don't manage focus
+    /// can omit it.
+    @ViewBuilder func focused(ifPresent binding: FocusState<Bool>.Binding?) -> some View {
+        if let binding { focused(binding) } else { self }
     }
 }
 

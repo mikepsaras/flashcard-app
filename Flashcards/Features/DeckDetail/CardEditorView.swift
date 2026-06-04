@@ -22,6 +22,7 @@ struct CardEditorView: View {
 
     @State private var term: String
     @State private var definition: String
+    @FocusState private var frontFocused: Bool
 
     init(deck: Deck, mode: CardEditorMode) {
         self.deck = deck
@@ -49,8 +50,20 @@ struct CardEditorView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    LabeledField(label: "Front", text: $term, axis: .vertical, lines: 1...4)
+                    LabeledField(label: "Front", text: $term, axis: .vertical, lines: 1...4, focus: $frontFocused)
                     LabeledField(label: "Back", text: $definition, axis: .vertical, lines: 3...10)
+
+                    // New cards only: save and immediately start a fresh blank card for fast
+                    // sequential entry (focus jumps back to Front).
+                    if !isEditing {
+                        Button { save(addAnother: true) } label: {
+                            Label("Add & Add Another", systemImage: "plus.circle")
+                                .font(Typography.callout)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(canSave ? Theme.accent : .secondary)
+                        .disabled(!canSave)
+                    }
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -65,13 +78,14 @@ struct CardEditorView: View {
                     Button(isEditing ? "Save" : "Add") { save() }.disabled(!canSave)
                 }
             }
+            .onAppear { if !isEditing { frontFocused = true } }
         }
         #if os(macOS)
-        .frame(width: 480, height: 440)
+        .frame(width: 480, height: 460)
         #endif
     }
 
-    private func save() {
+    private func save(addAnother: Bool = false) {
         let trimmedTerm = term.trimmingCharacters(in: .whitespacesAndNewlines)
         switch mode {
         case .new:
@@ -82,6 +96,13 @@ struct CardEditorView: View {
             card.modifiedAt = .now
         }
         context.saveAndPersist(touching: deck)
-        dismiss()
+        if addAnother {
+            // Keep the sheet open for the next card; reset and refocus the Front field.
+            term = ""
+            definition = ""
+            frontFocused = true
+        } else {
+            dismiss()
+        }
     }
 }
