@@ -100,13 +100,16 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   library; `SeedData` survives only for previews/snapshots). At launch `migrateLegacyExtension`
   renames any legacy `.deck` files to `.cards` in place (write-then-delete, never destructive).
 - `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review queue,
-  search, sort, duplicate, drag-drop import), `DeckDetail` (CRUD editors + **CSV
-  import/export** via `CSVCodec` + move-card + Reset Progress), `Study` (`StudySession`
+  search, sort, duplicate, drag-drop import), `DeckDetail` (CRUD editors + **bulk add**
+  (`BulkAddView` grid + "Add & Add Another") + multi-select / Return-to-open / bulk delete +
+  duplicate + move-card + Reset Progress; **JSON/CSV import/export gated behind Settings →
+  Advanced** via `CSVCodec`/`CardListCodec`), `Study` (`StudySession`
   `@Observable @MainActor` state machine over `ReviewItem`s — cards in a direction —
   full-screen UI driven by a `StudyPlan`, 2- or 4-button grading, keyboard shortcuts,
   single-pass review (a miss reschedules sooner, not re-queued), session-size cap;
   `StudyStats` tracks the daily streak), `AI`
-  (`AIGenerationView`), `Settings` (grading, session cap, opt-in `StudyReminders`).
+  (`AIGenerationView`), `Settings` (session cap, opt-in `StudyReminders`, an **Advanced** toggle
+  for JSON/CSV import/export, hidden developer tools).
 - `Flashcards/AI` — `CardGenerator` calls **OpenAI / Gemini / Anthropic** (per-provider
   `makeRequest` + `parse` in `Providers/`, tolerant JSON via `CardJSON`). API keys live in
   the **Keychain** (`KeychainStore`); provider/model in `@AppStorage`. `AIGenerationView`
@@ -114,8 +117,8 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   deck's ••• menu. **Live API calls can't be tested here** (need a real key) — the
   request/response codecs are unit-tested instead (`AIProviderTests`); do the end-to-end
   test in-app via **Settings → AI → Test connection**.
-- `Flashcards/DesignSystem` — `Theme`, `Typography`, components, and `AppIconArtwork`
-  (the icon is drawn in SwiftUI and rendered into the asset catalog).
+- `Flashcards/DesignSystem` — `Theme`, `Typography`, `Markdown` (inline-markdown card text),
+  components, and `AppIconArtwork` (the icon is drawn in SwiftUI and rendered into the asset catalog).
 - Everything touching SwiftData runs on `@MainActor` (Swift 6 strict concurrency).
 
 ## Storage (no database, no iCloud sync)
