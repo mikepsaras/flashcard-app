@@ -61,12 +61,14 @@ struct EUFlagTile: View {
             .frame(width: size, height: size)
             .overlay {
                 ForEach(0..<12, id: \.self) { i in
-                    // 12 stars evenly around a circle, starting at the top (12 o'clock).
+                    // 12 stars evenly around a circle, starting at the top (12 o'clock). Each Star
+                    // fills its own square and is offset from the tile's exact center, so the ring
+                    // is centered (an SF Symbol glyph's optical padding biased it slightly).
                     let angle = Double(i) / 12 * 2 * .pi - .pi / 2
-                    Image(systemName: "star.fill")
-                        .font(.system(size: size * 0.13))
-                        .foregroundStyle(gold)
-                        .offset(x: size * 0.30 * CGFloat(cos(angle)), y: size * 0.30 * CGFloat(sin(angle)))
+                    Star()
+                        .fill(gold)
+                        .frame(width: size * 0.15, height: size * 0.15)
+                        .offset(x: size * 0.32 * CGFloat(cos(angle)), y: size * 0.32 * CGFloat(sin(angle)))
                 }
             }
             .overlay {
@@ -74,5 +76,24 @@ struct EUFlagTile: View {
                     .strokeBorder(Color.white.opacity(selected ? 0.95 : 0), lineWidth: 2)
             }
             .accessibilityLabel("EU flag icon")
+    }
+}
+
+/// A five-pointed star (point up) that fills its rect — used for the EU-flag ring so every star is
+/// geometrically centered, unlike an SF Symbol glyph which carries optical padding.
+private struct Star: Shape {
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let outer = min(rect.width, rect.height) / 2
+        let inner = outer * 0.382   // standard 5-point star inner/outer radius ratio
+        var path = Path()
+        for i in 0..<10 {
+            let radius = i.isMultiple(of: 2) ? outer : inner
+            let angle = -CGFloat.pi / 2 + CGFloat(i) * .pi / 5
+            let point = CGPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
+            if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.closeSubpath()
+        return path
     }
 }

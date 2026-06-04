@@ -145,6 +145,25 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/24_deck_icons.png"))
     }
 
+    @Test func renderHeatmapRanges() throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let cal = Calendar.current
+        var reviews: [String: Int] = [:]
+        for offset in 0..<180 where offset % 5 != 0 {
+            reviews[StudyStats.dayKey(cal.date(byAdding: .day, value: -offset, to: now)!)] = (offset % 7) + 1
+        }
+        // 3M (cell 44) and 6M (cell 28) in a 900-wide card — should fill / center, not strip-left.
+        let view = VStack(spacing: 20) {
+            ActivityHeatmap(reviewsByDay: reviews, now: now, weekCap: 13, cell: 44)
+            ActivityHeatmap(reviewsByDay: reviews, now: now, weekCap: 26, cell: 28)
+        }
+        .frame(width: 900)
+        .padding(20)
+        .background(Theme.groupedBackground)
+        try Snapshot.write(view, size: CGSize(width: 940, height: 680), name: "25_heatmap_ranges")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/25_heatmap_ranges.png"))
+    }
+
     @Test func renderFourButtonStudyScreen() throws {
         let (container, _, plan) = try makeContext(fourButton: true)
         try Snapshot.write(

@@ -21,8 +21,8 @@ enum Theme {
     /// Insights bars read as a calm progression (echoing the activity heatmap's opacity steps)
     /// rather than three competing colors next to each deck's own swatch.
     enum Maturity {
-        static let new = Color.accentColor.opacity(0.30)
-        static let learning = Color.accentColor.opacity(0.58)
+        static let new = Color.accentColor.opacity(0.22)
+        static let learning = Color.accentColor.opacity(0.62)
         static let mature = Color.accentColor
     }
 

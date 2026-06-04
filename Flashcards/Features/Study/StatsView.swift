@@ -225,7 +225,7 @@ struct StatsContentView: View {
                 .controlSize(.small)
                 #endif
             }
-            ActivityHeatmap(reviewsByDay: reviewsByDay, now: now, weekCap: heatmapRange.weeks)
+            ActivityHeatmap(reviewsByDay: reviewsByDay, now: now, weekCap: heatmapRange.weeks, cell: heatmapRange.cellSize)
         }
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -436,6 +436,15 @@ enum HeatmapRange: Int, CaseIterable, Identifiable {
         case .year: "1Y"
         }
     }
+    /// Bigger cells for shorter ranges, so each range's grid fills the card rather than leaving a
+    /// strip of empty space.
+    var cellSize: CGFloat {
+        switch self {
+        case .threeMonths: 44
+        case .sixMonths: 28
+        case .year: 14
+        }
+    }
 }
 
 /// GitHub-style contribution grid: weeks of day cells, tinted by that day's review count. Fills
@@ -448,8 +457,10 @@ struct ActivityHeatmap: View {
     /// Upper bound on weeks shown, from the user's range pick (3M/6M/1Y); still clamped to whatever
     /// fits the width, so a narrow window never overflows.
     var weekCap = 53
+    /// Cell size — larger for shorter ranges so a 3M/6M grid fills its card instead of leaving a
+    /// strip of dead space (the range picker passes the matching size).
+    var cell: CGFloat = 13
 
-    private let cell: CGFloat = 13
     private let gap: CGFloat = 3
     private let maxWeeks = 53
 
@@ -475,11 +486,14 @@ struct ActivityHeatmap: View {
             // Scale colors to the user's busiest day. Computed once per render and threaded down —
             // not recomputed inside `color(_:)` for each of the ~371 cells.
             let maxCount = max(reviewsByDay.values.max() ?? 0, 1)
+            let gridWidth = CGFloat(weeks) * cell + CGFloat(weeks - 1) * gap
             VStack(alignment: .leading, spacing: 4) {
                 monthLabels(weeks: weeks, firstDay: firstDay)
                 grid(weeks: weeks, firstDay: firstDay, today: today, maxCount: maxCount)
                 legend
             }
+            .frame(width: gridWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)   // center the block (no left-side dead space)
         }
         .frame(height: 7 * cell + 6 * gap + 30)
         .accessibilityElement(children: .ignore)
@@ -713,9 +727,9 @@ struct MaturityBar: View {
     var body: some View {
         GeometryReader { geo in
             HStack(spacing: 0) {
-                segment(Theme.Maturity.new, new, geo.size.width)
-                segment(Theme.Maturity.learning, learning, geo.size.width)
-                segment(Theme.Maturity.mature, mature, geo.size.width)
+                segment(Theme.Maturity.new, new, "New", geo.size.width)
+                segment(Theme.Maturity.learning, learning, "Learning", geo.size.width)
+                segment(Theme.Maturity.mature, mature, "Mature", geo.size.width)
             }
         }
         .frame(height: 10)
@@ -723,8 +737,14 @@ struct MaturityBar: View {
         .clipShape(Capsule())
     }
 
-    private func segment(_ color: Color, _ count: Int, _ width: CGFloat) -> some View {
-        color.frame(width: width * CGFloat(count) / CGFloat(total))
+    /// One proportional segment. On macOS it carries a `.help` tooltip so hovering reveals that
+    /// band's count (e.g. "Learning: 12").
+    private func segment(_ color: Color, _ count: Int, _ label: String, _ width: CGFloat) -> some View {
+        color
+            .frame(width: width * CGFloat(count) / CGFloat(total))
+            #if os(macOS)
+            .help("\(label): \(count)")
+            #endif
     }
 }
 
