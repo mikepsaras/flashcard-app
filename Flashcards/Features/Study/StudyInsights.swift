@@ -143,24 +143,29 @@ struct StudyInsights: Equatable {
     private static func sectionStats(decks: [Deck], now: Date) -> [SectionStat] {
         var result: [SectionStat] = []
         for deck in decks where !deck.sectionOrder.isEmpty {
+            // Capture the deck's scalar fields (not the @Model itself) so the accumulator never has
+            // to "send" the non-Sendable Deck across isolation (Swift 6 strict concurrency, which the
+            // Release config flags even where Debug doesn't).
+            let deckID = deck.id.uuidString
+            let deckName = deck.displayName
+            let colorHex = deck.colorHex
             var byName: [String: SectionStat] = [:]
-            func bump(_ name: String, _ mutate: (inout SectionStat) -> Void) {
-                var stat = byName[name] ?? SectionStat(
-                    id: "\(deck.id.uuidString)-\(name)", deckName: deck.displayName, colorHex: deck.colorHex,
-                    section: name, totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
-                mutate(&stat)
-                byName[name] = stat
+            func slot(_ name: String) -> SectionStat {
+                byName[name] ?? SectionStat(id: "\(deckID)-\(name)", deckName: deckName, colorHex: colorHex,
+                                            section: name, totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
             }
             for card in deck.cardArray {
-                bump(card.section) { stat in
-                    stat.totalCards += 1
-                    if !card.hasBeenReviewed { stat.newCount += 1 }
-                    else if max(card.interval, card.reverseInterval) >= matureIntervalDays { stat.matureCount += 1 }
-                    else { stat.learningCount += 1 }
-                }
+                var stat = slot(card.section)
+                stat.totalCards += 1
+                if !card.hasBeenReviewed { stat.newCount += 1 }
+                else if max(card.interval, card.reverseInterval) >= matureIntervalDays { stat.matureCount += 1 }
+                else { stat.learningCount += 1 }
+                byName[card.section] = stat
             }
             for item in deck.allReviewItems where item.dueDate <= now {
-                bump(item.card.section) { $0.due += 1 }
+                var stat = slot(item.card.section)
+                stat.due += 1
+                byName[item.card.section] = stat
             }
             for name in deck.sectionOrder + [""] {
                 if let stat = byName[name], stat.totalCards > 0 { result.append(stat) }
