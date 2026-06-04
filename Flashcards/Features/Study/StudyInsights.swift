@@ -19,6 +19,18 @@ struct StudyInsights: Equatable {
     var accuracyLastWeek: Double?
     /// Total correct reviews all-time (the numerator behind accuracyAllTime).
     var correctAllTime = 0
+    /// Estimated mean recall *right now* across reviewed cards, from each card's schedule via a
+    /// 90%-at-due forgetting curve; `nil` when nothing has been reviewed yet. Distinct from
+    /// `accuracyAllTime` (a historical pass rate) — this is a current-state memory estimate.
+    var predictedRetention: Double?
+    /// Reviewed review-units (card × scheduled direction) backing `predictedRetention`.
+    var scheduledUnits = 0
+    /// Measured pass rate on *mature* cards (Anki's "true retention"); `nil` until a mature card is
+    /// reviewed (the log starts empty and fills as you study). All-time.
+    var trueRetention: Double?
+    /// Mature reviews logged and their correct subset (the denominator / numerator of trueRetention).
+    var matureReviewCount = 0
+    var matureCorrectCount = 0
     var totalCards = 0
     var newCount = 0
     var learningCount = 0
@@ -62,12 +74,18 @@ struct StudyInsights: Equatable {
     static let matureIntervalDays = 21
     /// How many days of upcoming due cards the forecast covers.
     static let forecastDays = 14
+    /// Target recall at a card's due date — the SM-2/SuperMemo convention behind predicted recall:
+    /// estimated recall decays as `targetRetentionAtDue^(daysSinceReview / interval)`, hitting this
+    /// at the due date (and falling below it once overdue).
+    static let targetRetentionAtDue = 0.9
 
     @MainActor
     static func make(
         decks: [Deck],
         reviewsByDay: [String: Int],
         correctByDay: [String: Int],
+        matureByDay: [String: Int] = [:],
+        matureCorrectByDay: [String: Int] = [:],
         now: Date = .now,
         calendar: Calendar = .current
     ) -> StudyInsights {
@@ -98,6 +116,12 @@ struct StudyInsights: Equatable {
         insights.accuracyThisWeek = ratio(sum(correctByDay, thisWeek), insights.reviewsThisWeek)
         insights.accuracyLastWeek = ratio(sum(correctByDay, lastWeek), insights.reviewsLastWeek)
 
+        // True retention — measured pass rate on mature cards (Anki's convention), all-time. `nil`
+        // until the (initially empty) mature log has data.
+        insights.matureReviewCount = matureByDay.values.reduce(0, +)
+        insights.matureCorrectCount = matureCorrectByDay.values.reduce(0, +)
+        insights.trueRetention = ratio(insights.matureCorrectCount, insights.matureReviewCount)
+
         let activeDays = reviewsByDay.values.filter { $0 > 0 }.count
         insights.dailyAverage = activeDays > 0
             ? Int((Double(insights.reviewsAllTime) / Double(activeDays)).rounded()) : 0
@@ -108,6 +132,9 @@ struct StudyInsights: Equatable {
         let weekAhead = calendar.date(byAdding: .day, value: 7, to: now) ?? now
         let startToday = calendar.startOfDay(for: now)
         var forecast = Array(repeating: 0, count: forecastDays)
+        // Predicted-recall accumulators (mean of 0.9^(elapsed/interval) over reviewed units).
+        var retentionSum = 0.0
+        var retentionUnits = 0
         for deck in decks {
             var stat = DeckStat(id: deck.id, name: deck.displayName, colorHex: deck.colorHex,
                                 totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
@@ -146,6 +173,16 @@ struct StudyInsights: Equatable {
                     let dueDay = calendar.startOfDay(for: due)
                     let offset = max(0, calendar.dateComponents([.day], from: startToday, to: dueDay).day ?? 0)
                     if offset < forecastDays { forecast[offset] += 1 }
+
+                    // Predicted recall now for this scheduled unit: 0.9^(daysSinceReview / interval),
+                    // i.e. ~90% at the due date, decaying past it. Only reviewed units contribute
+                    // (a never-seen card has nothing to recall). Interval floored at 1 day.
+                    if let last = card.lastReviewedAt(direction) {
+                        let intervalDays = Double(max(direction == .forward ? card.interval : card.reverseInterval, 1))
+                        let elapsed = max(now.timeIntervalSince(last) / 86_400, 0)
+                        retentionSum += pow(targetRetentionAtDue, elapsed / intervalDays)
+                        retentionUnits += 1
+                    }
                 }
 
                 if usesSections {
@@ -167,6 +204,8 @@ struct StudyInsights: Equatable {
             }
         }
         insights.dueForecast = forecast
+        insights.scheduledUnits = retentionUnits
+        insights.predictedRetention = retentionUnits > 0 ? retentionSum / Double(retentionUnits) : nil
         return insights
     }
 }

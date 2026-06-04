@@ -159,11 +159,23 @@ struct SnapshotGalleryTests {
         for (i, card) in decks.flatMap({ $0.cardArray }).enumerated() {
             card.dueDate = cal.date(byAdding: .day, value: i % 10, to: now) ?? now
             if i % 3 != 0 {
-                card.lastReviewedAt = now
+                // Back-date the last review across a spread of days so predicted recall varies and
+                // dips below 100% (rather than every card reading as just-reviewed).
+                card.lastReviewedAt = now.addingTimeInterval(Double(-(i % 12)) * 86_400)
                 card.interval = [2, 8, 25, 40][i % 4]
             }
         }
-        let insights = StudyInsights.make(decks: decks, reviewsByDay: reviews, correctByDay: correct, now: now)
+        // A mature-review log (a subset of the totals, mostly correct) so "true retention" renders.
+        var matureReviews: [String: Int] = [:]
+        var matureCorrect: [String: Int] = [:]
+        for (day, n) in reviews {
+            let m = max(n / 2, 1)
+            matureReviews[day] = m
+            matureCorrect[day] = max(0, m - (n >= 7 ? 1 : 0))   // a few misses on the busiest days
+        }
+        let insights = StudyInsights.make(
+            decks: decks, reviewsByDay: reviews, correctByDay: correct,
+            matureByDay: matureReviews, matureCorrectByDay: matureCorrect, now: now)
         try Snapshot.write(
             StatsContentView(insights: insights, reviewsByDay: reviews, now: now)
                 .padding(Theme.Spacing.m)

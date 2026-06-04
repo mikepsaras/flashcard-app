@@ -11,6 +11,11 @@ enum StudyStats {
     /// Correct reviews each day, by day-key — a parallel store so accuracy / retention can be
     /// derived without migrating the existing reviews log.
     static let correctStorageKey = "reviewCorrectByDay"
+    /// Mature-card reviews each day (interval ≥ the mature threshold *at review time*), plus the
+    /// correct subset — two more parallel stores backing Anki-style "true retention" (mature pass
+    /// rate). Kept separate so they need no model/file change and start empty (filling as you study).
+    static let matureStorageKey = "reviewMatureByDay"
+    static let matureCorrectStorageKey = "reviewMatureCorrectByDay"
     /// Bumped whenever the logs are cleared (reset), so views that read raw UserDefaults rather
     /// than `@AppStorage` re-render. Study sessions already re-render on their own when they end.
     static let revisionKey = "studyStatsRevision"
@@ -34,25 +39,38 @@ enum StudyStats {
         defaults.set(d, forKey: key)
     }
 
-    /// Records one graded card against today (and, when `correct`, the correct tally too).
-    /// `defaults` is injectable so tests use an isolated suite and never mutate the app's real
-    /// data (the test host shares `.standard`).
-    static func recordReview(correct: Bool, now: Date = .now, defaults: UserDefaults = .standard) {
+    /// Records one graded card against today (and, when `correct`, the correct tally too). When
+    /// `mature` — the card had already graduated (interval ≥ mature threshold) at review time — it
+    /// also feeds the separate mature tallies behind "true retention". `defaults` is injectable so
+    /// tests use an isolated suite and never mutate the app's real data (the test host shares
+    /// `.standard`).
+    static func recordReview(correct: Bool, mature: Bool = false, now: Date = .now, defaults: UserDefaults = .standard) {
         bump(storageKey, now: now, by: 1, defaults: defaults)
         if correct { bump(correctStorageKey, now: now, by: 1, defaults: defaults) }
+        if mature {
+            bump(matureStorageKey, now: now, by: 1, defaults: defaults)
+            if correct { bump(matureCorrectStorageKey, now: now, by: 1, defaults: defaults) }
+        }
     }
 
     /// Reverses one recorded review for today (used when a grade is undone) so a grade-then-undo
-    /// can't inflate "reviewed today", accuracy, or the streak. Mirror of `recordReview`.
-    static func unrecordReview(correct: Bool, now: Date = .now, defaults: UserDefaults = .standard) {
+    /// can't inflate "reviewed today", accuracy, retention, or the streak. Mirror of `recordReview`
+    /// — pass the same `mature` flag the grade was recorded with.
+    static func unrecordReview(correct: Bool, mature: Bool = false, now: Date = .now, defaults: UserDefaults = .standard) {
         bump(storageKey, now: now, by: -1, defaults: defaults)
         if correct { bump(correctStorageKey, now: now, by: -1, defaults: defaults) }
+        if mature {
+            bump(matureStorageKey, now: now, by: -1, defaults: defaults)
+            if correct { bump(matureCorrectStorageKey, now: now, by: -1, defaults: defaults) }
+        }
     }
 
-    /// Clears all recorded study history — streak, reviews, and accuracy.
+    /// Clears all recorded study history — streak, reviews, accuracy, and retention.
     static func reset(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: storageKey)
         defaults.removeObject(forKey: correctStorageKey)
+        defaults.removeObject(forKey: matureStorageKey)
+        defaults.removeObject(forKey: matureCorrectStorageKey)
         defaults.set(defaults.integer(forKey: revisionKey) + 1, forKey: revisionKey)
     }
 
@@ -64,6 +82,9 @@ enum StudyStats {
     static func reviewsByDay(defaults: UserDefaults = .standard) -> [String: Int] { dict(storageKey, defaults) }
     /// Full day-key → correct-reviews map (for accuracy / retention).
     static func correctByDay(defaults: UserDefaults = .standard) -> [String: Int] { dict(correctStorageKey, defaults) }
+    /// Full day-key → mature-review map and its correct subset (for "true retention").
+    static func matureReviewsByDay(defaults: UserDefaults = .standard) -> [String: Int] { dict(matureStorageKey, defaults) }
+    static func matureCorrectByDay(defaults: UserDefaults = .standard) -> [String: Int] { dict(matureCorrectStorageKey, defaults) }
 
     static func currentStreak(now: Date = .now, defaults: UserDefaults = .standard) -> Int {
         streak(in: dict(storageKey, defaults), asOf: now)

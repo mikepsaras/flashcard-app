@@ -167,4 +167,56 @@ final class StudyInsightsTests {
         #expect(verbs.due == 1)
         #expect(s.sections.first { $0.section == "Nouns" }?.learningCount == 1)
     }
+
+    // MARK: Retention
+
+    @Test func predictedRetentionFollowsForgettingCurveAtDueDate() {
+        let deck = makeDeck()
+        let card = addCard(to: deck, reviewed: true, interval: 10)
+        card.lastReviewedAt = now.addingTimeInterval(-10 * 86_400)   // reviewed exactly one interval ago
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.scheduledUnits == 1)
+        // 0.9^(elapsed/interval) = 0.9^(10/10) = 0.9 right at the due date.
+        #expect(abs((s.predictedRetention ?? 0) - 0.9) < 0.0001)
+    }
+
+    @Test func predictedRetentionIsFullRightAfterReview() {
+        let deck = makeDeck()
+        addCard(to: deck, reviewed: true, interval: 5)   // lastReviewedAt == now ⇒ elapsed 0 ⇒ 0.9^0 = 1
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.predictedRetention == 1.0)
+    }
+
+    @Test func predictedRetentionNilWhenNothingReviewed() {
+        let deck = makeDeck()
+        addCard(to: deck, reviewed: false)
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.predictedRetention == nil)
+        #expect(s.scheduledUnits == 0)
+    }
+
+    @Test func predictedRetentionCountsBothDirectionsWhenReversed() {
+        let deck = makeDeck(studyReversed: true)
+        addCard(to: deck, reviewed: true, interval: 5, reverseInterval: 30)   // both directions reviewed
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.scheduledUnits == 2)   // forward + reverse each contribute a unit
+    }
+
+    @Test func trueRetentionFromMatureLogs() {
+        let deck = makeDeck()
+        let s = StudyInsights.make(
+            decks: [deck], reviewsByDay: [:], correctByDay: [:],
+            matureByDay: [key(0): 7, key(-1): 3], matureCorrectByDay: [key(0): 6, key(-1): 3],
+            now: now, calendar: cal)
+        #expect(s.matureReviewCount == 10)
+        #expect(s.matureCorrectCount == 9)
+        #expect(s.trueRetention == 0.9)
+    }
+
+    @Test func trueRetentionNilWithoutMatureReviews() {
+        let deck = makeDeck()
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.trueRetention == nil)
+        #expect(s.matureReviewCount == 0)
+    }
 }

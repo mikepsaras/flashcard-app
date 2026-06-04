@@ -185,11 +185,14 @@ struct StudySessionView: View {
     // MARK: Actions
 
     private func performGrade(_ grade: Grade) {
+        // Capture maturity from the *pre-grade* schedule (before grade() advances the card) so the
+        // "true retention" tally buckets by the card's maturity at review time, Anki-style.
+        let wasMature = currentIsMature()
         session.grade(grade)
         // Practice runs (nothing due) don't advance schedules, and must not feed the daily
         // review count / accuracy / streak either — otherwise "Study Again" or studying an
         // already-caught-up deck would keep a streak alive with nothing actually due.
-        if !session.isPractice { StudyStats.recordReview(correct: grade.isCorrect) }
+        if !session.isPractice { StudyStats.recordReview(correct: grade.isCorrect, mature: wasMature) }
         #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(grade.isCorrect ? .success : .warning)
         #endif
@@ -198,8 +201,19 @@ struct StudySessionView: View {
     private func performUndo() {
         guard let undone = session.undo() else { return }
         // Mirror performGrade: only real (non-practice) reviews were recorded, so only those are
-        // reversed — and with the same correctness — keeping the count / accuracy / streak honest.
-        if !session.isPractice { StudyStats.unrecordReview(correct: undone.isCorrect) }
+        // reversed — and with the same correctness + maturity — keeping the count / accuracy /
+        // retention / streak honest. After undo, `session.current` is the restored (pre-grade)
+        // item again, so its maturity matches what `recordReview` saw.
+        if !session.isPractice { StudyStats.unrecordReview(correct: undone.isCorrect, mature: currentIsMature()) }
+    }
+
+    /// Whether `session.current` is a *mature* review unit — its direction's interval is at or past
+    /// the mature threshold. Read before grading (and after undo, when the item is restored), so it
+    /// reflects the schedule as it stood when the card came up for review.
+    private func currentIsMature() -> Bool {
+        guard let item = session.current else { return false }
+        let interval = item.direction == .forward ? item.card.interval : item.card.reverseInterval
+        return interval >= StudyInsights.matureIntervalDays
     }
 
     private func finish() {

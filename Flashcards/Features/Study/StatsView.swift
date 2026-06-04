@@ -16,7 +16,9 @@ struct StatsView: View {
         let insights = StudyInsights.make(
             decks: decks,
             reviewsByDay: reviews,
-            correctByDay: StudyStats.correctByDay()
+            correctByDay: StudyStats.correctByDay(),
+            matureByDay: StudyStats.matureReviewsByDay(),
+            matureCorrectByDay: StudyStats.matureCorrectByDay()
         )
         Group {
             if insights.totalCards == 0 && insights.reviewsAllTime == 0 {
@@ -87,6 +89,7 @@ struct StatsContentView: View {
             ) {
                 ForEach(stats) { tile($0) }
             }
+            if insights.predictedRetention != nil || insights.trueRetention != nil { retentionCard }
             forecastCard
             heatmapCard
             if !insights.perDeck.isEmpty { perDeckCard }
@@ -138,6 +141,55 @@ struct StatsContentView: View {
         insights.dueThisWeek > 0
             ? "\(insights.dueThisWeek) review\(insights.dueThisWeek == 1 ? "" : "s") due in the next 7 days"
             : "Nothing due in the next 7 days"
+    }
+
+    /// Predicted recall *now* (estimated from each card's schedule) beside measured *mature*
+    /// retention (Anki's "true retention"). They answer different questions — "how much would I
+    /// recall right now" vs. "when a graduated card comes due, how often do I still get it" — so
+    /// they sit together, clearly labeled, rather than being mistaken for the Accuracy tile.
+    private var retentionCard: some View {
+        card("Memory retention") {
+            HStack(alignment: .top, spacing: Theme.Spacing.l) {
+                retentionStat(
+                    percent(insights.predictedRetention), "Predicted recall now",
+                    insights.scheduledUnits > 0
+                        ? "across \(insights.scheduledUnits) scheduled card\(insights.scheduledUnits == 1 ? "" : "s")"
+                        : "no cards scheduled yet",
+                    insights.predictedRetention)
+                Divider().frame(height: 48)
+                retentionStat(
+                    percent(insights.trueRetention), "Mature retention",
+                    insights.matureReviewCount > 0
+                        ? "\(insights.matureCorrectCount) / \(insights.matureReviewCount) mature reviews correct"
+                        : "study mature cards to see this",
+                    insights.trueRetention)
+            }
+        }
+    }
+
+    private func retentionStat(_ value: String, _ label: String, _ detail: String, _ source: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .monospacedDigit().foregroundStyle(retentionTint(source))
+                .lineLimit(1).minimumScaleFactor(0.6)
+            Text(label).font(Typography.caption).foregroundStyle(.primary)
+            Text(detail).font(.system(size: 11, design: .rounded)).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value). \(detail).")
+    }
+
+    /// Green when retention is strong, amber when it's slipping — a quick read on memory health.
+    /// Unmeasured (`nil`) is neutral grey so an empty mature stat doesn't look alarming.
+    private func retentionTint(_ value: Double?) -> Color {
+        guard let value else { return .secondary }
+        switch value {
+        case 0.9...:    return Theme.success
+        case 0.8..<0.9: return Theme.accent
+        default:        return .orange
+        }
     }
 
     private var heatmapCard: some View {

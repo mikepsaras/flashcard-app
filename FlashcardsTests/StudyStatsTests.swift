@@ -124,6 +124,32 @@ import Foundation
         }
     }
 
+    // MARK: Mature reviews (true-retention tallies)
+
+    @Test func matureReviewsTrackedSeparatelyFromTotals() {
+        withIsolatedDefaults { defaults in
+            StudyStats.recordReview(correct: true,  mature: true,  now: now, defaults: defaults)  // mature hit
+            StudyStats.recordReview(correct: false, mature: true,  now: now, defaults: defaults)  // mature miss
+            StudyStats.recordReview(correct: true,  mature: false, now: now, defaults: defaults)  // young hit
+            let day = StudyStats.dayKey(now)
+            #expect(StudyStats.reviewsByDay(defaults: defaults)[day] == 3)        // every review
+            #expect(StudyStats.correctByDay(defaults: defaults)[day] == 2)        // both hits
+            #expect(StudyStats.matureReviewsByDay(defaults: defaults)[day] == 2)  // only the mature two
+            #expect(StudyStats.matureCorrectByDay(defaults: defaults)[day] == 1)  // only the mature hit
+        }
+    }
+
+    @Test func unrecordMatureReviewMirrorsRecord() {
+        withIsolatedDefaults { defaults in
+            StudyStats.recordReview(correct: true, mature: true, now: now, defaults: defaults)
+            StudyStats.unrecordReview(correct: true, mature: true, now: now, defaults: defaults)
+            let day = StudyStats.dayKey(now)
+            #expect(StudyStats.matureReviewsByDay(defaults: defaults)[day] == nil)  // removed at zero
+            #expect(StudyStats.matureCorrectByDay(defaults: defaults)[day] == nil)
+            #expect(StudyStats.reviewsByDay(defaults: defaults)[day] == nil)        // and the totals too
+        }
+    }
+
     @Test func longestStreakFindsMaxRun() {
         // A 3-day run (0, -1, -2) and a separate 2-day run (-5, -6) ⇒ longest is 3.
         let log = [key(0): 1, key(-1): 1, key(-2): 1, key(-5): 2, key(-6): 1]
@@ -137,11 +163,13 @@ import Foundation
 
     @Test func resetClearsAllHistory() {
         withIsolatedDefaults { defaults in
-            StudyStats.recordReview(correct: true, now: now, defaults: defaults)
+            StudyStats.recordReview(correct: true, mature: true, now: now, defaults: defaults)
             StudyStats.recordReview(correct: false, now: now, defaults: defaults)
             StudyStats.reset(defaults: defaults)
             #expect(StudyStats.reviewsByDay(defaults: defaults).isEmpty)
             #expect(StudyStats.correctByDay(defaults: defaults).isEmpty)
+            #expect(StudyStats.matureReviewsByDay(defaults: defaults).isEmpty)
+            #expect(StudyStats.matureCorrectByDay(defaults: defaults).isEmpty)
             #expect(StudyStats.currentStreak(now: now, defaults: defaults) == 0)
         }
     }
