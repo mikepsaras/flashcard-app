@@ -2,6 +2,22 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+/// One row of the flattened card list. Flattening the sections into a single `ForEach` is what lets
+/// `.onMove` drag a card *across* section boundaries (SwiftUI's per-`Section` `ForEach` can't) — the
+/// card's section is recomputed from where it lands. This mirrors how Reminders' list is built.
+private enum CardListRow: Identifiable {
+    case header(String)   // section name ("" = the unsectioned area)
+    case empty(String)    // an empty section's drop hint
+    case card(Card)
+    var id: String {
+        switch self {
+        case .header(let name): "h-\(name.isEmpty ? "\u{0}cards" : name)"
+        case .empty(let name): "e-\(name.isEmpty ? "\u{0}cards" : name)"
+        case .card(let card): "c-\(card.id.uuidString)"
+        }
+    }
+}
+
 struct DeckDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var deck: Deck
@@ -52,6 +68,14 @@ struct DeckDetailView: View {
             let cards = filteredCards(group.cards)
             if cardSearch.isEmpty { return Deck.SectionGroup(name: group.name, cards: cards) }
             return cards.isEmpty ? nil : Deck.SectionGroup(name: group.name, cards: cards)
+        }
+    }
+
+    /// The display groups flattened into a single row list (header, then its cards or an empty hint),
+    /// so one `ForEach` + `.onMove` can drag cards within *and* between sections.
+    private var flatRows: [CardListRow] {
+        displayGroups.flatMap { group -> [CardListRow] in
+            [.header(group.name)] + (group.cards.isEmpty ? [.empty(group.name)] : group.cards.map(CardListRow.card))
         }
     }
 
@@ -318,22 +342,27 @@ struct DeckDetailView: View {
             } else if !cardSearch.isEmpty && displayGroups.isEmpty {
                 emptyRow("No cards match “\(cardSearch)”.")
             } else {
-                ForEach(displayGroups) { group in
-                    Section {
-                        ForEach(group.cards) { card in cardRow(card) }
-                            .onDelete { offsets in deleteCards(offsets, in: group.cards) }
-                            .onMove { source, destination in
-                                moveCardsInSection(group.name, from: source, to: destination)
-                            }
-                        if group.cards.isEmpty {
-                            Text("No cards in this section yet — move cards here from their ••• menu.")
-                                .font(Typography.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } header: {
-                        sectionHeader(group)
+                // One ForEach over the flattened rows, so the native drag can move a card across
+                // section boundaries. Headers/hints are pinned; a moved card's section is recomputed
+                // from where it landed (see moveFlat) — exactly how Reminders behaves.
+                ForEach(flatRows) { row in
+                    switch row {
+                    case .header(let name):
+                        flatSectionHeader(name)
+                            .moveDisabled(true)
+                            .deleteDisabled(true)
+                    case .empty:
+                        Text("No cards yet — drag a card here, or use a card's ••• menu.")
+                            .font(Typography.caption)
+                            .foregroundStyle(.secondary)
+                            .moveDisabled(true)
+                            .deleteDisabled(true)
+                    case .card(let card):
+                        cardRow(card)
                     }
                 }
+                .onMove { source, destination in moveFlat(from: source, to: destination) }
+                .onDelete { offsets in deleteFlat(offsets) }
             }
         }
         #if os(iOS)
@@ -354,6 +383,9 @@ struct DeckDetailView: View {
         CardRowView(card: card)
             .contentShape(Rectangle())
             .tag(card.id)
+            #if os(macOS)
+            .pointerStyle(.link)   // pointing-hand cursor on hover — the row is click-to-edit
+            #endif
             .contextMenu {
             Button { cardEditor = .edit(card) } label: { Label("Edit", systemImage: "pencil") }
             Divider()
@@ -379,28 +411,32 @@ struct DeckDetailView: View {
         }
     }
 
-    @ViewBuilder private func sectionHeader(_ group: Deck.SectionGroup) -> some View {
-        if group.isUnsectioned {
-            Text("Cards")
-        } else {
-            HStack {
-                Text(group.name)
-                Spacer()
+    /// A section header rendered as a row in the flattened list (styled to read like a `Section`
+    /// header). `name == ""` is the unsectioned area.
+    @ViewBuilder private func flatSectionHeader(_ name: String) -> some View {
+        HStack(spacing: 6) {
+            Text(name.isEmpty ? "Cards" : name)
+                .font(.system(.title3, design: .rounded, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            if !name.isEmpty {
                 Menu {
-                    Button { startRenameSection(group.name) } label: { Label("Rename", systemImage: "pencil") }
-                    Button { moveSection(group.name, by: -1) } label: { Label("Move Up", systemImage: "arrow.up") }
-                        .disabled(deck.sectionOrder.first == group.name)
-                    Button { moveSection(group.name, by: 1) } label: { Label("Move Down", systemImage: "arrow.down") }
-                        .disabled(deck.sectionOrder.last == group.name)
+                    Button { startRenameSection(name) } label: { Label("Rename", systemImage: "pencil") }
+                    Button { moveSection(name, by: -1) } label: { Label("Move Up", systemImage: "arrow.up") }
+                        .disabled(deck.sectionOrder.first == name)
+                    Button { moveSection(name, by: 1) } label: { Label("Move Down", systemImage: "arrow.down") }
+                        .disabled(deck.sectionOrder.last == name)
                     Divider()
-                    Button(role: .destructive) { deleteSection(group.name) } label: { Label("Delete Section", systemImage: "trash") }
+                    Button(role: .destructive) { deleteSection(name) } label: { Label("Delete Section", systemImage: "trash") }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "ellipsis.circle").foregroundStyle(.secondary)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
         }
+        .padding(.top, 10)
+        .listRowSeparator(.hidden)
     }
 
     private func emptyRow(_ text: String) -> some View {
@@ -409,8 +445,38 @@ struct DeckDetailView: View {
         }
     }
 
-    private func deleteCards(_ offsets: IndexSet, in cards: [Card]) {
-        for index in offsets { context.delete(cards[index]) }
+    private func deleteFlat(_ offsets: IndexSet) {
+        let rows = flatRows
+        var deleted = false
+        for index in offsets where index < rows.count {
+            if case .card(let card) = rows[index] { context.delete(card); deleted = true }
+        }
+        if deleted { context.saveAndPersist(touching: deck) }
+    }
+
+    /// Apply an `.onMove` over the flattened rows: move the card, then recompute every card's section
+    /// (the nearest preceding header) and its order within that section. This is what turns a single
+    /// native drag into both within- and cross-section moves.
+    private func moveFlat(from source: IndexSet, to destination: Int) {
+        guard cardSearch.isEmpty else { return }   // order is ambiguous while filtering
+        var rows = flatRows
+        rows.move(fromOffsets: source, toOffset: destination)
+        var currentSection = ""
+        var orderInSection: [String: Int] = [:]
+        for row in rows {
+            switch row {
+            case .header(let name): currentSection = name
+            case .empty: break
+            case .card(let card):
+                let order = orderInSection[currentSection, default: 0]
+                orderInSection[currentSection] = order + 1
+                if card.section != currentSection || card.sortOrder != order {
+                    card.section = currentSection
+                    card.sortOrder = order
+                    card.modifiedAt = .now
+                }
+            }
+        }
         context.saveAndPersist(touching: deck)
     }
 
@@ -435,14 +501,6 @@ struct DeckDetailView: View {
         card.section = name
         card.sortOrder = deck.nextSortOrder(inSection: name)
         card.modifiedAt = .now
-        context.saveAndPersist(touching: deck)
-    }
-
-    /// Native list reorder within a section (drag-to-reorder). The reorder lives on `Deck`
-    /// (unit-tested); this persists. Ignored while searching, where the row indices are filtered.
-    private func moveCardsInSection(_ section: String, from source: IndexSet, to destination: Int) {
-        guard cardSearch.isEmpty else { return }
-        deck.moveCards(inSection: section, from: source, to: destination)
         context.saveAndPersist(touching: deck)
     }
 
