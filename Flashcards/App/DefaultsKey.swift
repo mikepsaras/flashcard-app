@@ -5,8 +5,6 @@ import Foundation
 /// feature — `AIProvider.selectedProviderKey`, `StudyStats.storageKey`, `GradingMode.storageKey` —
 /// and stay there.)
 enum DefaultsKey {
-    /// Study: whether grading advances the spaced-repetition schedule.
-    static let trackLearning = "trackLearning"
     /// Study: max cards per session (0 = unlimited).
     static let studySessionLimit = "studySessionLimit"
     /// Library: deck sort order (a `DeckSort` raw value).

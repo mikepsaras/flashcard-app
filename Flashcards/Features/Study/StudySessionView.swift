@@ -11,14 +11,14 @@ struct StudySessionView: View {
     let onClose: () -> Void
 
     @Environment(\.modelContext) private var context
-    @AppStorage(DefaultsKey.trackLearning) private var trackLearning = true
     @State private var session: StudySession
 
     init(plan: StudyPlan, onClose: @escaping () -> Void) {
         self.plan = plan
         self.onClose = onClose
-        let track = UserDefaults.standard.object(forKey: DefaultsKey.trackLearning) as? Bool ?? true
-        _session = State(initialValue: StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: track))
+        // Grading always advances the spaced-repetition schedule for due cards; the engine still
+        // skips rescheduling in Practice mode (nothing due), so caught-up review is safe.
+        _session = State(initialValue: StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: true))
     }
 
     private var accent: Color { plan.accent }
@@ -49,7 +49,6 @@ struct StudySessionView: View {
             .background(Theme.windowBackground)
             .background(keyboardControls)
         }
-        .onChange(of: trackLearning) { _, newValue in session.trackLearning = newValue }
     }
 
     // MARK: Top bar
@@ -66,7 +65,7 @@ struct StudySessionView: View {
                     .buttonStyle(.plain)
                     .help("Shuffle remaining cards")
                     .accessibilityLabel("Shuffle remaining cards")
-                trackLearningItem(compact: compact)
+                practiceBadge(compact: compact)
             }
             if let exportText = plan.exportText {
                 ShareLink(item: exportText) { Image(systemName: "square.and.arrow.up") }
@@ -83,9 +82,9 @@ struct StudySessionView: View {
         .padding(.vertical, Theme.Spacing.s)
     }
 
-    /// Track-learning control for the toolbar: a labeled pill toggle, an icon toggle on a tight
-    /// (compact) toolbar, or a "Practice" badge when nothing's due (schedules won't change).
-    @ViewBuilder private func trackLearningItem(compact: Bool) -> some View {
+    /// A quiet "Practice" badge shown when nothing's due — grades won't change the schedule. (There's
+    /// no track-learning toggle: due cards always reschedule, which is what spaced repetition is for.)
+    @ViewBuilder private func practiceBadge(compact: Bool) -> some View {
         if session.isPractice {
             HStack(spacing: 6) {
                 Image(systemName: "graduationcap.fill").font(.system(size: 12))
@@ -98,27 +97,6 @@ struct StudySessionView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Practice mode")
             .accessibilityHint("Nothing is due, so your review schedule won't change")
-        } else if compact {
-            Button { trackLearning.toggle() } label: {
-                Image(systemName: trackLearning ? "graduationcap.fill" : "graduationcap")
-                    .foregroundStyle(trackLearning ? Theme.accent : Color.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Track learning")
-            .accessibilityLabel("Track learning")
-            .accessibilityValue(trackLearning ? "On" : "Off")
-        } else {
-            HStack(spacing: 7) {
-                Image(systemName: "graduationcap.fill").font(.system(size: 12))
-                Text("Track learning").font(.system(size: 12, weight: .medium, design: .rounded))
-                CompactSwitch(isOn: $trackLearning)
-            }
-            .foregroundStyle(.secondary)
-            .padding(.leading, 10).padding(.trailing, 6).padding(.vertical, 4)
-            .background(Color.primary.opacity(0.05), in: Capsule())
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Track learning")
-            .accessibilityValue(trackLearning ? "On" : "Off")
         }
     }
 
@@ -273,7 +251,7 @@ struct StudySessionView: View {
     }
 
     private func restart() {
-        session = StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: trackLearning)
+        session = StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: true)
     }
 
     /// Applies the "cards per session" setting (0 ⇒ unlimited). The cap logic lives on
