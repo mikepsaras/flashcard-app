@@ -30,12 +30,27 @@ struct StudyInsights: Equatable {
     var dueForecast: [Int] = []
     /// Per-deck breakdown for the "where to focus" table, in deck order.
     var perDeck: [DeckStat] = []
+    /// Per-section breakdown (only for decks that use sections), for the "By section" table.
+    var sections: [SectionStat] = []
 
     /// One deck's at-a-glance composition for the per-deck breakdown.
     struct DeckStat: Equatable, Identifiable {
         var id: UUID
         var name: String
         var colorHex: String
+        var totalCards: Int
+        var due: Int
+        var newCount: Int
+        var learningCount: Int
+        var matureCount: Int
+    }
+
+    /// One section's composition (within its deck) for the per-section breakdown.
+    struct SectionStat: Equatable, Identifiable {
+        var id: String
+        var deckName: String
+        var colorHex: String
+        var section: String          // "" ⇒ the deck's unsectioned cards
         var totalCards: Int
         var due: Int
         var newCount: Int
@@ -118,6 +133,39 @@ struct StudyInsights: Equatable {
             insights.perDeck.append(stat)
         }
         insights.dueForecast = forecast
+        insights.sections = sectionStats(decks: decks, now: now)
         return insights
+    }
+
+    /// Per-section composition for decks that use sections (`sectionOrder` non-empty). Sections are
+    /// listed in the deck's own order, unsectioned cards last; sections with no cards are omitted.
+    @MainActor
+    private static func sectionStats(decks: [Deck], now: Date) -> [SectionStat] {
+        var result: [SectionStat] = []
+        for deck in decks where !deck.sectionOrder.isEmpty {
+            var byName: [String: SectionStat] = [:]
+            func bump(_ name: String, _ mutate: (inout SectionStat) -> Void) {
+                var stat = byName[name] ?? SectionStat(
+                    id: "\(deck.id.uuidString)-\(name)", deckName: deck.displayName, colorHex: deck.colorHex,
+                    section: name, totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
+                mutate(&stat)
+                byName[name] = stat
+            }
+            for card in deck.cardArray {
+                bump(card.section) { stat in
+                    stat.totalCards += 1
+                    if !card.hasBeenReviewed { stat.newCount += 1 }
+                    else if max(card.interval, card.reverseInterval) >= matureIntervalDays { stat.matureCount += 1 }
+                    else { stat.learningCount += 1 }
+                }
+            }
+            for item in deck.allReviewItems where item.dueDate <= now {
+                bump(item.card.section) { $0.due += 1 }
+            }
+            for name in deck.sectionOrder + [""] {
+                if let stat = byName[name], stat.totalCards > 0 { result.append(stat) }
+            }
+        }
+        return result
     }
 }

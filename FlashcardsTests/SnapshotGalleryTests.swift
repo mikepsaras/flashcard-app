@@ -96,6 +96,24 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/21_deck_detail_sections.png"))
     }
 
+    @Test func renderInsightsBySection() throws {
+        var insights = StudyInsights()
+        insights.totalCards = 12
+        insights.newCount = 5; insights.learningCount = 4; insights.matureCount = 3
+        insights.dueNow = 3; insights.dueThisWeek = 3
+        insights.dueForecast = Array(repeating: 0, count: StudyInsights.forecastDays)
+        insights.sections = [
+            .init(id: "1", deckName: "Spanish", colorHex: "#3478F6", section: "Verbs", totalCards: 6, due: 3, newCount: 2, learningCount: 2, matureCount: 2),
+            .init(id: "2", deckName: "Spanish", colorHex: "#3478F6", section: "Nouns", totalCards: 4, due: 0, newCount: 1, learningCount: 2, matureCount: 1),
+            .init(id: "3", deckName: "Spanish", colorHex: "#3478F6", section: "", totalCards: 2, due: 0, newCount: 2, learningCount: 0, matureCount: 0),
+        ]
+        try Snapshot.write(
+            StatsContentView(insights: insights, reviewsByDay: [:])
+                .padding(Theme.Spacing.m).background(Theme.groupedBackground),
+            size: CGSize(width: 720, height: 1180), name: "22_insights_by_section")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/22_insights_by_section.png"))
+    }
+
     @Test func renderFourButtonStudyScreen() throws {
         let (container, _, plan) = try makeContext(fourButton: true)
         try Snapshot.write(

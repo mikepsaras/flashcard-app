@@ -145,4 +145,26 @@ final class StudyInsightsTests {
         #expect(s.accuracyThisWeek == 0.9)
         #expect(s.accuracyLastWeek == 0.8)
     }
+
+    @Test func perSectionBreakdownOnlyForDecksUsingSections() {
+        let sectioned = makeDeck(); sectioned.name = "Spanish"
+        sectioned.sectionOrder = ["Verbs", "Nouns"]
+        let v1 = addCard(to: sectioned, reviewed: false, due: now.addingTimeInterval(-86_400)); v1.section = "Verbs"      // new + overdue
+        let v2 = addCard(to: sectioned, reviewed: true, interval: 40, due: now.addingTimeInterval(40 * 86_400)); v2.section = "Verbs"  // mature, not due
+        let n1 = addCard(to: sectioned, reviewed: true, interval: 5, due: now.addingTimeInterval(5 * 86_400)); n1.section = "Nouns"    // learning, not due
+        let u1 = addCard(to: sectioned, reviewed: false, due: now.addingTimeInterval(10 * 86_400)); u1.section = ""        // unsectioned
+        // A deck WITHOUT sections must NOT contribute to `sections`.
+        let plain = makeDeck(); plain.name = "Plain"
+        addCard(to: plain, reviewed: false)
+
+        let s = StudyInsights.make(decks: [sectioned, plain], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.sections.map(\.section) == ["Verbs", "Nouns", ""])   // deck order, unsectioned last
+        #expect(s.sections.allSatisfy { $0.deckName == "Spanish" })    // plain deck absent
+        let verbs = s.sections.first { $0.section == "Verbs" }!
+        #expect(verbs.totalCards == 2)
+        #expect(verbs.newCount == 1)
+        #expect(verbs.matureCount == 1)
+        #expect(verbs.due == 1)
+        #expect(s.sections.first { $0.section == "Nouns" }?.learningCount == 1)
+    }
 }

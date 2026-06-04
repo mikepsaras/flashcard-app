@@ -90,6 +90,7 @@ struct StatsContentView: View {
             forecastCard
             heatmapCard
             if !insights.perDeck.isEmpty { perDeckCard }
+            if !insights.sections.isEmpty { bySectionCard }
             maturityCard
         }
         .frame(maxWidth: 940)          // keep the dashboard readable instead of stretching edge-to-edge
@@ -186,6 +187,52 @@ struct StatsContentView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(deck.name): \(deck.totalCards) cards, \(deck.due) due, \(maturePct) percent mature")
+    }
+
+    private var bySectionCard: some View {
+        card("By section") {
+            VStack(spacing: Theme.Spacing.s) {
+                ForEach(sortedSections) { sectionRow($0) }
+            }
+        }
+    }
+
+    /// Most actionable first: most due, then largest.
+    private var sortedSections: [StudyInsights.SectionStat] {
+        insights.sections.sorted { ($0.due, $0.totalCards) > ($1.due, $1.totalCards) }
+    }
+
+    private func sectionRow(_ section: StudyInsights.SectionStat) -> some View {
+        let maturePct = section.totalCards > 0 ? section.matureCount * 100 / section.totalCards : 0
+        let label = section.section.isEmpty ? "\(section.deckName) · No section" : "\(section.deckName) · \(section.section)"
+        return HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(hex: section.colorHex)).frame(width: 22, height: 22)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(label).font(Typography.body).lineLimit(1)
+                    Spacer(minLength: 4)
+                    if section.due > 0 {
+                        Text("\(section.due) due")
+                            .font(.system(.caption2, design: .rounded, weight: .bold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(.orange.opacity(Theme.Opacity.fillSubtle), in: Capsule())
+                    }
+                    Text("\(section.totalCards)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+                HStack(spacing: 8) {
+                    MaturityBar(new: section.newCount, learning: section.learningCount, mature: section.matureCount)
+                        .frame(height: 6)
+                    Text("\(maturePct)%")
+                        .font(.system(.caption2, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.secondary).monospacedDigit()
+                        .frame(width: 34, alignment: .trailing)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(section.totalCards) cards, \(section.due) due, \(maturePct) percent mature")
     }
 
     private var maturityCard: some View {
