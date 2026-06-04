@@ -347,8 +347,17 @@ struct ActivityHeatmap: View {
     private let gap: CGFloat = 3
     private let maxWeeks = 53
 
-    /// Scale colors to the user's own busiest day, so intensity reads meaningfully at any volume.
-    private var maxCount: Int { max(reviewsByDay.values.max() ?? 0, 1) }
+    #if os(macOS)
+    /// One reused formatter for the per-day tooltips. `Date.formatted(...)` builds a fresh format
+    /// style on every call, which adds up across the ~371 cells that re-render together; a shared
+    /// `DateFormatter` is far cheaper and is thread-safe for formatting (macOS 10.9+). iOS skips the
+    /// tooltip entirely (`.help` doesn't surface on touch), so this is macOS-only.
+    nonisolated(unsafe) private static let tooltipDate: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        return f
+    }()
+    #endif
 
     var body: some View {
         GeometryReader { geo in
@@ -357,9 +366,12 @@ struct ActivityHeatmap: View {
             let weekday = calendar.component(.weekday, from: today)
             let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
             let firstDay = calendar.date(byAdding: .day, value: -((weeks - 1) * 7), to: startOfWeek) ?? today
+            // Scale colors to the user's busiest day. Computed once per render and threaded down —
+            // not recomputed inside `color(_:)` for each of the ~371 cells.
+            let maxCount = max(reviewsByDay.values.max() ?? 0, 1)
             VStack(alignment: .leading, spacing: 4) {
                 monthLabels(weeks: weeks, firstDay: firstDay)
-                grid(weeks: weeks, firstDay: firstDay, today: today)
+                grid(weeks: weeks, firstDay: firstDay, today: today, maxCount: maxCount)
                 legend
             }
         }
@@ -368,26 +380,28 @@ struct ActivityHeatmap: View {
         .accessibilityLabel("Activity heatmap of daily reviews over the past year")
     }
 
-    private func grid(weeks: Int, firstDay: Date, today: Date) -> some View {
+    private func grid(weeks: Int, firstDay: Date, today: Date, maxCount: Int) -> some View {
         HStack(spacing: gap) {
             ForEach(Array(0..<weeks), id: \.self) { col in
                 VStack(spacing: gap) {
                     ForEach(0..<7, id: \.self) { row in
-                        cellView(firstDay: firstDay, today: today, index: col * 7 + row)
+                        cellView(firstDay: firstDay, today: today, index: col * 7 + row, maxCount: maxCount)
                     }
                 }
             }
         }
     }
 
-    @ViewBuilder private func cellView(firstDay: Date, today: Date, index: Int) -> some View {
+    @ViewBuilder private func cellView(firstDay: Date, today: Date, index: Int, maxCount: Int) -> some View {
         let date = calendar.date(byAdding: .day, value: index, to: firstDay) ?? firstDay
         let isFuture = date > today
         let count = isFuture ? 0 : (reviewsByDay[StudyStats.dayKey(date, calendar: calendar)] ?? 0)
         RoundedRectangle(cornerRadius: 2, style: .continuous)
-            .fill(isFuture ? Color.clear : color(count))
+            .fill(isFuture ? Color.clear : color(count, max: maxCount))
             .frame(width: cell, height: cell)
-            .help(isFuture ? "" : "\(date.formatted(date: .abbreviated, time: .omitted)): \(count) review\(count == 1 ? "" : "s")")
+            #if os(macOS)
+            .help(isFuture ? "" : "\(Self.tooltipDate.string(from: date)): \(count) review\(count == 1 ? "" : "s")")
+            #endif
     }
 
     /// Month abbreviations placed at the column where each new month begins (aligned to the grid).
@@ -428,7 +442,7 @@ struct ActivityHeatmap: View {
         }
     }
 
-    private func color(_ count: Int) -> Color {
+    private func color(_ count: Int, max maxCount: Int) -> Color {
         guard count > 0 else { return levelColor(0) }
         switch Double(count) / Double(maxCount) {
         case ..<0.25: return levelColor(1)
