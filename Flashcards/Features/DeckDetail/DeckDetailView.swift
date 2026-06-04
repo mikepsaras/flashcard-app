@@ -460,6 +460,13 @@ struct DeckDetailView: View {
             return .handled
         }
         .onDeleteCommand { if !selection.isEmpty { showingBulkDeleteConfirm = true } }
+        // Double-click-to-open, wired natively on the underlying NSTableView (NOT a SwiftUI tap
+        // gesture, which would disable drag + click-select). The clicked row maps to flatRows.
+        .background(TableDoubleClickHandler { row in
+            let rows = flatRows
+            guard rows.indices.contains(row), case .card(let card) = rows[row] else { return }
+            cardEditor = .edit(card)
+        })
         #endif
     }
 
@@ -502,7 +509,9 @@ struct DeckDetailView: View {
         // macOS: NO tap gesture of ANY kind — even a *simultaneous* double-tap makes SwiftUI route
         // the press to gesture recognition, which disables the List's native drag-reorder AND
         // click-to-select (FB7367473; confirmed by testing). A click selects (native); Return or the
-        // context-menu "Edit" opens. Double-click-to-open is therefore incompatible with the drag.
+        // context-menu "Edit" opens; double-click opens via the underlying NSTableView's native
+        // doubleAction (TableDoubleClickHandler), which coexists with drag/select since it isn't a
+        // SwiftUI gesture.
         row
         #endif
     }
