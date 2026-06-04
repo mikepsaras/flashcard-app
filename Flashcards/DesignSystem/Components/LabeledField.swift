@@ -104,25 +104,29 @@ struct MultilineField: View {
 /// of the editor; it finds the editor's own scroll view (guarding on an NSTextView document so it
 /// can't grab an outer ScrollView) and disables its scrollers.
 struct HideVerticalScroller: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async { Self.hide(from: view) }
-        return view
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ nsView: Probe, context: Context) { nsView.hideScrollers() }
+
+    /// Hides the scroller during the layout pass (before drawing) and on window-entry, rather than
+    /// a runloop-later `DispatchQueue.main.async` — which let the scroller paint for one frame first
+    /// (the brief flash on open).
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); hideScrollers() }
+        override func layout() { super.layout(); hideScrollers() }
+
+        func hideScrollers() {
+            guard let scroll = HideVerticalScroller.textScrollView(behind: self) else { return }
+            scroll.hasVerticalScroller = false
+            scroll.hasHorizontalScroller = false
+            scroll.verticalScroller?.isHidden = true
+        }
     }
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { Self.hide(from: nsView) }
-    }
-    private static func hide(from view: NSView) {
-        guard let scrollView = textScrollView(behind: view) else { return }
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.verticalScroller?.isHidden = true
-    }
+
     /// This editor's OWN scroll view: among the window's text scroll views, the one whose frame
     /// contains this hider view's center. A plain ancestor/DFS search returns the first match, which
     /// mis-targets a sibling field's editor when several share a container (it left Back's scroller
     /// visible while hiding Front's twice). Geometry pins it to the right editor.
-    private static func textScrollView(behind view: NSView) -> NSScrollView? {
+    static func textScrollView(behind view: NSView) -> NSScrollView? {
         guard let content = view.window?.contentView, view.bounds.width > 0 else { return nil }
         let center = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
         return textScrollViews(in: content).first { $0.convert($0.bounds, to: nil).contains(center) }
