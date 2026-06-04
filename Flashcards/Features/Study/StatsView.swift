@@ -50,7 +50,8 @@ struct StatsContentView: View {
     let reviewsByDay: [String: Int]
     var now: Date = .now
 
-    private let learningColor = Theme.learning
+    @AppStorage(DefaultsKey.heatmapRange) private var heatmapRangeRaw = HeatmapRange.year.rawValue
+    private var heatmapRange: HeatmapRange { HeatmapRange(rawValue: heatmapRangeRaw) ?? .year }
 
     private struct Stat: Identifiable {
         var id: String { label }
@@ -193,7 +194,25 @@ struct StatsContentView: View {
     }
 
     private var heatmapCard: some View {
-        card("Activity") { ActivityHeatmap(reviewsByDay: reviewsByDay, now: now) }
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            HStack(spacing: Theme.Spacing.s) {
+                Text("Activity").font(Typography.headline).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Picker("Range", selection: $heatmapRangeRaw) {
+                    ForEach(HeatmapRange.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                #if os(macOS)
+                .controlSize(.small)
+                #endif
+            }
+            ActivityHeatmap(reviewsByDay: reviewsByDay, now: now, weekCap: heatmapRange.weeks)
+        }
+        .padding(Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: Theme.Radius.tile)
     }
 
     private var perDeckCard: some View {
@@ -292,9 +311,9 @@ struct StatsContentView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
                 HStack(spacing: Theme.Spacing.l) {
-                    legend("New", Theme.accent, insights.newCount)
-                    legend("Learning", learningColor, insights.learningCount)
-                    legend("Mature", Theme.success, insights.matureCount)
+                    legend("New", Theme.Maturity.new, insights.newCount)
+                    legend("Learning", Theme.Maturity.learning, insights.learningCount)
+                    legend("Mature", Theme.Maturity.mature, insights.matureCount)
                     Spacer(minLength: 0)
                 }
             }
@@ -387,13 +406,31 @@ struct DueForecastChart: View {
     }
 }
 
+/// The Activity heatmap's selectable range (in weeks), persisted via `@AppStorage`. The raw value
+/// is the week count, so `weeks` is just `rawValue`.
+enum HeatmapRange: Int, CaseIterable, Identifiable {
+    case threeMonths = 13, sixMonths = 26, year = 53
+    var id: Int { rawValue }
+    var weeks: Int { rawValue }
+    var label: String {
+        switch self {
+        case .threeMonths: "3M"
+        case .sixMonths: "6M"
+        case .year: "1Y"
+        }
+    }
+}
+
 /// GitHub-style contribution grid: weeks of day cells, tinted by that day's review count. Fills
-/// the available width (as many weeks as fit, up to a year). Drawn in plain SwiftUI (no Charts
-/// dependency, no scroll view), so it renders under `ImageRenderer`.
+/// the available width (as many weeks as fit, up to the selected range). Drawn in plain SwiftUI (no
+/// Charts dependency, no scroll view), so it renders under `ImageRenderer`.
 struct ActivityHeatmap: View {
     let reviewsByDay: [String: Int]
     var now: Date = .now
     var calendar: Calendar = .current
+    /// Upper bound on weeks shown, from the user's range pick (3M/6M/1Y); still clamped to whatever
+    /// fits the width, so a narrow window never overflows.
+    var weekCap = 53
 
     private let cell: CGFloat = 13
     private let gap: CGFloat = 3
@@ -413,7 +450,7 @@ struct ActivityHeatmap: View {
 
     var body: some View {
         GeometryReader { geo in
-            let weeks = min(max(Int((geo.size.width + gap) / (cell + gap)), 1), maxWeeks)
+            let weeks = min(max(Int((geo.size.width + gap) / (cell + gap)), 1), min(maxWeeks, weekCap))
             let today = calendar.startOfDay(for: now)
             let weekday = calendar.component(.weekday, from: today)
             let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
@@ -526,9 +563,9 @@ struct MaturityBar: View {
     var body: some View {
         GeometryReader { geo in
             HStack(spacing: 0) {
-                segment(Theme.accent, new, geo.size.width)
-                segment(Theme.learning, learning, geo.size.width)
-                segment(Theme.success, mature, geo.size.width)
+                segment(Theme.Maturity.new, new, geo.size.width)
+                segment(Theme.Maturity.learning, learning, geo.size.width)
+                segment(Theme.Maturity.mature, mature, geo.size.width)
             }
         }
         .frame(height: 10)

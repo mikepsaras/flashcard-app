@@ -17,4 +17,6 @@ enum DefaultsKey {
     static let reminderMinute = "reminderMinute"
     /// Hidden developer mode (unlocked by tapping the version 7×), gating the test-data tools.
     static let developerMode = "developerMode"
+    /// Insights: the Activity heatmap's visible range (a `HeatmapRange` raw value, in weeks).
+    static let heatmapRange = "heatmapRange"
 }

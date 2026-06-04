@@ -13,9 +13,18 @@ enum Theme {
     static let accent  = Color.accentColor
     static let success = Color.adaptive(light: (0.20, 0.78, 0.35), dark: (0.30, 0.85, 0.45)) // ~system green
     static let danger  = Color.adaptive(light: (1.00, 0.23, 0.19), dark: (1.00, 0.42, 0.38)) // ~system red
-    /// "Learning"/Hard amber — shared by the card-maturity UI and the Hard grade, so the one
-    /// accent color lives in a single place instead of a scattered `Color(hex: "#FF9500")`.
+    /// "Learning"/Hard amber — shared by the Hard grade button, so the one accent color lives in a
+    /// single place instead of a scattered `Color(hex: "#FF9500")`.
     static let learning = Color(hex: "#FF9500")
+
+    /// Card-maturity ramp: New → Learning → Mature as one accent hue at rising strength, so the
+    /// Insights bars read as a calm progression (echoing the activity heatmap's opacity steps)
+    /// rather than three competing colors next to each deck's own swatch.
+    enum Maturity {
+        static let new = Color.accentColor.opacity(0.30)
+        static let learning = Color.accentColor.opacity(0.58)
+        static let mature = Color.accentColor
+    }
 
     /// The soft, light surface used for the big study card and tiles.
     static let cardSurface = Color.adaptive(
