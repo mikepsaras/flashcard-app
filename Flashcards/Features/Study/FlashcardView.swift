@@ -58,11 +58,17 @@ struct FlashcardView: View {
                         .tracking(0.8)
                         .foregroundStyle(accent)
                 }
-                Text(text.isEmpty ? AttributedString("—") : Markdown.attributed(text))
-                    .font(.system(size: fontSize, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.5)
+                Group {
+                    if text.isEmpty {
+                        Text("—").multilineTextAlignment(.center)
+                    } else {
+                        // Renders inline styling + bullet lists; centers a plain term, left-aligns lists.
+                        MarkdownText(text: text, centered: true)
+                    }
+                }
+                .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .minimumScaleFactor(0.5)
             }
             .padding(40)
         }

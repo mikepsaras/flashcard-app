@@ -127,11 +127,12 @@ struct StudySessionView: View {
                     accent: accent,
                     onTap: { session.flip() }
                 )
-                // A fixed-ratio card that scales with the window — bigger in full screen, same shape —
-                // centered in the available space with a margin so it never touches the edges.
-                .aspectRatio(1.25, contentMode: .fit)
+                // A fixed-ratio card that scales with the window — bigger in full screen, same shape.
+                // Compact widths (iPhone) get a tall portrait card; roomy ones (Mac/iPad) a landscape
+                // one. Centered in the available space with a margin so it never touches the edges.
+                .aspectRatio(compact ? 0.72 : 1.25, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.horizontal, compact ? Theme.Spacing.m : Theme.Spacing.xl)
                 .padding(.vertical, Theme.Spacing.s)
             }
 

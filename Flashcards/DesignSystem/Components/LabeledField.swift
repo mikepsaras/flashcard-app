@@ -58,14 +58,17 @@ extension View {
 
 /// A labeled multi-line text box backed by `TextEditor`, so Return reliably inserts a newline — a
 /// vertical-axis `TextField` commits instead on macOS, which blocks multi-line entry. `TextEditor`
-/// has no native placeholder, so it's drawn as an overlay. Optional external focus binding, like
-/// `LabeledField`.
+/// has no native placeholder, so it's drawn as an overlay — and hidden once the field is focused (or
+/// has text), so an active field is never cluttered by its hint. `autofocus` focuses it on appear;
+/// bump `refocus` from the parent to re-focus it (e.g. after "Add & Add Another").
 struct MultilineField: View {
     let label: String
     var placeholder: String = ""
     @Binding var text: String
     var minHeight: CGFloat = 96
-    var focus: FocusState<Bool>.Binding? = nil
+    var autofocus: Bool = false
+    var refocus: Int = 0
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -73,19 +76,19 @@ struct MultilineField: View {
                 .font(.system(.subheadline, weight: .medium))
                 .foregroundStyle(.secondary)
             TextEditor(text: $text)
-                .focused(ifPresent: focus)
+                .focused($isFocused)
                 .font(Typography.body)
                 .scrollContentBackground(.hidden)
-                .scrollIndicators(.hidden)   // handles iOS; no-op on macOS TextEditor (see below)
                 #if os(macOS)
-                .background(HideVerticalScroller())
+                .background(OverlayScroller())   // native overlay scroller (fades); iOS uses the default
                 #endif
                 .frame(minHeight: minHeight)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
                 .fieldBox()
                 .overlay(alignment: .topLeading) {
-                    if text.isEmpty && !placeholder.isEmpty {
+                    // Native-style placeholder: gone as soon as you focus the field or type.
+                    if text.isEmpty && !isFocused && !placeholder.isEmpty {
                         Text(placeholder)
                             .font(Typography.body)
                             .foregroundStyle(.secondary)
@@ -95,37 +98,42 @@ struct MultilineField: View {
                     }
                 }
         }
+        .onAppear { if autofocus { isFocused = true } }
+        .onChange(of: refocus) { _, _ in isFocused = true }
     }
 }
 
 #if os(macOS)
-/// Hides the scroll indicator on the macOS NSScrollView backing a SwiftUI `TextEditor` —
-/// `.scrollIndicators(.hidden)` has no effect on TextEditor there. Drop in as a `.background`
-/// of the editor; it finds the editor's own scroll view (guarding on an NSTextView document so it
-/// can't grab an outer ScrollView) and disables its scrollers.
-struct HideVerticalScroller: NSViewRepresentable {
+/// Makes the macOS `TextEditor`'s scroller behave like a native **overlay** scroller — it appears
+/// only while scrolling and fades out, instead of the persistent legacy scrollbar a mouse user gets
+/// by default (`.scrollIndicators(.hidden)` has no effect on TextEditor there). Drop in as a
+/// `.background` of the editor; it finds the editor's own scroll view (guarding on an NSTextView
+/// document so it can't grab an outer ScrollView) and switches it to overlay + autohide.
+struct OverlayScroller: NSViewRepresentable {
     func makeNSView(context: Context) -> Probe { Probe() }
-    func updateNSView(_ nsView: Probe, context: Context) { nsView.hideScrollers() }
+    func updateNSView(_ nsView: Probe, context: Context) { nsView.applyOverlayStyle() }
 
-    /// Hides the scroller during the layout pass (before drawing) and on window-entry, rather than
-    /// a runloop-later `DispatchQueue.main.async` — which let the scroller paint for one frame first
-    /// (the brief flash on open).
+    /// Applies the style during the layout pass (before drawing) and on window-entry, rather than
+    /// a runloop-later `DispatchQueue.main.async` — which let the legacy scroller paint for one
+    /// frame first (a brief flicker on open).
     final class Probe: NSView {
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); hideScrollers() }
-        override func layout() { super.layout(); hideScrollers() }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); applyOverlayStyle() }
+        override func layout() { super.layout(); applyOverlayStyle() }
 
-        func hideScrollers() {
-            guard let scroll = HideVerticalScroller.textScrollView(behind: self) else { return }
-            scroll.hasVerticalScroller = false
+        func applyOverlayStyle() {
+            guard let scroll = OverlayScroller.textScrollView(behind: self) else { return }
+            scroll.scrollerStyle = .overlay      // thin overlay that fades, regardless of mouse/trackpad
+            scroll.autohidesScrollers = true     // …and only shows while actively scrolling
+            scroll.hasVerticalScroller = true
+            scroll.verticalScroller?.isHidden = false
             scroll.hasHorizontalScroller = false
-            scroll.verticalScroller?.isHidden = true
         }
     }
 
     /// This editor's OWN scroll view: among the window's text scroll views, the one whose frame
-    /// contains this hider view's center. A plain ancestor/DFS search returns the first match, which
-    /// mis-targets a sibling field's editor when several share a container (it left Back's scroller
-    /// visible while hiding Front's twice). Geometry pins it to the right editor.
+    /// contains this view's center. A plain ancestor/DFS search returns the first match, which
+    /// mis-targets a sibling field's editor when several share a container. Geometry pins it to the
+    /// right editor.
     static func textScrollView(behind view: NSView) -> NSScrollView? {
         guard let content = view.window?.contentView, view.bounds.width > 0 else { return nil }
         let center = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)

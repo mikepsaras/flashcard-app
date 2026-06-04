@@ -22,7 +22,8 @@ struct CardEditorView: View {
 
     @State private var term: String
     @State private var definition: String
-    @FocusState private var frontFocused: Bool
+    /// Bumped to (re)focus the Front field — on open (new card) and after "Add & Add Another".
+    @State private var frontRefocus = 0
 
     init(deck: Deck, mode: CardEditorMode) {
         self.deck = deck
@@ -50,7 +51,7 @@ struct CardEditorView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    MultilineField(label: "Front", placeholder: "Front of the card", text: $term, minHeight: 56, focus: $frontFocused)
+                    MultilineField(label: "Front", placeholder: "Front of the card", text: $term, minHeight: 56, autofocus: !isEditing, refocus: frontRefocus)
                     MultilineField(label: "Back", placeholder: "Back of the card", text: $definition, minHeight: 120)
 
                     if !term.isEmpty || !definition.isEmpty {
@@ -82,7 +83,6 @@ struct CardEditorView: View {
                     Button(isEditing ? "Save" : "Add") { save() }.disabled(!canSave)
                 }
             }
-            .onAppear { if !isEditing { frontFocused = true } }
         }
         #if os(macOS)
         .frame(width: 480, height: 460)
@@ -97,19 +97,35 @@ struct CardEditorView: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 8) {
                 if !term.isEmpty {
-                    Text(Markdown.attributed(term)).font(Typography.headline)
+                    MarkdownText(text: term).font(Typography.headline)
                 }
                 if !definition.isEmpty {
-                    Text(Markdown.attributed(definition)).font(Typography.body).foregroundStyle(.secondary)
+                    MarkdownText(text: definition).font(Typography.body).foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
             .fieldBox()
-            Text("Markdown: **bold**, *italic*, `code`, [links](url).")
+            markdownHint
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// The syntax hint. Each example is rendered in its own style (so you see the result), but
+    /// "links" is styled text — NOT a live Markdown link, which would try to open `url:` and fail.
+    private var markdownHint: Text {
+        Text("Markdown: ")
+            + Text("bold").bold()
+            + Text(", ")
+            + Text("italic").italic()
+            + Text(", ")
+            + Text("code").monospaced()
+            + Text(", ")
+            + Text("links").underline().foregroundStyle(Theme.accent)
+            + Text(", and ")
+            + Text("• bullet").foregroundStyle(Theme.accent)
+            + Text(" lists.")
     }
 
     private func save(addAnother: Bool = false) {
@@ -127,7 +143,7 @@ struct CardEditorView: View {
             // Keep the sheet open for the next card; reset and refocus the Front field.
             term = ""
             definition = ""
-            frontFocused = true
+            frontRefocus += 1
         } else {
             dismiss()
         }

@@ -49,7 +49,9 @@ struct BulkAddView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if !deck.sectionOrder.isEmpty { sectionRow }
-                    ForEach($rows) { $row in cardRow($row) }
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, _ in
+                        cardRow(index, $rows[index])
+                    }
                     addControls
                 }
                 .padding(20)
@@ -96,37 +98,54 @@ struct BulkAddView: View {
         .fieldBox()
     }
 
-    @ViewBuilder private func cardRow(_ row: Binding<Row>) -> some View {
+    /// One card as a titled group ("Card N") with labeled Front/Back fields — so each Front/Back
+    /// pair reads as its own card and the labels stay visible as you type (unlike placeholders).
+    @ViewBuilder private func cardRow(_ index: Int, _ row: Binding<Row>) -> some View {
         let id = row.wrappedValue.id
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("Front", text: row.front)
-                    .textFieldStyle(.plain)
-                    .font(Typography.body)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .fieldBox()
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Card \(index + 1)")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if rows.count > 1 {
+                    Button { delete(id) } label: {
+                        Image(systemName: "minus.circle.fill").font(.system(size: 16))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Remove this card")
+                }
+            }
+            bulkField("Front") {
+                TextField("", text: row.front)
                     .focused($focused, equals: .front(id))
                     .onSubmit { addRowIfLast(id) }
                     .onChange(of: row.wrappedValue.front) { _, v in if v.contains("\n") { paste(v, into: id) } }
-                TextField("Back", text: row.back, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(Typography.body)
+            }
+            bulkField("Back") {
+                TextField("", text: row.back, axis: .vertical)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .fieldBox()
                     .focused($focused, equals: .back(id))
             }
-            Button { delete(id) } label: {
-                Image(systemName: "minus.circle.fill").font(.system(size: 18))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .padding(.top, 8)
-            .opacity(rows.count > 1 ? 1 : 0)
-            .disabled(rows.count <= 1)
-            .help("Remove this row")
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.cardSurface))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.06)))
+    }
+
+    /// A captioned field box for a bulk-add row (label above, the field inside the standard box).
+    @ViewBuilder private func bulkField<Content: View>(_ label: String, @ViewBuilder _ field: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.system(.caption, weight: .medium))
+                .foregroundStyle(.secondary)
+            field()
+                .textFieldStyle(.plain)
+                .font(Typography.body)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .fieldBox()
         }
     }
 

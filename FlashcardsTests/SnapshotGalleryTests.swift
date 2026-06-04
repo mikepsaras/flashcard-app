@@ -278,5 +278,20 @@ struct SnapshotGalleryTests {
             size: CGSize(width: 620, height: 600), name: "26_card_markdown")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/26_card_markdown.png"))
     }
+
+    @Test func renderBulletListCard() throws {
+        // Verifies block-level bullet lists render on the card face (left-aligned, hanging indent)
+        // rather than showing the raw `*` markers.
+        try Snapshot.write(
+            FlashcardView(term: "Key Steps in Initiating a Project",
+                          definition: "* Identify the central problem, gap, or opportunity\n"
+                            + "* Gain approval for the initial business case\n"
+                            + "* Develop the project charter and stakeholder register\n"
+                            + "* Secure final approval to authorize the planning phase",
+                          isShowingDefinition: true, onTap: {})
+                .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 620, height: 600), name: "27_card_bullets")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/27_card_bullets.png"))
+    }
 }
 #endif
