@@ -1,45 +1,50 @@
 import SwiftUI
 
-/// Bottom study controls.
-/// - Two-button: Undo (left), ✕/✓ centered, Track learning (right) — one row.
-/// - Four-button: a utility row (Undo + Track learning) above an Again/Hard/Good/Easy row.
+/// Bottom study controls — grading + undo. (Shuffle and Track-learning live in the top toolbar.)
+/// - Two-button: ✕ / ✓ icon pills centered, Undo bottom-left.
+/// - Four-button: an Undo row above an Again/Hard/Good/Easy pill row.
 struct StudyControlsBar: View {
     let canUndo: Bool
     var compact: Bool = false
     var fourButton: Bool = false
-    var isPractice: Bool = false
-    @Binding var trackLearning: Bool
     var onUndo: () -> Void
     var onGrade: (Grade) -> Void
 
     var body: some View {
         if fourButton {
-            VStack(spacing: 16) {
-                utilityRow
+            VStack(spacing: 14) {
+                HStack { undoButton; Spacer() }
                 fourButtonRow
             }
         } else {
-            twoButtonBar
-        }
-    }
-
-    // MARK: Two-button
-
-    private var twoButtonBar: some View {
-        ZStack {
-            HStack(spacing: 22) {
-                CircleIconButton(systemName: "xmark", tint: Grade.again.studyColor, size: 60, weight: .bold) { onGrade(.again) }
-                CircleIconButton(systemName: "checkmark", tint: Grade.good.studyColor, size: 60, weight: .bold) { onGrade(.good) }
-            }
-            HStack(spacing: 12) {
-                undoButton(showLabel: !compact)
-                Spacer(minLength: 8)
-                trackToggle(showLabel: !compact)
+            ZStack {
+                HStack(spacing: 16) {
+                    gradePill("xmark", .again, "Don't know")
+                    gradePill("checkmark", .good, "Know")
+                }
+                HStack { undoButton; Spacer() }
             }
         }
     }
 
-    // MARK: Four-button
+    // MARK: Two-button — icon-only pills
+
+    private func gradePill(_ symbol: String, _ grade: Grade, _ label: String) -> some View {
+        let color = grade.studyColor
+        return Button { onGrade(grade) } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 104, height: 54)
+                .background(color.opacity(0.14), in: Capsule())
+                .overlay(Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .shadow(color: color.opacity(0.18), radius: 8, x: 0, y: 3)
+        .accessibilityLabel(label)
+    }
+
+    // MARK: Four-button — labeled pills
 
     private var fourButtonRow: some View {
         HStack(spacing: 10) {
@@ -59,60 +64,28 @@ struct StudyControlsBar: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
                 .background(color.opacity(0.16), in: Capsule())
+                .overlay(Capsule().strokeBorder(color.opacity(0.20), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
 
-    private var utilityRow: some View {
-        HStack(spacing: 12) {
-            undoButton(showLabel: true)
-            Spacer(minLength: 8)
-            trackToggle(showLabel: true)
-        }
-    }
+    // MARK: Undo
 
-    // MARK: Shared pieces
-
-    private func undoButton(showLabel: Bool) -> some View {
+    private var undoButton: some View {
         Button(action: onUndo) {
             Group {
-                if showLabel {
-                    Label("Undo", systemImage: "arrow.uturn.backward")
-                } else {
+                if compact {
                     Image(systemName: "arrow.uturn.backward")
+                } else {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
                 }
             }
-            .font(Typography.callout)
+            .font(.system(size: 13, weight: .medium, design: .rounded))
         }
         .buttonStyle(.plain)
-        .foregroundStyle(canUndo ? Color.primary : Color.secondary.opacity(0.45))
+        .foregroundStyle(canUndo ? Color.secondary : Color.secondary.opacity(0.4))
         .disabled(!canUndo)
         .accessibilityLabel("Undo")
-    }
-
-    @ViewBuilder private func trackToggle(showLabel: Bool) -> some View {
-        if isPractice {
-            // Nothing is due — schedules won't change, so the toggle is moot. Show why.
-            HStack(spacing: 6) {
-                Image(systemName: "graduationcap.fill")
-                if showLabel { Text("Practice") }
-            }
-            .font(Typography.callout)
-            .foregroundStyle(.secondary)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Practice mode")
-            .accessibilityHint("Nothing is due, so your review schedule won't change")
-        } else {
-            HStack(spacing: 8) {
-                if showLabel {
-                    Text("Track learning").font(Typography.callout)
-                }
-                CompactSwitch(isOn: $trackLearning)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Track learning")
-            .accessibilityValue(trackLearning ? "On" : "Off")
-        }
     }
 }
 
@@ -130,11 +103,11 @@ extension Grade {
 }
 
 #Preview("Two-button") {
-    StudyControlsBar(canUndo: true, trackLearning: .constant(true), onUndo: {}, onGrade: { _ in })
+    StudyControlsBar(canUndo: true, onUndo: {}, onGrade: { _ in })
         .padding().frame(width: 560)
 }
 
 #Preview("Four-button") {
-    StudyControlsBar(canUndo: true, fourButton: true, trackLearning: .constant(true), onUndo: {}, onGrade: { _ in })
+    StudyControlsBar(canUndo: true, fourButton: true, onUndo: {}, onGrade: { _ in })
         .padding().frame(width: 560)
 }

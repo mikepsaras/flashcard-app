@@ -28,12 +28,12 @@ struct SnapshotGalleryTests {
         let def = "Short, simple descriptions of a feature told from the perspective of the user who desires it."
 
         try Snapshot.write(
-            FlashcardView(term: term, definition: def, isShowingDefinition: false, onShuffle: {}, onTap: {})
+            FlashcardView(term: term, definition: def, isShowingDefinition: false, onTap: {})
                 .padding(28).background(Theme.windowBackground),
             size: CGSize(width: 620, height: 600), name: "01_card_front")
 
         try Snapshot.write(
-            FlashcardView(term: term, definition: def, isShowingDefinition: true, onShuffle: {}, onTap: {})
+            FlashcardView(term: term, definition: def, isShowingDefinition: true, onTap: {})
                 .padding(28).background(Theme.windowBackground),
             size: CGSize(width: 620, height: 600), name: "02_card_back")
 
@@ -47,13 +47,13 @@ struct SnapshotGalleryTests {
 
         // Two-button controls
         try Snapshot.write(
-            StudyControlsBar(canUndo: true, trackLearning: .constant(true), onUndo: {}, onGrade: { _ in })
+            StudyControlsBar(canUndo: true, onUndo: {}, onGrade: { _ in })
                 .padding(28).background(Theme.windowBackground),
             size: CGSize(width: 620, height: 140), name: "06_controls_two_button")
 
         // Four-button controls
         try Snapshot.write(
-            StudyControlsBar(canUndo: true, fourButton: true, trackLearning: .constant(true), onUndo: {}, onGrade: { _ in })
+            StudyControlsBar(canUndo: true, fourButton: true, onUndo: {}, onGrade: { _ in })
                 .padding(28).background(Theme.windowBackground),
             size: CGSize(width: 620, height: 200), name: "07_controls_four_button")
 
@@ -68,7 +68,7 @@ struct SnapshotGalleryTests {
     @Test func renderSectionsFeature() throws {
         // Headline visual: the section chip on the study card.
         try Snapshot.write(
-            FlashcardView(term: "correr", definition: "to run", isShowingDefinition: false, section: "Verbs", onShuffle: {}, onTap: {})
+            FlashcardView(term: "correr", definition: "to run", isShowingDefinition: false, section: "Verbs", onTap: {})
                 .padding(28).background(Theme.windowBackground),
             size: CGSize(width: 620, height: 600), name: "20_card_with_section")
 
@@ -247,7 +247,7 @@ struct SnapshotGalleryTests {
         let term = "User Stories"
         let def = "Short, simple descriptions of a feature told from the perspective of the user who desires it."
         try Snapshot.write(
-            FlashcardView(term: term, definition: def, isShowingDefinition: false, onShuffle: {}, onTap: {})
+            FlashcardView(term: term, definition: def, isShowingDefinition: false, onTap: {})
                 .padding(28).background(Theme.windowBackground)
                 .environment(\.dynamicTypeSize, .accessibility2),
             size: CGSize(width: 620, height: 600), name: "13_card_large_type")

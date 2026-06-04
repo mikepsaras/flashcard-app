@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The big rounded study card. Tap to flip term ↔ definition with a 3D rotation.
+/// The big rounded study card. Tap to flip term ↔ definition with a 3D rotation. Elevated with a
+/// soft shadow + hairline so it reads as a physical card; a subtle hint shows how to flip.
 struct FlashcardView: View {
     let term: String
     let definition: String
@@ -9,7 +10,6 @@ struct FlashcardView: View {
     /// The card's section, shown as a chip on the card. Hidden when nil/empty.
     var section: String? = nil
     var accent: Color = Theme.accent
-    var onShuffle: (() -> Void)?
     var onTap: () -> Void
 
     /// Card text scales with the user's Dynamic Type setting (40pt at the default size).
@@ -17,10 +17,10 @@ struct FlashcardView: View {
 
     var body: some View {
         ZStack {
-            face(text: term, label: nil)
+            face(text: term, label: nil, showHint: true)
                 .opacity(isShowingDefinition ? 0 : 1)
 
-            face(text: definition, label: definitionLabel.isEmpty ? nil : definitionLabel)
+            face(text: definition, label: definitionLabel.isEmpty ? nil : definitionLabel, showHint: false)
                 .opacity(isShowingDefinition ? 1 : 0)
                 .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
         }
@@ -28,31 +28,22 @@ struct FlashcardView: View {
         .animation(.spring(response: 0.5, dampingFraction: 0.82), value: isShowingDefinition)
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .onTapGesture(perform: onTap)
-        // Combine only the card faces so VoiceOver reads the card as one element and flips on
-        // double-tap; the shuffle button is added on top as a separate, reachable element.
+        // VoiceOver reads the card as one element and flips on double-tap.
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(isShowingDefinition ? "Definition: \(definition)" : "Term: \(term)")
         .accessibilityHint("Double-tap to flip")
-        .overlay(alignment: .bottomTrailing) {
-            if let onShuffle {
-                Button(action: onShuffle) {
-                    Image(systemName: "shuffle")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(18)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Shuffle remaining cards")
-            }
-        }
     }
 
-    private func face(text: String, label: String?) -> some View {
+    private func face(text: String, label: String?, showHint: Bool) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                 .fill(Theme.cardSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.05), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.10), radius: 22, x: 0, y: 10)
 
             VStack(spacing: 14) {
                 if let label {
@@ -70,7 +61,24 @@ struct FlashcardView: View {
             .padding(40)
         }
         .overlay(alignment: .top) { sectionChip }
+        .overlay(alignment: .bottom) { if showHint { flipHint } }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// A quiet affordance for the flip gesture, shown on the front (term) face only.
+    private var flipHint: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "hand.tap")
+            #if os(macOS)
+            Text("Click or press space to flip")
+            #else
+            Text("Tap to flip")
+            #endif
+        }
+        .font(.system(size: 11, weight: .medium, design: .rounded))
+        .foregroundStyle(.tertiary)
+        .padding(.bottom, 18)
+        .accessibilityHidden(true)
     }
 
     /// The section chip pinned to the top of the card — an outlined capsule with the section name.

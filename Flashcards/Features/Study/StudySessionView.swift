@@ -38,7 +38,7 @@ struct StudySessionView: View {
         GeometryReader { proxy in
             let compact = proxy.size.width < 480
             VStack(spacing: 0) {
-                topBar
+                topBar(compact: compact)
                 if session.isFinished {
                     summary
                 } else {
@@ -54,12 +54,20 @@ struct StudySessionView: View {
 
     // MARK: Top bar
 
-    private var topBar: some View {
-        HStack(spacing: 16) {
+    private func topBar(compact: Bool) -> some View {
+        HStack(spacing: 14) {
             Text(plan.title)
                 .font(Typography.headline)
                 .lineLimit(1)
             Spacer()
+            // Session controls live here now (off the card / bottom bar), only while studying.
+            if !session.isFinished {
+                Button { session.shuffleRemaining() } label: { Image(systemName: "shuffle") }
+                    .buttonStyle(.plain)
+                    .help("Shuffle remaining cards")
+                    .accessibilityLabel("Shuffle remaining cards")
+                trackLearningItem(compact: compact)
+            }
             if let exportText = plan.exportText {
                 ShareLink(item: exportText) { Image(systemName: "square.and.arrow.up") }
                     .buttonStyle(.plain)
@@ -73,6 +81,45 @@ struct StudySessionView: View {
         .padding(.leading, topBarLeadingInset)
         .padding(.trailing, Theme.Spacing.m)
         .padding(.vertical, Theme.Spacing.s)
+    }
+
+    /// Track-learning control for the toolbar: a labeled pill toggle, an icon toggle on a tight
+    /// (compact) toolbar, or a "Practice" badge when nothing's due (schedules won't change).
+    @ViewBuilder private func trackLearningItem(compact: Bool) -> some View {
+        if session.isPractice {
+            HStack(spacing: 6) {
+                Image(systemName: "graduationcap.fill").font(.system(size: 12))
+                if !compact { Text("Practice").font(.system(size: 12, weight: .medium, design: .rounded)) }
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Color.primary.opacity(0.05), in: Capsule())
+            .help("Practice mode — nothing is due, so your review schedule won't change")
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Practice mode")
+            .accessibilityHint("Nothing is due, so your review schedule won't change")
+        } else if compact {
+            Button { trackLearning.toggle() } label: {
+                Image(systemName: trackLearning ? "graduationcap.fill" : "graduationcap")
+                    .foregroundStyle(trackLearning ? Theme.accent : Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Track learning")
+            .accessibilityLabel("Track learning")
+            .accessibilityValue(trackLearning ? "On" : "Off")
+        } else {
+            HStack(spacing: 7) {
+                Image(systemName: "graduationcap.fill").font(.system(size: 12))
+                Text("Track learning").font(.system(size: 12, weight: .medium, design: .rounded))
+                CompactSwitch(isOn: $trackLearning)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.leading, 10).padding(.trailing, 6).padding(.vertical, 4)
+            .background(Color.primary.opacity(0.05), in: Capsule())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Track learning")
+            .accessibilityValue(trackLearning ? "On" : "Off")
+        }
     }
 
     // MARK: Studying
@@ -100,7 +147,6 @@ struct StudySessionView: View {
                     definitionLabel: item.backLabel ?? "",
                     section: item.section,
                     accent: accent,
-                    onShuffle: { session.shuffleRemaining() },
                     onTap: { session.flip() }
                 )
                 .frame(maxWidth: 600)
@@ -112,8 +158,6 @@ struct StudySessionView: View {
                 canUndo: session.canUndo,
                 compact: compact,
                 fourButton: fourButton,
-                isPractice: session.isPractice,
-                trackLearning: $trackLearning,
                 onUndo: { performUndo() },
                 onGrade: { performGrade($0) }
             )
