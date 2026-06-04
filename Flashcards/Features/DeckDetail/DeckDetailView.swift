@@ -45,11 +45,15 @@ struct DeckDetailView: View {
     @State private var newSectionCardTarget: Card?
     @State private var sectionPendingRename: String?
     @State private var renameSectionName = ""
-    // macOS drag-to-reorder uses a custom gesture (List's native onMove can't coexist with
-    // tap-to-edit on macOS — FB7367473). iOS keeps native onMove via the Edit button.
-    /// Selected card id — a click sets it, which opens the editor. Click is the list's *native*
-    /// selection (not a tap gesture), so it doesn't break the native drag-reorder (FB7367473).
-    @State private var selectedCardID: UUID?
+    // Card selection drives bulk actions. macOS: click selects, Return opens, Delete removes the
+    // selection. iOS: a tap opens; multi-select + bulk delete happen in Edit mode. The list uses
+    // the *native* selection (never a tap gesture) so it can't break the native onMove drag —
+    // FB7367473: a row with any tap gesture silently disables drag-reorder on macOS.
+    @State private var selection = Set<UUID>()
+    @State private var showingBulkDeleteConfirm = false
+    #if os(iOS)
+    @Environment(\.editMode) private var editMode
+    #endif
 
     /// Cards in display order — unsectioned first, then by section, `sortOrder` within each.
     private var orderedCards: [Card] { deck.sectionGroups.flatMap(\.cards) }
@@ -154,9 +158,26 @@ struct DeckDetailView: View {
                     Label("More", systemImage: "ellipsis.circle")
                 }
             }
-            #if os(iOS)
-            // onMove needs edit mode on iOS (macOS reorders by direct row drag).
+            #if os(macOS)
+            // Bulk delete appears once cards are selected (click / ⌘-click / ⇧-click).
+            ToolbarItem(placement: .automatic) {
+                if !selection.isEmpty {
+                    Button(role: .destructive) { showingBulkDeleteConfirm = true } label: {
+                        Label("Delete \(selection.count)", systemImage: "trash")
+                    }
+                }
+            }
+            #else
+            // onMove needs edit mode on iOS (macOS reorders by direct row drag); Edit mode also
+            // drives the multi-select that the bottom-bar Delete acts on.
             ToolbarItem(placement: .topBarLeading) { EditButton() }
+            ToolbarItem(placement: .bottomBar) {
+                if editMode?.wrappedValue.isEditing == true && !selection.isEmpty {
+                    Button(role: .destructive) { showingBulkDeleteConfirm = true } label: {
+                        Label("Delete \(selection.count)", systemImage: "trash")
+                    }
+                }
+            }
             #endif
         }
         .sheet(item: $cardEditor) { mode in
@@ -212,6 +233,16 @@ struct DeckDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: { card in
             Text("“\(card.term.isEmpty ? "This card" : card.term)” will be permanently deleted. This can’t be undone.")
+        }
+        .confirmationDialog(
+            "Delete \(selection.count) card\(selection.count == 1 ? "" : "s")?",
+            isPresented: $showingBulkDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(selection.count)", role: .destructive) { deleteSelected() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The selected card\(selection.count == 1 ? "" : "s") will be permanently deleted. This can’t be undone.")
         }
         .alert("New Section", isPresented: $showingNewSection) {
             TextField("Section name", text: $newSectionName)
@@ -341,7 +372,7 @@ struct DeckDetailView: View {
     // MARK: Cards
 
     private var cardList: some View {
-        List(selection: $selectedCardID) {
+        List(selection: $selection) {
             if deck.cardArray.isEmpty {
                 emptyRow("No cards yet. Tap + to add one.")
             } else if !cardSearch.isEmpty && displayGroups.isEmpty {
@@ -374,46 +405,64 @@ struct DeckDetailView: View {
         .listStyle(.insetGrouped)
         #else
         .listStyle(.inset)
-        #endif
-        // Click-to-edit via the list's native selection (not a tap gesture, which would break the
-        // native drag-reorder). Reset the selection so the same card can be reopened.
-        .onChange(of: selectedCardID) { _, id in
-            guard let id, let card = deck.cardArray.first(where: { $0.id == id }) else { return }
+        // macOS keyboard niceties (the context menu + toolbar cover the same actions): Return opens
+        // the single selected card, ⌘A selects all, and the Delete key removes the selection (with a
+        // confirmation, via onDeleteCommand). A click is the list's native selection — never a tap
+        // gesture — so it doesn't disable the native onMove drag (FB7367473).
+        .onKeyPress(.return) {
+            guard let card = singleSelectedCard else { return .ignored }
             cardEditor = .edit(card)
-            selectedCardID = nil
+            return .handled
         }
+        .onKeyPress(keys: ["a"]) { press in
+            guard press.modifiers.contains(.command) else { return .ignored }
+            selection = Set(deck.cardArray.map(\.id))
+            return .handled
+        }
+        .onDeleteCommand { if !selection.isEmpty { showingBulkDeleteConfirm = true } }
+        #endif
     }
 
     @ViewBuilder private func cardRow(_ card: Card) -> some View {
-        CardRowView(card: card)
+        let row = CardRowView(card: card)
             .contentShape(Rectangle())
             .tag(card.id)
-            #if os(macOS)
-            .pointerStyle(.link)   // pointing-hand cursor on hover — the row is click-to-edit
-            #endif
             .contextMenu {
-            Button { cardEditor = .edit(card) } label: { Label("Edit", systemImage: "pencil") }
-            Divider()
-            Menu("Move to Section") {
-                Button("None") { moveCard(card, toSection: "") }
-                    .disabled(card.section.isEmpty)
-                if !deck.sectionOrder.isEmpty { Divider() }
-                ForEach(deck.sectionOrder, id: \.self) { name in
-                    Button(name) { moveCard(card, toSection: name) }
-                        .disabled(card.section == name)
-                }
+                Button { cardEditor = .edit(card) } label: { Label("Edit", systemImage: "pencil") }
+                Button { duplicate(card) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
                 Divider()
-                Button("New Section…") { startNewSection(assigning: card) }
-            }
-            if !otherDecks.isEmpty {
-                Menu("Move to Deck") {
-                    ForEach(otherDecks) { target in
-                        Button(target.displayName) { move(card, to: target) }
+                Menu("Move to Section") {
+                    Button("None") { moveCard(card, toSection: "") }
+                        .disabled(card.section.isEmpty)
+                    if !deck.sectionOrder.isEmpty { Divider() }
+                    ForEach(deck.sectionOrder, id: \.self) { name in
+                        Button(name) { moveCard(card, toSection: name) }
+                            .disabled(card.section == name)
+                    }
+                    Divider()
+                    Button("New Section…") { startNewSection(assigning: card) }
+                }
+                if !otherDecks.isEmpty {
+                    Menu("Move to Deck") {
+                        ForEach(otherDecks) { target in
+                            Button(target.displayName) { move(card, to: target) }
+                        }
                     }
                 }
+                Button(role: .destructive) { cardPendingDeletion = card } label: { Label("Delete", systemImage: "trash") }
             }
-            Button(role: .destructive) { cardPendingDeletion = card } label: { Label("Delete", systemImage: "trash") }
+        #if os(iOS)
+        // iOS: a tap opens the editor — but only outside Edit mode, where taps drive multi-select.
+        if editMode?.wrappedValue.isEditing == true {
+            row
+        } else {
+            row.onTapGesture { cardEditor = .edit(card) }
         }
+        #else
+        // macOS: no tap gesture — a click is the list's native selection (which, unlike a tap
+        // gesture, coexists with the native onMove drag); Return opens the selection.
+        row
+        #endif
     }
 
     /// A section header rendered as a row in the flattened list (styled to read like a `Section`
@@ -489,6 +538,31 @@ struct DeckDetailView: View {
         context.delete(card)
         context.saveAndPersist(touching: deck)
     }
+
+    /// Deletes every currently-selected card (bulk delete). The caller confirms first.
+    private func deleteSelected() {
+        let ids = selection
+        for card in deck.cardArray where ids.contains(card.id) { context.delete(card) }
+        selection.removeAll()
+        context.saveAndPersist(touching: deck)
+    }
+
+    /// Duplicates a card within the same deck + section, with a fresh schedule, placed at the end
+    /// of its section.
+    private func duplicate(_ card: Card) {
+        let copy = Card(term: card.term, definition: card.definition, deck: deck,
+                        section: card.section, sortOrder: deck.nextSortOrder(inSection: card.section))
+        context.insert(copy)
+        context.saveAndPersist(touching: deck)
+    }
+
+    #if os(macOS)
+    /// The single selected card, or nil if zero/multiple are selected — used by Return-to-open.
+    private var singleSelectedCard: Card? {
+        guard selection.count == 1, let id = selection.first else { return nil }
+        return deck.cardArray.first { $0.id == id }
+    }
+    #endif
 
     private func move(_ card: Card, to target: Deck) {
         // The section belongs to this deck; moving decks drops it (the name may not exist there).
