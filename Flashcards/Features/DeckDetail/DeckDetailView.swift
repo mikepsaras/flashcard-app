@@ -60,6 +60,12 @@ struct DeckDetailView: View {
     /// Cards in display order — unsectioned first, then by section, `sortOrder` within each.
     private var orderedCards: [Card] { deck.sectionGroups.flatMap(\.cards) }
 
+    /// Cards an export acts on: the current selection when there is one, else the whole deck
+    /// (kept in display order either way).
+    private var cardsToExport: [Card] {
+        selection.isEmpty ? orderedCards : orderedCards.filter { selection.contains($0.id) }
+    }
+
     private func filteredCards(_ cards: [Card]) -> [Card] {
         guard !cardSearch.isEmpty else { return cards }
         return cards.filter {
@@ -149,17 +155,18 @@ struct DeckDetailView: View {
                         Divider()
                         Menu {
                             Button {
-                                exportText = CSVCodec.export(orderedCards)   // build once, on demand
+                                exportText = CSVCodec.export(cardsToExport)   // build once, on demand
                                 showingExporter = true
                             } label: { Label("CSV", systemImage: "tablecells") }
                             Button {
-                                exportText = CardListCodec.exportJSON(orderedCards, name: deck.name)
+                                exportText = CardListCodec.exportJSON(cardsToExport, name: deck.name)
                                 showingJSONExporter = true
                             } label: { Label("JSON", systemImage: "curlybraces") }
                         } label: {
-                            Label("Export Cards", systemImage: "square.and.arrow.up")
+                            Label(selection.isEmpty ? "Export Cards" : "Export \(selection.count) Selected",
+                                  systemImage: "square.and.arrow.up")
                         }
-                        .disabled(orderedCards.isEmpty)
+                        .disabled(cardsToExport.isEmpty)
                     }
                     Divider()
                     Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
