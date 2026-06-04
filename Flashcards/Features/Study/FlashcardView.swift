@@ -12,22 +12,28 @@ struct FlashcardView: View {
     var accent: Color = Theme.accent
     var onTap: () -> Void
 
-    /// Card text scales with the user's Dynamic Type setting (40pt at the default size).
+    /// Dynamic-Type floor for the card text (40pt at the default size); the actual size scales with
+    /// the card so the whole card grows uniformly on bigger / full-screen windows.
     @ScaledMetric(relativeTo: .largeTitle) private var termSize: CGFloat = 40
 
     var body: some View {
-        ZStack {
-            face(text: term, label: nil, showHint: true)
-                .opacity(isShowingDefinition ? 0 : 1)
+        GeometryReader { geo in
+            // ≈40pt at the ~615pt baseline width, scaling up with the card; never below the
+            // Dynamic-Type baseline so it stays legible on small windows / large text settings.
+            let fontSize = max(geo.size.width * 0.065, termSize)
+            ZStack {
+                face(text: term, label: nil, showHint: true, fontSize: fontSize)
+                    .opacity(isShowingDefinition ? 0 : 1)
 
-            face(text: definition, label: definitionLabel.isEmpty ? nil : definitionLabel, showHint: false)
-                .opacity(isShowingDefinition ? 1 : 0)
-                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                face(text: definition, label: definitionLabel.isEmpty ? nil : definitionLabel, showHint: false, fontSize: fontSize)
+                    .opacity(isShowingDefinition ? 1 : 0)
+                    .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+            }
+            .rotation3DEffect(.degrees(isShowingDefinition ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+            .animation(.spring(response: 0.5, dampingFraction: 0.82), value: isShowingDefinition)
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            .onTapGesture(perform: onTap)
         }
-        .rotation3DEffect(.degrees(isShowingDefinition ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-        .animation(.spring(response: 0.5, dampingFraction: 0.82), value: isShowingDefinition)
-        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .onTapGesture(perform: onTap)
         // VoiceOver reads the card as one element and flips on double-tap.
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
@@ -35,7 +41,7 @@ struct FlashcardView: View {
         .accessibilityHint("Double-tap to flip")
     }
 
-    private func face(text: String, label: String?, showHint: Bool) -> some View {
+    private func face(text: String, label: String?, showHint: Bool, fontSize: CGFloat) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                 .fill(Theme.cardSurface)
@@ -53,7 +59,7 @@ struct FlashcardView: View {
                         .foregroundStyle(accent)
                 }
                 Text(text.isEmpty ? "—" : text)
-                    .font(.system(size: termSize, weight: .semibold, design: .rounded))
+                    .font(.system(size: fontSize, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.5)

@@ -127,11 +127,12 @@ struct StudySessionView: View {
                     accent: accent,
                     onTap: { session.flip() }
                 )
-                // Cap the card to a comfortable size and center it, instead of stretching to fill
-                // the whole height (which made a tall, narrow card on large windows).
-                .frame(maxWidth: 620, maxHeight: 500)
+                // A fixed-ratio card that scales with the window — bigger in full screen, same shape —
+                // centered in the available space with a margin so it never touches the edges.
+                .aspectRatio(1.25, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, Theme.Spacing.m)
+                .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.vertical, Theme.Spacing.s)
             }
 
             StudyControlsBar(
