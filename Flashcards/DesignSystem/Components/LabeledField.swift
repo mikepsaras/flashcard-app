@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// A labeled editor field: a small caption above the field, with the text sitting in a
 /// clean rounded box (a step lighter than the page). The placeholder is native — it stays
@@ -73,7 +76,10 @@ struct MultilineField: View {
                 .focused(ifPresent: focus)
                 .font(Typography.body)
                 .scrollContentBackground(.hidden)
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.hidden)   // handles iOS; no-op on macOS TextEditor (see below)
+                #if os(macOS)
+                .background(HideVerticalScroller())
+                #endif
                 .frame(minHeight: minHeight)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
@@ -91,6 +97,45 @@ struct MultilineField: View {
         }
     }
 }
+
+#if os(macOS)
+/// Hides the scroll indicator on the macOS NSScrollView backing a SwiftUI `TextEditor` —
+/// `.scrollIndicators(.hidden)` has no effect on TextEditor there. Drop in as a `.background`
+/// of the editor; it finds the editor's own scroll view (guarding on an NSTextView document so it
+/// can't grab an outer ScrollView) and disables its scrollers.
+struct HideVerticalScroller: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { Self.hide(from: view) }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { Self.hide(from: nsView) }
+    }
+    private static func hide(from view: NSView) {
+        guard let scrollView = textScrollView(near: view) else { return }
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.verticalScroller?.isHidden = true
+    }
+    private static func textScrollView(near view: NSView) -> NSScrollView? {
+        if let scroll = view.enclosingScrollView, scroll.documentView is NSTextView { return scroll }
+        var ancestor: NSView? = view.superview
+        while let current = ancestor {
+            if let scroll = scrollViewWithText(in: current) { return scroll }
+            ancestor = current.superview
+        }
+        return nil
+    }
+    private static func scrollViewWithText(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView, scroll.documentView is NSTextView { return scroll }
+        for subview in view.subviews {
+            if let scroll = scrollViewWithText(in: subview) { return scroll }
+        }
+        return nil
+    }
+}
+#endif
 
 #Preview {
     VStack(spacing: 22) {

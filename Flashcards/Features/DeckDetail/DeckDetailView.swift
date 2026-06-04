@@ -462,11 +462,15 @@ struct DeckDetailView: View {
         .onDeleteCommand { if !selection.isEmpty { showingBulkDeleteConfirm = true } }
         // Double-click-to-open, wired natively on the underlying NSTableView (NOT a SwiftUI tap
         // gesture, which would disable drag + click-select). The clicked row maps to flatRows.
-        .background(TableDoubleClickHandler { row in
+        .background(TableDoubleClickHandler(onDoubleClick: { row in
             let rows = flatRows
             guard rows.indices.contains(row), case .card(let card) = rows[row] else { return }
             cardEditor = .edit(card)
-        })
+        }, onRowDrag: {
+            // A drag started in the table: drop any selected-but-not-dragged card so it doesn't
+            // flicker mid-drag. moveFlat re-selects the dropped card when the drag finishes.
+            if !selection.isEmpty { selection.removeAll() }
+        }))
         #endif
     }
 
