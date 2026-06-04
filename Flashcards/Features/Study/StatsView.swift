@@ -93,7 +93,7 @@ struct StatsContentView: View {
             ) {
                 ForEach(stats) { tile($0) }
             }
-            if insights.predictedRetention != nil || insights.trueRetention != nil { retentionCard }
+            retentionCard
             forecastCard
             heatmapCard
             if !insights.perDeck.isEmpty { perDeckCard }
@@ -151,42 +151,74 @@ struct StatsContentView: View {
     /// measured *mature* retention (Anki's "true retention") — sit as a legend under a graph the user
     /// picks: the recall Spread, the mature-retention Trend, or the forgetting Curve.
     private var retentionCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+        // Until something's been reviewed, both numbers are nil — show a "study to see this" state
+        // rather than hiding the card, so its place on the dashboard (and what it tracks) is visible.
+        let hasData = insights.predictedRetention != nil || insights.trueRetention != nil
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             HStack(alignment: .top, spacing: Theme.Spacing.s) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Memory retention").font(Typography.headline).foregroundStyle(.secondary)
-                    Text(retentionGraphSubtitle).font(Typography.caption).foregroundStyle(.secondary)
+                    if hasData {
+                        Text(retentionGraphSubtitle).font(Typography.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer(minLength: 8)
-                Picker("Graph", selection: $retentionGraphRaw) {
-                    ForEach(RetentionGraph.allCases) { Text($0.label).tag($0.rawValue) }
+                if hasData {
+                    Picker("Graph", selection: $retentionGraphRaw) {
+                        ForEach(RetentionGraph.allCases) { Text($0.label).tag($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    #if os(macOS)
+                    .controlSize(.small)
+                    #endif
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                #if os(macOS)
-                .controlSize(.small)
-                #endif
             }
-            retentionGraphView.frame(height: 140)
-            retentionLegend
-            if let takeaway = insights.retentionTakeaway {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.accent)
-                        .padding(.top, 1)
-                    Text(takeaway)
-                        .font(Typography.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            if hasData {
+                retentionGraphView.frame(height: 140)
+                retentionLegend
+                if let takeaway = insights.retentionTakeaway {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.top, 1)
+                        Text(takeaway)
+                            .font(Typography.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 2)
                 }
-                .padding(.top, 2)
+            } else {
+                retentionEmptyState
             }
         }
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardSurface(cornerRadius: Theme.Radius.tile)
+    }
+
+    /// Shown before any reviews exist: keeps the card on the dashboard and says what will appear.
+    private var retentionEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "brain.head.profile")
+                .font(.system(size: 26))
+                .foregroundStyle(.secondary)
+            Text("Study some cards to see this")
+                .font(Typography.callout)
+                .foregroundStyle(.secondary)
+            Text("Predicted recall appears after your first review; mature-card retention fills in as cards reach a 21-day interval.")
+                .font(Typography.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 140)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Memory retention. Study some cards to see this.")
     }
 
     /// Explains the selected graph's axes — these are hand-drawn charts, so the words carry the
