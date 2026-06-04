@@ -83,9 +83,7 @@ struct TodayDetailView: View {
             Section("Due by deck") {
                 ForEach(dueDecks, id: \.deck.persistentModelID) { entry in
                     HStack(spacing: 12) {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Color(hex: entry.deck.colorHex))
-                            .frame(width: 26, height: 26)
+                        DeckIconChip(icon: entry.deck.icon, colorHex: entry.deck.colorHex, size: 26)
                         Text(entry.deck.displayName)
                             .font(Typography.body)
                         Spacer()

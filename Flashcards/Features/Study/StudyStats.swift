@@ -128,30 +128,31 @@ enum StudyStats {
     }
 
     /// The longest run of consecutive studied days anywhere in the log (not just ending today).
-    /// Pure — the storage-free core, for testing.
+    /// Pure — the storage-free core, for testing. `calendar` is unused (the keys are Gregorian
+    /// "YYYY-MM-DD"); kept for call-site symmetry with `streak`.
     static func longestStreak(in log: [String: Int], calendar: Calendar = .current) -> Int {
-        let days = log.filter { $0.value > 0 }.keys
-            .compactMap { dateFromKey($0, calendar: calendar) }
-            .map { calendar.startOfDay(for: $0) }
-            .sorted()
-        guard !days.isEmpty else { return 0 }
-        var longest = 1, run = 1
-        for i in 1..<days.count {
-            let nextOfPrev = calendar.date(byAdding: .day, value: 1, to: days[i - 1])
-            if let nextOfPrev, calendar.isDate(nextOfPrev, inSameDayAs: days[i]) {
-                run += 1
-            } else {
-                run = 1
-            }
+        // Convert each studied day-key to an integer day number so consecutive days differ by exactly
+        // 1 — far cheaper than parsing every key to a `Date` and doing calendar arithmetic per pair
+        // (this runs on every Insights render, over a log that can hold a year+ of days).
+        let ordinals = log.compactMap { $0.value > 0 ? dayNumber(fromKey: $0.key) : nil }.sorted()
+        guard let first = ordinals.first else { return 0 }
+        var longest = 1, run = 1, prev = first
+        for ord in ordinals.dropFirst() {
+            if ord == prev + 1 { run += 1 } else if ord != prev { run = 1 }
             longest = max(longest, run)
+            prev = ord
         }
         return longest
     }
 
-    /// Parses a "YYYY-MM-DD" day-key back into a Date (for longest-streak run detection).
-    private static func dateFromKey(_ key: String, calendar: Calendar) -> Date? {
-        let parts = key.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    /// Julian Day Number for a Gregorian "YYYY-MM-DD" day-key (nil if malformed). Pure integer math,
+    /// no `Calendar`, so consecutive-day detection over a long log stays cheap.
+    private static func dayNumber(fromKey key: String) -> Int? {
+        let parts = key.split(separator: "-")
+        guard parts.count == 3, let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
+        let a = (14 - m) / 12
+        let yy = y + 4800 - a
+        let mm = m + 12 * a - 3
+        return d + (153 * mm + 2) / 5 + 365 * yy + yy / 4 - yy / 100 + yy / 400 - 32045
     }
 }

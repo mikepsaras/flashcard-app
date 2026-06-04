@@ -143,6 +143,9 @@ struct StudyInsights: Equatable {
         // are built, and a sectioned deck's cards aren't walked a second time.
         let weekAhead = calendar.date(byAdding: .day, value: 7, to: now) ?? now
         let startToday = calendar.startOfDay(for: now)
+        // Anything due past here can't land in the forecast, so we skip the (costly) day-bucketing
+        // calendar math for it — most cards in a mature library are due well beyond two weeks.
+        let forecastEnd = calendar.date(byAdding: .day, value: forecastDays, to: startToday) ?? now
         var forecast = Array(repeating: 0, count: forecastDays)
         // Predicted-recall accumulators (mean of 0.9^(elapsed/interval) over reviewed units), plus
         // a recall histogram and an interval sum for the "Spread" / "Curve" graphs.
@@ -165,35 +168,47 @@ struct StudyInsights: Equatable {
                                                icon: deckIcon, section: name, totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
             }
 
-            // Forward for every card, plus reverse when the deck studies both ways — the same units
-            // `deck.allReviewItems` yields, counted directly off the card to skip the allocation.
-            let directions: [ReviewDirection] = deck.studyReversed ? [.forward, .reverse] : [.forward]
+            // Forward for every card, plus reverse when the deck studies both ways. Read once.
+            let reversed = deck.studyReversed
             for card in deck.cardArray {
+                // SwiftData @Model property access is ~1–2µs each (machinery, not a plain field), so
+                // read every scalar this loop needs ONCE into a local instead of re-reading per use —
+                // this is the bulk of make()'s cost on a large library.
+                let fInterval = card.interval, rInterval = card.reverseInterval
+                let fDue = card.dueDate, rDue = card.reverseDueDate
+                let fLast = card.lastReviewedAt, rLast = card.reverseLastReviewedAt
+
                 insights.totalCards += 1
                 stat.totalCards += 1
-                let isNew = !card.hasBeenReviewed
+                let isNew = fLast == nil && rLast == nil
                 // Best interval the card earned in any direction — independent of the deck's
                 // current `studyReversed` toggle.
-                let isMature = !isNew && max(card.interval, card.reverseInterval) >= matureIntervalDays
+                let isMature = !isNew && max(fInterval, rInterval) >= matureIntervalDays
                 if isNew { insights.newCount += 1; stat.newCount += 1 }
                 else if isMature { insights.matureCount += 1; stat.matureCount += 1 }
                 else { insights.learningCount += 1; stat.learningCount += 1 }
 
                 var cardDue = 0
-                for direction in directions {
-                    let due = card.dueDate(direction)
+                for unit in 0..<(reversed ? 2 : 1) {
+                    let due = unit == 0 ? fDue : rDue
+                    let last = unit == 0 ? fLast : rLast
+                    let unitInterval = unit == 0 ? fInterval : rInterval
                     if due <= now { insights.dueNow += 1; stat.due += 1; cardDue += 1 }
                     if due <= weekAhead { insights.dueThisWeek += 1 }
-                    // Bucket into the forecast; overdue folds into today (index 0).
-                    let dueDay = calendar.startOfDay(for: due)
-                    let offset = max(0, calendar.dateComponents([.day], from: startToday, to: dueDay).day ?? 0)
-                    if offset < forecastDays { forecast[offset] += 1 }
+                    // Bucket into the forecast (overdue folds into today, index 0); skip cards due
+                    // past the window. Offset is days-from-today via elapsed seconds — no per-card
+                    // calendar call. (A DST day is 23/25h, so this can be off by one around a
+                    // transition; immaterial for a 14-day forecast bar chart.)
+                    if due <= forecastEnd {
+                        let offset = max(0, Int(due.timeIntervalSince(startToday) / 86_400))
+                        if offset < forecastDays { forecast[offset] += 1 }
+                    }
 
                     // Predicted recall now for this scheduled unit: 0.9^(daysSinceReview / interval),
                     // i.e. ~90% at the due date, decaying past it. Only reviewed units contribute
                     // (a never-seen card has nothing to recall). Interval floored at 1 day.
-                    if let last = card.lastReviewedAt(direction) {
-                        let intervalDays = Double(max(direction == .forward ? card.interval : card.reverseInterval, 1))
+                    if let last {
+                        let intervalDays = Double(max(unitInterval, 1))
                         let elapsed = max(now.timeIntervalSince(last) / 86_400, 0)
                         let r = pow(targetRetentionAtDue, elapsed / intervalDays)
                         retentionSum += r
@@ -204,11 +219,12 @@ struct StudyInsights: Equatable {
                 }
 
                 if usesSections {
-                    var s = slot(card.section)
+                    let cardSection = card.section
+                    var s = slot(cardSection)
                     s.totalCards += 1
                     if isNew { s.newCount += 1 } else if isMature { s.matureCount += 1 } else { s.learningCount += 1 }
                     s.due += cardDue
-                    bySection[card.section] = s
+                    bySection[cardSection] = s
                 }
             }
             insights.perDeck.append(stat)
