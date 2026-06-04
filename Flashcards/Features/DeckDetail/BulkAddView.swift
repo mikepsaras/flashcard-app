@@ -1,39 +1,16 @@
 import SwiftUI
 import SwiftData
 
-/// Enter many cards at once. Three modes:
-/// - **Pairs** — each row is its own Front + Back (a tidy grid).
-/// - **Same back** — type one Back (e.g. "Germany"), then a list of Fronts → one card each.
-/// - **Same front** — type one Front, then a list of Backs → one card each.
-///
-/// Reached from a deck's "+" menu, a section header ("Add Cards…"), and the empty-deck state. In the
-/// single-line entry fields a pasted multi-line list splits into rows (Pairs also splits a tab/comma
-/// into Front/Back).
+/// Enter many cards at once — Front/Back rows styled like the rest of the editors (fieldBox fields on
+/// the grouped background). The **Add Row** split button adds the number of rows set in the little
+/// counter beside it; its menu reuses the previous row's Back or Front, so several cards that share a
+/// side (e.g. five backed "Germany") don't need it retyped. Pasting a multi-line list into a Front
+/// field splits it into rows (a tab or the first comma splits Front/Back).
 struct BulkAddView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
     let deck: Deck
-
-    /// What varies row-to-row. The "same" modes share one side (typed once) so you don't retype it.
-    enum Mode: String, CaseIterable, Identifiable {
-        case pairs, sameBack, sameFront
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .pairs: "Pairs"
-            case .sameBack: "Same back"
-            case .sameFront: "Same front"
-            }
-        }
-        var hint: String {
-            switch self {
-            case .pairs: "Each row becomes its own card."
-            case .sameBack: "Every card shares one back; add a front for each."
-            case .sameFront: "Every card shares one front; add a back for each."
-            }
-        }
-    }
 
     private struct Row: Identifiable, Equatable {
         let id = UUID()
@@ -41,39 +18,42 @@ struct BulkAddView: View {
         var back = ""
     }
 
-    @State private var mode: Mode = .pairs
+    private enum Field: Hashable { case front(UUID), back(UUID) }
+    private enum SharedSide {
+        case front, back
+        var title: String { self == .back ? "Same back" : "Same front" }
+        var prompt: String { self == .back ? "Shared back" : "Shared front" }
+    }
+
     @State private var rows: [Row]
-    @State private var sharedFront = ""
-    @State private var sharedBack = ""
     @State private var section: String
-    @FocusState private var focused: UUID?
+    @State private var addCount = 1
+    @State private var addCountText = "1"
+    @State private var sharedSide: SharedSide?
+    @State private var sharedValue = ""
+    @FocusState private var focused: Field?
 
     init(deck: Deck, section: String = "") {
         self.deck = deck
-        _rows = State(initialValue: [Row(), Row(), Row()])   // start with a few blank rows
+        _rows = State(initialValue: [Row(), Row(), Row()])
         _section = State(initialValue: section)
     }
 
-    /// The (front, back) pairs that will be inserted — also drives the count and Add button.
-    private var drafts: [(front: String, back: String)] {
-        Self.draftCards(mode: mode, rows: rows.map { ($0.front, $0.back) },
-                        sharedFront: sharedFront, sharedBack: sharedBack)
+    private func isFilled(_ row: Row) -> Bool {
+        !row.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    private var canAdd: Bool {
-        guard !drafts.isEmpty else { return false }
-        // "Same front" needs the shared front; "same back" allows a blank back (a term-only card).
-        if mode == .sameFront { return !sharedFront.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        return true
-    }
+    private var filledCount: Int { rows.filter(isFilled).count }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                header
-                #if os(macOS)
-                Divider()
-                #endif
-                entriesList
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if !deck.sectionOrder.isEmpty { sectionRow }
+                    ForEach($rows) { $row in cardRow($row) }
+                    addControls
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Theme.groupedBackground)
             .navigationTitle("Add Cards")
@@ -83,112 +63,142 @@ struct BulkAddView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add \(drafts.count)") { addAll() }.disabled(!canAdd)
+                    Button("Add \(filledCount)") { addAll() }.disabled(filledCount == 0)
                 }
+            }
+            .alert(sharedSide?.title ?? "", isPresented: Binding(get: { sharedSide != nil }, set: { if !$0 { sharedSide = nil } }), presenting: sharedSide) { side in
+                TextField(side.prompt, text: $sharedValue)
+                Button("Cancel", role: .cancel) {}
+                Button("Add \(addCount)") { commitShared(side) }
+            } message: { side in
+                Text("Adds \(addCount) card\(addCount == 1 ? "" : "s") sharing this \(side == .back ? "back" : "front"); fill in the \(side == .back ? "fronts" : "backs") after.")
             }
         }
         #if os(macOS)
-        .frame(width: 540, height: 600)
+        .frame(width: 520, height: 600)
         #endif
     }
 
-    /// Fixed top zone — mode toggle, the shared field (in the "same" modes), and the section picker.
-    /// Mirrors the deck-detail header band so the sheet reads as one header + one list rather than a
-    /// stack of grouped boxes.
-    private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Picker("Mode", selection: $mode.animation(.snappy)) {
-                ForEach(Mode.allCases) { Text($0.label).tag($0) }
+    private var sectionRow: some View {
+        HStack {
+            Text("Section").font(Typography.body)
+            Spacer(minLength: 8)
+            Picker("Section", selection: $section) {
+                Text("None").tag("")
+                ForEach(deck.sectionOrder, id: \.self) { Text($0).tag($0) }
             }
-            .pickerStyle(.segmented)
             .labelsHidden()
-
-            Text(mode.hint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if mode == .sameBack {
-                MultilineField(label: "Shared back", placeholder: "e.g. Germany", text: $sharedBack, minHeight: 54)
-            } else if mode == .sameFront {
-                MultilineField(label: "Shared front", placeholder: "Front of every card", text: $sharedFront, minHeight: 54)
-            }
-
-            if !deck.sectionOrder.isEmpty {
-                HStack(spacing: 8) {
-                    Text("Section").font(Typography.callout).foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    Picker("Section", selection: $section) {
-                        Text("None").tag("")
-                        ForEach(deck.sectionOrder, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                }
-            }
+            .pickerStyle(.menu)
+            .fixedSize()
         }
-        .padding(Theme.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.windowBackground)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .fieldBox()
     }
 
-    private var entriesList: some View {
-        List {
-            Section {
-                ForEach($rows) { $row in rowField($row) }
-                    .onDelete { rows.remove(atOffsets: $0) }
-                Button { addRow() } label: { Label("Add Row", systemImage: "plus") }
-            } header: {
-                Text(drafts.count == 1 ? "1 card" : "\(drafts.count) cards")
-            }
-        }
-        #if os(iOS)
-        .listStyle(.insetGrouped)
-        #else
-        .listStyle(.inset)
-        #endif
-    }
-
-    /// The per-row editor: two fields in Pairs, a single field in the shared modes. The varying
-    /// field is single-line, so a newline can only come from a paste → split into rows.
-    @ViewBuilder private func rowField(_ row: Binding<Row>) -> some View {
+    @ViewBuilder private func cardRow(_ row: Binding<Row>) -> some View {
         let id = row.wrappedValue.id
-        switch mode {
-        case .pairs:
-            VStack(alignment: .leading, spacing: 6) {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 TextField("Front", text: row.front)
-                    .font(Typography.headline)
-                    .focused($focused, equals: id)
+                    .textFieldStyle(.plain)
+                    .font(Typography.body)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .fieldBox()
+                    .focused($focused, equals: .front(id))
                     .onSubmit { addRowIfLast(id) }
                     .onChange(of: row.wrappedValue.front) { _, v in if v.contains("\n") { paste(v, into: id) } }
                 TextField("Back", text: row.back, axis: .vertical)
-                    .font(Typography.callout)
+                    .textFieldStyle(.plain)
+                    .font(Typography.body)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .fieldBox()
+                    .focused($focused, equals: .back(id))
             }
-            .padding(.vertical, 2)
-        case .sameBack:
-            TextField("Front", text: row.front)
-                .focused($focused, equals: id)
-                .onSubmit { addRowIfLast(id) }
-                .onChange(of: row.wrappedValue.front) { _, v in if v.contains("\n") { paste(v, into: id) } }
-        case .sameFront:
-            TextField("Back", text: row.back)
-                .focused($focused, equals: id)
-                .onSubmit { addRowIfLast(id) }
-                .onChange(of: row.wrappedValue.back) { _, v in if v.contains("\n") { paste(v, into: id) } }
+            Button { delete(id) } label: {
+                Image(systemName: "minus.circle.fill").font(.system(size: 18))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.top, 8)
+            .opacity(rows.count > 1 ? 1 : 0)
+            .disabled(rows.count <= 1)
+            .help("Remove this row")
         }
     }
 
-    private func addRow() {
-        let row = Row()
-        rows.append(row)
-        focused = row.id
+    private var addControls: some View {
+        HStack(spacing: 10) {
+            Menu {
+                Button { startShared(.back) } label: { Label("Same back…", systemImage: "rectangle.on.rectangle") }
+                Button { startShared(.front) } label: { Label("Same front…", systemImage: "rectangle.on.rectangle") }
+            } label: {
+                Label("Add Row", systemImage: "plus")
+            } primaryAction: {
+                addRows(count: addCount)
+            }
+            .fixedSize()
+
+            TextField("", text: $addCountText)
+                .multilineTextAlignment(.center)
+                .frame(width: 44)
+                .textFieldStyle(.roundedBorder)
+                #if os(iOS)
+                .keyboardType(.numberPad)
+                #endif
+                .onChange(of: addCountText) { _, newValue in
+                    let filtered = String(newValue.filter(\.isNumber).prefix(3))
+                    if filtered != newValue { addCountText = filtered; return }
+                    if let value = Int(filtered) { addCount = min(max(value, 1), 100) }
+                }
+                .onChange(of: addCount) { _, newValue in
+                    if addCountText != String(newValue) { addCountText = String(newValue) }
+                }
+            #if os(macOS)
+            Stepper("Rows to add", value: $addCount, in: 1...100).labelsHidden()
+            #endif
+            Text(addCount == 1 ? "row" : "rows").font(Typography.caption).foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 4)
     }
 
-    /// Return on the last row adds a fresh one (rapid entry); on earlier rows it just commits.
+    private func addRows(count: Int = 1, front: String = "", back: String = "") {
+        let newRows = (0..<max(count, 1)).map { _ in Row(front: front, back: back) }
+        rows.append(contentsOf: newRows)
+        if let first = newRows.first {
+            // Focus the side still to be filled (the shared side, if any, is prefilled).
+            focused = front.isEmpty ? .front(first.id) : .back(first.id)
+        }
+    }
+
+    /// Opens the "Same back/front" prompt, pre-filled with the last row's value for that side — so it
+    /// defaults to the most recent value but the user can type a custom one.
+    private func startShared(_ side: SharedSide) {
+        sharedValue = (side == .back ? rows.last?.back : rows.last?.front) ?? ""
+        sharedSide = side
+    }
+
+    private func commitShared(_ side: SharedSide) {
+        switch side {
+        case .back:  addRows(count: addCount, back: sharedValue)
+        case .front: addRows(count: addCount, front: sharedValue)
+        }
+        sharedSide = nil
+    }
+
+    /// Return on the last row adds a single fresh one (rapid entry); on earlier rows it just commits.
     private func addRowIfLast(_ id: UUID) {
         guard rows.last?.id == id else { return }
-        addRow()
+        addRows(count: 1)
+    }
+
+    private func delete(_ id: UUID) {
+        guard rows.count > 1 else { return }
+        rows.removeAll { $0.id == id }
     }
 
     // MARK: Paste-splitting
@@ -213,73 +223,30 @@ struct BulkAddView: View {
             .map { (front: $0.0, back: $0.1) }
     }
 
-    /// Non-empty, trimmed lines — for splitting a pasted list into the single-field (shared) modes.
-    static func parseLines(_ text: String) -> [String] {
-        text.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-    }
-
-    /// Splits a multi-line paste in the varying field into rows beneath the pasted one.
     private func paste(_ text: String, into id: UUID) {
         guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
-        switch mode {
-        case .pairs:
-            let parsed = Self.parsePaste(text)
-            guard !parsed.isEmpty else { rows[index].front = text.trimmingCharacters(in: .whitespacesAndNewlines); return }
-            rows[index].front = parsed[0].front
-            rows[index].back = parsed[0].back
-            rows.insert(contentsOf: parsed.dropFirst().map { Row(front: $0.front, back: $0.back) }, at: index + 1)
-        case .sameBack:
-            let lines = Self.parseLines(text)
-            guard !lines.isEmpty else { rows[index].front = text.trimmingCharacters(in: .whitespacesAndNewlines); return }
-            rows[index].front = lines[0]
-            rows.insert(contentsOf: lines.dropFirst().map { Row(front: $0) }, at: index + 1)
-        case .sameFront:
-            let lines = Self.parseLines(text)
-            guard !lines.isEmpty else { rows[index].back = text.trimmingCharacters(in: .whitespacesAndNewlines); return }
-            rows[index].back = lines[0]
-            rows.insert(contentsOf: lines.dropFirst().map { Row(back: $0) }, at: index + 1)
+        let parsed = Self.parsePaste(text)
+        guard !parsed.isEmpty else {
+            rows[index].front = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return
         }
-    }
-
-    // MARK: Build
-
-    /// The (front, back) pairs to insert for a mode — pure, so the per-mode logic is unit-tested
-    /// without the view. Rows whose varying side is blank are dropped; fronts are trimmed.
-    static func draftCards(mode: Mode, rows: [(front: String, back: String)],
-                           sharedFront: String, sharedBack: String) -> [(front: String, back: String)] {
-        let sf = sharedFront.trimmingCharacters(in: .whitespacesAndNewlines)
-        var out: [(front: String, back: String)] = []
-        for row in rows {
-            let front = row.front.trimmingCharacters(in: .whitespacesAndNewlines)
-            switch mode {
-            case .pairs:
-                guard !front.isEmpty else { continue }
-                out.append((front, row.back))
-            case .sameBack:
-                guard !front.isEmpty else { continue }
-                out.append((front, sharedBack))
-            case .sameFront:
-                guard !row.back.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                out.append((sf, row.back))
-            }
-        }
-        return out
+        rows[index].front = parsed[0].front
+        rows[index].back = parsed[0].back
+        rows.insert(contentsOf: parsed.dropFirst().map { Row(front: $0.front, back: $0.back) }, at: index + 1)
     }
 
     private func addAll() {
-        let drafts = self.drafts
-        guard !drafts.isEmpty else { dismiss(); return }
         // New cards land in the chosen section in row order, appended after any existing cards.
         if !section.isEmpty && !deck.sectionOrder.contains(section) { deck.sectionOrder.append(section) }
         var order = deck.nextSortOrder(inSection: section)
-        for draft in drafts {
-            context.insert(Card(term: draft.front, definition: draft.back,
-                                deck: deck, section: section, sortOrder: order))
+        var added = 0
+        for row in rows where isFilled(row) {
+            context.insert(Card(term: row.front.trimmingCharacters(in: .whitespacesAndNewlines),
+                                definition: row.back, deck: deck, section: section, sortOrder: order))
             order += 1
+            added += 1
         }
-        context.saveAndPersist(touching: deck)
+        if added > 0 { context.saveAndPersist(touching: deck) }
         dismiss()
     }
 }
