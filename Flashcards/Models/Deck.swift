@@ -106,6 +106,22 @@ extension Deck {
         (cardArray.filter { $0.section == section }.map(\.sortOrder).max() ?? -1) + 1
     }
 
+    /// Native `List` reorder within a section: applies an `onMove` (offsets → destination) to the
+    /// section's cards and renumbers their `sortOrder`. Pure model mutation (the caller persists).
+    func moveCards(inSection section: String, from source: IndexSet, to destination: Int) {
+        var cards = (sectionGroups.first { $0.name == section }?.cards) ?? []
+        cards.move(fromOffsets: source, toOffset: destination)
+        for (index, card) in cards.enumerated() { card.sortOrder = index }
+    }
+
+    /// Moves the named section up (`-1`) or down (`+1`) in `sectionOrder`. No-op at the ends.
+    func moveSection(_ name: String, by offset: Int) {
+        guard let index = sectionOrder.firstIndex(of: name) else { return }
+        let destination = index + offset
+        guard destination >= 0, destination < sectionOrder.count else { return }
+        sectionOrder.swapAt(index, destination)
+    }
+
     /// The deck's name for display, with a placeholder when it's blank. Centralizes the
     /// "Untitled Deck" fallback the UI would otherwise repeat at every call site.
     var displayName: String { name.isEmpty ? "Untitled Deck" : name }

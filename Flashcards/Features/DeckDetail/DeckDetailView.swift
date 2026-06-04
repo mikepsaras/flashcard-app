@@ -28,6 +28,11 @@ struct DeckDetailView: View {
     @State private var newSectionCardTarget: Card?
     @State private var sectionPendingRename: String?
     @State private var renameSectionName = ""
+    // macOS drag-to-reorder uses a custom gesture (List's native onMove can't coexist with
+    // tap-to-edit on macOS — FB7367473). iOS keeps native onMove via the Edit button.
+    /// Selected card id — a click sets it, which opens the editor. Click is the list's *native*
+    /// selection (not a tap gesture), so it doesn't break the native drag-reorder (FB7367473).
+    @State private var selectedCardID: UUID?
 
     /// Cards in display order — unsectioned first, then by section, `sortOrder` within each.
     private var orderedCards: [Card] { deck.sectionGroups.flatMap(\.cards) }
@@ -120,6 +125,10 @@ struct DeckDetailView: View {
                     Label("More", systemImage: "ellipsis.circle")
                 }
             }
+            #if os(iOS)
+            // onMove needs edit mode on iOS (macOS reorders by direct row drag).
+            ToolbarItem(placement: .topBarLeading) { EditButton() }
+            #endif
         }
         .sheet(item: $cardEditor) { mode in
             CardEditorView(deck: deck, mode: mode)
@@ -292,7 +301,7 @@ struct DeckDetailView: View {
     // MARK: Cards
 
     private var cardList: some View {
-        List {
+        List(selection: $selectedCardID) {
             if deck.cardArray.isEmpty {
                 emptyRow("No cards yet. Tap + to add one.")
             } else if !cardSearch.isEmpty && displayGroups.isEmpty {
@@ -302,6 +311,9 @@ struct DeckDetailView: View {
                     Section {
                         ForEach(group.cards) { card in cardRow(card) }
                             .onDelete { offsets in deleteCards(offsets, in: group.cards) }
+                            .onMove { source, destination in
+                                moveCardsInSection(group.name, from: source, to: destination)
+                            }
                         if group.cards.isEmpty {
                             Text("No cards in this section yet — move cards here from their ••• menu.")
                                 .font(Typography.caption)
@@ -318,14 +330,22 @@ struct DeckDetailView: View {
         #else
         .listStyle(.inset)
         #endif
+        // Click-to-edit via the list's native selection (not a tap gesture, which would break the
+        // native drag-reorder). Reset the selection so the same card can be reopened.
+        .onChange(of: selectedCardID) { _, id in
+            guard let id, let card = deck.cardArray.first(where: { $0.id == id }) else { return }
+            cardEditor = .edit(card)
+            selectedCardID = nil
+        }
     }
 
     @ViewBuilder private func cardRow(_ card: Card) -> some View {
-        Button { cardEditor = .edit(card) } label: {
-            CardRowView(card: card)
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
+        CardRowView(card: card)
+            .contentShape(Rectangle())
+            .tag(card.id)
+            .contextMenu {
+            Button { cardEditor = .edit(card) } label: { Label("Edit", systemImage: "pencil") }
+            Divider()
             Menu("Move to Section") {
                 Button("None") { moveCard(card, toSection: "") }
                     .disabled(card.section.isEmpty)
@@ -357,6 +377,11 @@ struct DeckDetailView: View {
                 Spacer()
                 Menu {
                     Button { startRenameSection(group.name) } label: { Label("Rename", systemImage: "pencil") }
+                    Button { moveSection(group.name, by: -1) } label: { Label("Move Up", systemImage: "arrow.up") }
+                        .disabled(deck.sectionOrder.first == group.name)
+                    Button { moveSection(group.name, by: 1) } label: { Label("Move Down", systemImage: "arrow.down") }
+                        .disabled(deck.sectionOrder.last == group.name)
+                    Divider()
                     Button(role: .destructive) { deleteSection(group.name) } label: { Label("Delete Section", systemImage: "trash") }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -399,6 +424,19 @@ struct DeckDetailView: View {
         card.section = name
         card.sortOrder = deck.nextSortOrder(inSection: name)
         card.modifiedAt = .now
+        context.saveAndPersist(touching: deck)
+    }
+
+    /// Native list reorder within a section (drag-to-reorder). The reorder lives on `Deck`
+    /// (unit-tested); this persists. Ignored while searching, where the row indices are filtered.
+    private func moveCardsInSection(_ section: String, from source: IndexSet, to destination: Int) {
+        guard cardSearch.isEmpty else { return }
+        deck.moveCards(inSection: section, from: source, to: destination)
+        context.saveAndPersist(touching: deck)
+    }
+
+    private func moveSection(_ name: String, by offset: Int) {
+        deck.moveSection(name, by: offset)
         context.saveAndPersist(touching: deck)
     }
 

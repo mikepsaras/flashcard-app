@@ -818,3 +818,56 @@ import SwiftData
         #expect(DeckStore().loadAll(into: reloaded.mainContext, from: dir) == 2)
     }
 }
+
+@MainActor
+@Suite struct DeckSectionReorderTests {
+
+    /// Builds a deck with `cards` (terms) in one section. The caller MUST keep the returned
+    /// container alive for the test (via `withExtendedLifetime`) — SwiftData traps if a model's
+    /// container is deallocated out from under it.
+    private func makeDeck(_ cards: [String], section: String = "A") -> (ModelContainer, Deck) {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "D")
+        deck.sectionOrder = [section]
+        container.mainContext.insert(deck)
+        for (index, term) in cards.enumerated() {
+            container.mainContext.insert(Card(term: term, definition: "", deck: deck, section: section, sortOrder: index))
+        }
+        return (container, deck)
+    }
+
+    private func order(_ deck: Deck, _ section: String) -> [String] {
+        (deck.sectionGroups.first { $0.name == section }?.cards ?? []).map(\.term)
+    }
+
+    @Test func moveCardDownReorders() {
+        let (container, deck) = makeDeck(["a", "b", "c", "d"])
+        withExtendedLifetime(container) {
+            deck.moveCards(inSection: "A", from: IndexSet(integer: 0), to: 3)   // "a" to after "c"
+            #expect(order(deck, "A") == ["b", "c", "a", "d"])
+        }
+    }
+
+    @Test func moveCardUpReorders() {
+        let (container, deck) = makeDeck(["a", "b", "c", "d"])
+        withExtendedLifetime(container) {
+            deck.moveCards(inSection: "A", from: IndexSet(integer: 3), to: 1)   // "d" to before "b"
+            #expect(order(deck, "A") == ["a", "d", "b", "c"])
+        }
+    }
+
+    @Test func moveSectionReordersList() {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "D")
+        deck.sectionOrder = ["A", "B", "C"]
+        container.mainContext.insert(deck)
+        withExtendedLifetime(container) {
+            deck.moveSection("C", by: -1)
+            #expect(deck.sectionOrder == ["A", "C", "B"])
+            deck.moveSection("A", by: -1)            // already first → no-op
+            #expect(deck.sectionOrder == ["A", "C", "B"])
+            deck.moveSection("A", by: 1)
+            #expect(deck.sectionOrder == ["C", "A", "B"])
+        }
+    }
+}
