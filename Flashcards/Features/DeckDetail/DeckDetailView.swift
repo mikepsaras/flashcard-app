@@ -499,11 +499,11 @@ struct DeckDetailView: View {
             row.onTapGesture { cardEditor = .edit(card) }
         }
         #else
-        // macOS: a click is the list's native selection (it coexists with the native onMove drag);
-        // a DOUBLE-click opens the editor (a single click only selects), and Return opens too. The
-        // double-click is a *simultaneous* gesture so it runs alongside — rather than instead of —
-        // the list's press/drag, avoiding the FB7367473 trap that a plain tap gesture would hit.
-        row.simultaneousGesture(TapGesture(count: 2).onEnded { cardEditor = .edit(card) })
+        // macOS: NO tap gesture of ANY kind — even a *simultaneous* double-tap makes SwiftUI route
+        // the press to gesture recognition, which disables the List's native drag-reorder AND
+        // click-to-select (FB7367473; confirmed by testing). A click selects (native); Return or the
+        // context-menu "Edit" opens. Double-click-to-open is therefore incompatible with the drag.
+        row
         #endif
     }
 
