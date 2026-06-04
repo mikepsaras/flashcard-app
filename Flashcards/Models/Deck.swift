@@ -31,6 +31,10 @@ final class Deck {
     var sectionOrder: [String] = []
     /// Whether each card's section appears as a chip on the study card. Per deck. CloudKit-safe.
     var showSectionsInStudy: Bool = true
+    /// The deck's icon: empty ⇒ the default glyph; an SF Symbol name ⇒ that symbol (tinted by
+    /// `colorHex`); or a themed preset id like `DeckIconPreset.euFlag` (drawn, and it owns the
+    /// color). Defaulted ⇒ CloudKit-safe.
+    var icon: String = ""
     var createdAt: Date = Date.now
     var modifiedAt: Date = Date.now
 
@@ -46,7 +50,8 @@ final class Deck {
         gradingMode: GradingMode = .twoButton,
         section: String = "",
         sectionOrder: [String] = [],
-        showSectionsInStudy: Bool = true
+        showSectionsInStudy: Bool = true,
+        icon: String = ""
     ) {
         self.id = UUID()
         self.name = name
@@ -58,6 +63,7 @@ final class Deck {
         self.section = section
         self.sectionOrder = sectionOrder
         self.showSectionsInStudy = showSectionsInStudy
+        self.icon = icon
         self.createdAt = .now
         self.modifiedAt = .now
         self.cards = []

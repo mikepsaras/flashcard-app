@@ -127,6 +127,24 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/23_retention_graphs.png"))
     }
 
+    @Test func renderDeckIcons() throws {
+        let row = VStack(spacing: 20) {
+            HStack(spacing: 16) {
+                DeckIconChip(icon: "", colorHex: "#3478F6")
+                DeckIconChip(icon: "globe.europe.africa.fill", colorHex: "#34C759")
+                DeckIconChip(icon: "brain.head.profile", colorHex: "#AF52DE")
+                DeckIconChip(icon: DeckIconPreset.euFlag, colorHex: DeckIconPreset.euBlue)
+                DeckIconChip(icon: "", colorHex: "#3478F6", selected: true)
+                DeckIconChip(icon: DeckIconPreset.euFlag, colorHex: DeckIconPreset.euBlue, selected: true)
+            }
+            EUFlagTile(size: 88)   // large, to inspect the 12-star ring
+        }
+        .padding(24)
+        .background(Theme.groupedBackground)
+        try Snapshot.write(row, size: CGSize(width: 480, height: 200), name: "24_deck_icons")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/24_deck_icons.png"))
+    }
+
     @Test func renderFourButtonStudyScreen() throws {
         let (container, _, plan) = try makeContext(fourButton: true)
         try Snapshot.write(

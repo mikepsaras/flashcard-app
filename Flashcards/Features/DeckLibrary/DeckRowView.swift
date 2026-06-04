@@ -8,11 +8,7 @@ struct DeckRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            SidebarIconChip(
-                systemName: "rectangle.on.rectangle.angled",
-                color: Color(hex: deck.colorHex),
-                selected: selected
-            )
+            DeckIconChip(icon: deck.icon, colorHex: deck.colorHex, selected: selected)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(deck.displayName)
@@ -40,14 +36,15 @@ struct SidebarIconChip: View {
     let systemName: String
     let color: Color
     var selected: Bool = false
+    var size: CGFloat = 34
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        RoundedRectangle(cornerRadius: size * 8 / 34, style: .continuous)
             .fill(selected ? Color.white : color)
-            .frame(width: 34, height: 34)
+            .frame(width: size, height: size)
             .overlay(
                 Image(systemName: systemName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: size * 14 / 34, weight: .semibold))
                     .foregroundStyle(selected ? color : Color.white)
             )
     }

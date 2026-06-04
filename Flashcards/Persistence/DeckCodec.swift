@@ -27,6 +27,8 @@ enum DeckCodec {
         // v3: card-section names within the deck + whether to show section chips in study.
         var sectionOrder: [String]?
         var showSectionsInStudy: Bool?
+        // Optional deck icon (SF Symbol name or themed preset id); omitted when default.
+        var icon: String?
         var createdAt: Date
         var modifiedAt: Date
         var cards: [CardDTO]
@@ -85,6 +87,8 @@ enum DeckCodec {
             // Omit when empty/default so decks not using card sections re-encode without noise.
             sectionOrder: deck.sectionOrder.isEmpty ? nil : deck.sectionOrder,
             showSectionsInStudy: deck.showSectionsInStudy ? nil : false,
+            // Omit when default so decks using the standard icon re-encode without noise.
+            icon: deck.icon.isEmpty ? nil : deck.icon,
             createdAt: deck.createdAt,
             modifiedAt: deck.modifiedAt,
             // Encode in display order — unsectioned first, then each section in `sectionOrder`,
@@ -115,6 +119,7 @@ enum DeckCodec {
         deck.section = dto.section ?? ""
         deck.sectionOrder = dto.sectionOrder ?? []
         deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
+        deck.icon = dto.icon ?? ""
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
         context.insert(deck)
@@ -142,6 +147,7 @@ enum DeckCodec {
         deck.section = dto.section ?? ""
         deck.sectionOrder = dto.sectionOrder ?? []
         deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
+        deck.icon = dto.icon ?? ""
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
 

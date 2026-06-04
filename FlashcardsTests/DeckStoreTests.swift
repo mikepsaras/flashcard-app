@@ -233,6 +233,32 @@ import SwiftData
         #expect(rebuilt.cardArray.first?.section == "Verbs")
     }
 
+    @Test func deckIconRoundTrips() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "EU", colorHex: DeckIconPreset.euBlue, icon: DeckIconPreset.euFlag)
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.icon == DeckIconPreset.euFlag)
+        // Bind the second container to a local so it outlives the makeDeck call + property read —
+        // an inlined `.mainContext` would let it deallocate mid-decode and trap SwiftData.
+        let other = DeckStore.makeContainer()
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        #expect(rebuilt.icon == DeckIconPreset.euFlag)
+    }
+
+    @Test func defaultIconOmitsKeyToAvoidPhantomEdit() throws {
+        // A deck with no custom icon must omit the key so it re-encodes identically (reconcile no-op).
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Plain")
+        container.mainContext.insert(deck)
+        let data = try DeckCodec.encode(deck)
+        #expect(!(String(data: data, encoding: .utf8) ?? "").contains("\"icon\""))
+        let dto1 = try DeckCodec.decodeDTO(data)
+        let other = DeckStore.makeContainer()
+        let dto2 = try DeckCodec.decodeDTO(DeckCodec.encode(DeckCodec.makeDeck(from: dto1, in: other.mainContext)))
+        #expect(dto1 == dto2)
+    }
+
     @Test func manualCardOrderRoundTripsViaFileOrder() throws {
         // Manual order is the order of the cards array: encode writes cards by (section, sortOrder)
         // and decode assigns sortOrder from the file position — so order round-trips with no field.

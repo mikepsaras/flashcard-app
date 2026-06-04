@@ -22,6 +22,7 @@ struct DeckEditorView: View {
     @State private var name: String
     @State private var deckDescription: String
     @State private var colorHex: String
+    @State private var icon: String
     @State private var backLabel: String
     @State private var showLabel: Bool
     @State private var studyReversed: Bool
@@ -38,6 +39,7 @@ struct DeckEditorView: View {
             _name = State(initialValue: "")
             _deckDescription = State(initialValue: "")
             _colorHex = State(initialValue: DeckPalette.default)
+            _icon = State(initialValue: "")
             _backLabel = State(initialValue: "Definition")
             _showLabel = State(initialValue: true)
             _studyReversed = State(initialValue: false)
@@ -49,6 +51,7 @@ struct DeckEditorView: View {
             _name = State(initialValue: deck.name)
             _deckDescription = State(initialValue: deck.deckDescription)
             _colorHex = State(initialValue: deck.colorHex)
+            _icon = State(initialValue: deck.icon)
             // An empty stored label means "no label"; keep a sensible default text
             // to show if the user flips the toggle back on.
             _backLabel = State(initialValue: deck.backLabel.isEmpty ? "Definition" : deck.backLabel)
@@ -78,10 +81,20 @@ struct DeckEditorView: View {
                     LabeledField(label: "Description", placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
 
                     VStack(alignment: .leading, spacing: 10) {
+                        Text("Icon")
+                            .font(.system(.subheadline, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        iconGrid
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("Color")
                             .font(.system(.subheadline, weight: .medium))
                             .foregroundStyle(.secondary)
                         colorGrid
+                            .disabled(isThemedIcon)
+                            .opacity(isThemedIcon ? 0.35 : 1)
+                        if isThemedIcon { caption("Color is set by the EU flag theme.") }
                     }
 
                     // Advanced settings are collapsed by default for a new deck (a clean,
@@ -187,6 +200,46 @@ struct DeckEditorView: View {
         Text(text).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 2)
     }
 
+    private var isThemedIcon: Bool { DeckIconPreset.isThemed(icon) }
+
+    private var iconGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 12)], spacing: 12) {
+            ForEach(DeckIconPreset.symbols, id: \.self) { sym in
+                iconCell(selected: !isThemedIcon && DeckIconPreset.symbol(for: icon) == sym) {
+                    SidebarIconChip(systemName: sym, color: Color(hex: colorHex), size: 32)
+                } action: {
+                    icon = sym
+                }
+                .accessibilityLabel(Text(sym))
+            }
+            // Themed EU flag — selecting it fixes the deck color to EU blue.
+            iconCell(selected: isThemedIcon) {
+                EUFlagTile(size: 32)
+            } action: {
+                icon = DeckIconPreset.euFlag
+                colorHex = DeckIconPreset.euBlue
+            }
+            .accessibilityLabel(Text("EU flag"))
+        }
+        .padding(.vertical, 4)
+        .animation(.snappy, value: isThemedIcon)
+    }
+
+    private func iconCell<Content: View>(
+        selected: Bool, @ViewBuilder _ content: () -> Content, action: @escaping () -> Void
+    ) -> some View {
+        ZStack {
+            content()
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(Theme.accent, lineWidth: selected ? 3 : 0)
+                .frame(width: 42, height: 42)
+        }
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
     private var colorGrid: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 12)], spacing: 12) {
             ForEach(DeckPalette.colors, id: \.self) { hex in
@@ -216,7 +269,7 @@ struct DeckEditorView: View {
         let trimmedSection = String(section.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
         let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
-        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy)
+        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
         context.insert(deck)
         return deck
     }
@@ -230,7 +283,7 @@ struct DeckEditorView: View {
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         switch mode {
         case .new:
-            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy)
+            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
             context.insert(deck)
         case .edit(let deck):
             deck.name = trimmed
@@ -241,6 +294,7 @@ struct DeckEditorView: View {
             deck.gradingMode = gradingMode
             deck.section = trimmedSection
             deck.showSectionsInStudy = showSectionsInStudy
+            deck.icon = icon
             deck.modifiedAt = .now
         }
         context.saveAndPersist()
