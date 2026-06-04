@@ -15,4 +15,6 @@ enum DefaultsKey {
     static let remindersEnabled = "remindersEnabled"
     static let reminderHour = "reminderHour"
     static let reminderMinute = "reminderMinute"
+    /// Hidden developer mode (unlocked by tapping the version 7×), gating the test-data tools.
+    static let developerMode = "developerMode"
 }

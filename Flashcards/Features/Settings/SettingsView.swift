@@ -17,6 +17,16 @@ struct SettingsView: View {
     @State private var showingResetStats = false
     @State private var showingDeleteAll = false
 
+    // Hidden developer mode (unlocked by tapping the version 7×) + its test-data tools.
+    @AppStorage(DefaultsKey.developerMode) private var developerMode = false
+    @State private var versionTaps = 0
+    @State private var devStatus: String?
+    @State private var showingStressSheet = false
+    @State private var showingSeedHistory = false
+    @State private var showingRemoveTestData = false
+    @State private var stressDecks = 25
+    @State private var stressCards = 200
+
     private var reminderTime: Binding<Date> {
         Binding(
             get: { Calendar.current.date(from: DateComponents(hour: reminderHour, minute: reminderMinute)) ?? Date() },
@@ -38,8 +48,23 @@ struct SettingsView: View {
             aiSection
             storageSection
             dataSection
+            if developerMode { developerSection }
+            aboutSection
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showingStressSheet) { stressSheet }
+        .confirmationDialog("Seed a year of review history?", isPresented: $showingSeedHistory, titleVisibility: .visible) {
+            Button("Replace Statistics", role: .destructive) { runSeedHistory() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Overwrites your current streak, accuracy, and retention history with ~1 year of synthetic activity. Your decks are kept.")
+        }
+        .confirmationDialog("Remove all test data?", isPresented: $showingRemoveTestData, titleVisibility: .visible) {
+            Button("Remove Test Data", role: .destructive) { runRemoveTestData() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Deletes every deck under the “Test Data” section and resets all study statistics (the streak/accuracy/retention log is global — it can't be split into test vs. real). Your other decks are kept.")
+        }
         .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder]) { result in
             handleFolderPick(result)
         }
@@ -199,6 +224,111 @@ struct SettingsView: View {
         } footer: {
             Text("Reset Statistics clears your streak and review history but keeps your decks. Delete All Decks permanently removes every deck and card, and clears statistics.")
         }
+    }
+
+    // MARK: About + hidden developer mode
+
+    private var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—" }
+    private var appBuild: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—" }
+
+    private var aboutSection: some View {
+        Section {
+            // A plain Button (not .onTapGesture, which is flaky on macOS Form rows) so the hidden
+            // 7-tap unlock registers reliably — while still looking like an ordinary row.
+            Button(action: registerVersionTap) {
+                HStack {
+                    Text("Version").foregroundStyle(.primary)
+                    Spacer()
+                    Text("\(appVersion) (\(appBuild))").foregroundStyle(.secondary).monospacedDigit()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } header: {
+            Text("About")
+        } footer: {
+            if developerMode {
+                Text("Developer mode is on.")
+            } else if versionTaps >= 4 {
+                let left = 7 - versionTaps
+                Text("\(left) more tap\(left == 1 ? "" : "s") to enable developer mode…")
+            }
+        }
+    }
+
+    private var developerSection: some View {
+        Section {
+            Button { runLoadSample() } label: { Label("Load sample library", systemImage: "square.stack.3d.up.fill") }
+            Button { showingStressSheet = true } label: { Label("Stress test…", systemImage: "gauge.high") }
+            Button { showingSeedHistory = true } label: { Label("Seed review history", systemImage: "calendar.badge.clock") }
+            Button(role: .destructive) { showingRemoveTestData = true } label: { Label("Remove all test data", systemImage: "trash") }
+            Button("Disable Developer Mode") { developerMode = false; devStatus = nil }
+        } header: {
+            Text("Developer")
+        } footer: {
+            Text(devStatus ?? "Generates test decks under a “Test Data” section for stress + feature testing. “Remove all test data” deletes only those and clears seeded stats.")
+        }
+    }
+
+    private var stressSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Button("Small — 5 × 50") { stressDecks = 5; stressCards = 50 }
+                    Button("Medium — 25 × 200") { stressDecks = 25; stressCards = 200 }
+                    Button("Large — 100 × 1,000") { stressDecks = 100; stressCards = 1000 }
+                } header: { Text("Presets") }
+                Section {
+                    Stepper("Decks: \(stressDecks)", value: $stressDecks, in: 1...200)
+                    Stepper("Cards per deck: \(stressCards)", value: $stressCards, in: 0...5000, step: 50)
+                } footer: {
+                    Text("Total: \((stressDecks * stressCards).formatted()) cards. Large sizes take a moment to generate and write to disk.")
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Stress Test")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingStressSheet = false } }
+                ToolbarItem(placement: .confirmationAction) { Button("Generate") { runStress() } }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 320)
+        #endif
+    }
+
+    private func registerVersionTap() {
+        guard !developerMode else { return }
+        versionTaps += 1
+        if versionTaps >= 7 {
+            developerMode = true
+            versionTaps = 0
+            devStatus = "Developer mode enabled."
+        }
+    }
+
+    private func runLoadSample() {
+        let r = DeveloperTools.loadSampleLibrary(into: context)
+        context.saveAndPersist()
+        devStatus = "Loaded \(r.decks) sample decks (\(r.cards) cards)."
+    }
+
+    private func runStress() {
+        showingStressSheet = false
+        let r = DeveloperTools.stressTest(decks: stressDecks, cardsPerDeck: stressCards, into: context)
+        context.saveAndPersist()
+        devStatus = "Generated \(r.decks) decks · \(r.cards.formatted()) cards."
+    }
+
+    private func runSeedHistory() {
+        DeveloperTools.seedReviewHistory()
+        devStatus = "Seeded ~1 year of review history."
+    }
+
+    private func runRemoveTestData() {
+        let n = DeveloperTools.removeAllTestData(into: context)
+        context.saveAndPersist()
+        devStatus = "Removed \(n) test deck\(n == 1 ? "" : "s") and cleared seeded stats."
     }
 
     @ViewBuilder private var testStatusView: some View {

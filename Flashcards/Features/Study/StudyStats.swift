@@ -65,6 +65,20 @@ enum StudyStats {
         }
     }
 
+    /// Overwrites the day-logs wholesale — used only by the developer test-data tools to seed a
+    /// year of synthetic activity. Bumps the revision so live stat views re-read immediately.
+    static func overwriteLogs(
+        reviews: [String: Int], correct: [String: Int],
+        mature: [String: Int], matureCorrect: [String: Int],
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(reviews, forKey: storageKey)
+        defaults.set(correct, forKey: correctStorageKey)
+        defaults.set(mature, forKey: matureStorageKey)
+        defaults.set(matureCorrect, forKey: matureCorrectStorageKey)
+        defaults.set(defaults.integer(forKey: revisionKey) + 1, forKey: revisionKey)
+    }
+
     /// Clears all recorded study history — streak, reviews, accuracy, and retention.
     static func reset(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: storageKey)
