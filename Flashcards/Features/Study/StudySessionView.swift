@@ -149,7 +149,9 @@ struct StudySessionView: View {
                     accent: accent,
                     onTap: { session.flip() }
                 )
-                .frame(maxWidth: 600)
+                // Cap the card to a comfortable size and center it, instead of stretching to fill
+                // the whole height (which made a tall, narrow card on large windows).
+                .frame(maxWidth: 620, maxHeight: 500)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, Theme.Spacing.m)
             }
