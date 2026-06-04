@@ -53,6 +53,10 @@ struct CardEditorView: View {
                     LabeledField(label: "Front", text: $term, axis: .vertical, lines: 1...4, focus: $frontFocused)
                     LabeledField(label: "Back", text: $definition, axis: .vertical, lines: 3...10)
 
+                    if !term.isEmpty || !definition.isEmpty {
+                        markdownPreview
+                    }
+
                     // New cards only: save and immediately start a fresh blank card for fast
                     // sequential entry (focus jumps back to Front).
                     if !isEditing {
@@ -83,6 +87,29 @@ struct CardEditorView: View {
         #if os(macOS)
         .frame(width: 480, height: 460)
         #endif
+    }
+
+    /// Live preview of how the card's Markdown renders (the fields stay plain-text source).
+    private var markdownPreview: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Preview")
+                .font(.system(.subheadline, weight: .medium))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                if !term.isEmpty {
+                    Text(Markdown.attributed(term)).font(Typography.headline)
+                }
+                if !definition.isEmpty {
+                    Text(Markdown.attributed(definition)).font(Typography.body).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .fieldBox()
+            Text("Markdown: **bold**, *italic*, `code`, [links](url).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func save(addAnother: Bool = false) {

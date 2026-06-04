@@ -58,7 +58,7 @@ struct FlashcardView: View {
                         .tracking(0.8)
                         .foregroundStyle(accent)
                 }
-                Text(text.isEmpty ? "—" : text)
+                Text(text.isEmpty ? AttributedString("—") : Markdown.attributed(text))
                     .font(.system(size: fontSize, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)

@@ -253,5 +253,17 @@ struct SnapshotGalleryTests {
             size: CGSize(width: 620, height: 600), name: "13_card_large_type")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/13_card_large_type.png"))
     }
+
+    @Test func renderMarkdownCard() throws {
+        // Verifies inline Markdown renders on the card face (FlashcardView renders under
+        // ImageRenderer, unlike List-based views).
+        try Snapshot.write(
+            FlashcardView(term: "**Photosynthesis**",
+                          definition: "Converts *light* into chemical energy.\n\nUses `CO₂` and water.",
+                          isShowingDefinition: true, onTap: {})
+                .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 620, height: 600), name: "26_card_markdown")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/26_card_markdown.png"))
+    }
 }
 #endif

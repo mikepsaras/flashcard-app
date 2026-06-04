@@ -687,10 +687,10 @@ private struct CardRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(card.term.isEmpty ? "—" : card.term)
+                Text(card.term.isEmpty ? AttributedString("—") : Markdown.attributed(card.term))
                     .font(Typography.headline)
                     .lineLimit(1)
-                Text(card.definition)
+                Text(Markdown.attributed(card.definition))
                     .font(Typography.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
