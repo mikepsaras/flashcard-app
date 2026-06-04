@@ -176,13 +176,22 @@ final class StudySessionTests {
         #expect(session.isShowingDefinition == true)
     }
 
-    @Test func shuffleKeepsSameCardSet() {
+    @Test func shuffleAllKeepsCardSetAndRestarts() {
         let cards = makeCards(8)
-        let session = StudySession(cards: cards, trackLearning: true)
+        let session = StudySession(cards: cards, trackLearning: false)
+        session.grade(known: true)
+        session.grade(known: false)
         let idsBefore = Set(session.items.map(\.id))
-        session.shuffleRemaining()
-        #expect(Set(session.items.map(\.id)) == idsBefore)
+
+        session.shuffleAll()
+
+        #expect(Set(session.items.map(\.id)) == idsBefore)   // same cards, reordered
         #expect(session.items.count == 8)
+        #expect(session.answered == 0)                        // restarts from the top
+        #expect(session.correctCount == 0)
+        #expect(session.wrongCount == 0)
+        #expect(session.gradeLog.isEmpty)
+        #expect(session.canUndo == false)                     // undo history cleared
     }
 
     @Test func reverseDirectionSchedulesIndependently() {

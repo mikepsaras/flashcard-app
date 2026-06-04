@@ -126,16 +126,19 @@ final class StudySession {
         return undoneGrade
     }
 
-    /// Shuffles the current item and everything not yet answered. Undo history is
-    /// cleared (you can't undo across a shuffle).
-    func shuffleRemaining() {
-        guard index < items.count else { return }
-        var updated = items
-        let shuffledTail = Array(updated[index...]).shuffled()
-        updated.replaceSubrange(index..., with: shuffledTail)
+    /// Shuffles the entire run and restarts it from the top — "shuffle the deck" — the same in both
+    /// practice and real study runs. Progress (position, ✓/✕ tallies, grade log) and the undo history
+    /// reset, since the whole order changes. A practice run never touched schedules; a real run simply
+    /// re-reviews its cards in the new order.
+    func shuffleAll() {
+        guard !items.isEmpty else { return }
         history.removeAll()
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-            items = updated
+            items.shuffle()
+            index = 0
+            correctCount = 0
+            wrongCount = 0
+            gradeLog.removeAll()
             isShowingDefinition = false
         }
     }

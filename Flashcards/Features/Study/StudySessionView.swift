@@ -61,10 +61,10 @@ struct StudySessionView: View {
             Spacer()
             // Session controls live here now (off the card / bottom bar), only while studying.
             if !session.isFinished {
-                Button { session.shuffleRemaining() } label: { Image(systemName: "shuffle") }
+                Button { session.shuffleAll() } label: { Image(systemName: "shuffle") }
                     .buttonStyle(.plain)
-                    .help("Shuffle remaining cards")
-                    .accessibilityLabel("Shuffle remaining cards")
+                    .help("Shuffle the deck")
+                    .accessibilityLabel("Shuffle the deck")
                 practiceBadge(compact: compact)
             }
             if let exportText = plan.exportText {
@@ -272,7 +272,7 @@ struct StudySessionView: View {
             Group {
                 Button("Flip") { session.flip() }
                     .keyboardShortcut(.space, modifiers: [])
-                Button("Shuffle") { session.shuffleRemaining() }
+                Button("Shuffle") { session.shuffleAll() }
                     .keyboardShortcut("s", modifiers: [])
                 Button("Undo") { performUndo() }
                     .keyboardShortcut("z", modifiers: .command)
