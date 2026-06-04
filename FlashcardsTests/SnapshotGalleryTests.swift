@@ -281,17 +281,29 @@ struct SnapshotGalleryTests {
 
     @Test func renderBulletListCard() throws {
         // Verifies block-level bullet lists render on the card face (left-aligned, hanging indent)
-        // rather than showing the raw `*` markers.
+        // rather than showing the raw `*` markers. Rendered large (≈ a real macOS study card, where
+        // the font computes to ~65pt) so it also exercises shrink-to-fit: the 5-bullet back must
+        // scale down to stay INSIDE the card rather than overflowing onto the grading buttons.
+        let bullets = "* Identify the central problem, gap, or opportunity\n"
+            + "* Gain approval for the initial business case and statement of work (SOW)\n"
+            + "* Develop the project charter and the stakeholder register.\n"
+            + "* Obtain stakeholder approval for the pre-baseline\n"
+            + "* Secure final approval of the project charter to authorize the planning phase."
         try Snapshot.write(
-            FlashcardView(term: "Key Steps in Initiating a Project",
-                          definition: "* Identify the central problem, gap, or opportunity\n"
-                            + "* Gain approval for the initial business case\n"
-                            + "* Develop the project charter and stakeholder register\n"
-                            + "* Secure final approval to authorize the planning phase",
+            FlashcardView(term: "Key Steps in Initiating a Project", definition: bullets,
                           isShowingDefinition: true, onTap: {})
                 .padding(28).background(Theme.windowBackground),
-            size: CGSize(width: 620, height: 600), name: "27_card_bullets")
+            size: CGSize(width: 1040, height: 820), name: "27_card_bullets")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/27_card_bullets.png"))
+
+        // The front (short term) of the SAME card, same size — to confirm the card itself doesn't
+        // resize between faces (the back just renders smaller text).
+        try Snapshot.write(
+            FlashcardView(term: "Key Steps in Initiating a Project", definition: bullets,
+                          isShowingDefinition: false, onTap: {})
+                .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 1040, height: 820), name: "27b_card_bullets_front")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/27b_card_bullets_front.png"))
     }
 }
 #endif

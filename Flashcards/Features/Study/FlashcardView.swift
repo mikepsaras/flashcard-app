@@ -58,23 +58,46 @@ struct FlashcardView: View {
                         .tracking(0.8)
                         .foregroundStyle(accent)
                 }
-                Group {
-                    if text.isEmpty {
-                        Text("—").multilineTextAlignment(.center)
-                    } else {
-                        // Renders inline styling + bullet lists; centers a plain term, left-aligns lists.
-                        MarkdownText(text: text, centered: true)
-                    }
-                }
-                .font(.system(size: fontSize, weight: .semibold, design: .rounded))
-                .foregroundStyle(.primary)
-                .minimumScaleFactor(0.5)
+                cardText(text, fontSize: fontSize)
             }
             .padding(40)
         }
         .overlay(alignment: .top) { sectionChip }
         .overlay(alignment: .bottom) { if showHint { flipHint } }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The card's main text, shrunk to fit the fixed-size card so a long back (e.g. a bullet list)
+    /// scales DOWN instead of overflowing the card onto the grading buttons. Both faces share the
+    /// card size, so a long back simply renders at a smaller size than a short front — the card never
+    /// resizes. `minimumScaleFactor` alone can't do this: it shrinks a single `Text`, not the
+    /// multi-line `VStack` that bullet lists need, so we step the font down until the whole block fits.
+    @ViewBuilder private func cardText(_ text: String, fontSize: CGFloat) -> some View {
+        if text.isEmpty {
+            cardTextBody(text, fontSize)
+        } else {
+            ViewThatFits(in: .vertical) {
+                cardTextBody(text, fontSize)
+                cardTextBody(text, fontSize * 0.85)
+                cardTextBody(text, fontSize * 0.72)
+                cardTextBody(text, fontSize * 0.60)
+                cardTextBody(text, fontSize * 0.50)
+                cardTextBody(text, fontSize * 0.40)
+            }
+        }
+    }
+
+    @ViewBuilder private func cardTextBody(_ text: String, _ size: CGFloat) -> some View {
+        Group {
+            if text.isEmpty {
+                Text("—").multilineTextAlignment(.center)
+            } else {
+                // Renders inline styling + bullet lists; centers a plain term, left-aligns lists.
+                MarkdownText(text: text, centered: true)
+            }
+        }
+        .font(.system(size: size, weight: .semibold, design: .rounded))
+        .foregroundStyle(.primary)
     }
 
     /// A quiet affordance for the flip gesture, shown on the front (term) face only.
