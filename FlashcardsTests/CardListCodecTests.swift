@@ -83,4 +83,25 @@ import Foundation
         // Braces inside a value don't confuse the round-trip.
         #expect(CardListCodec.parse(json).cards.first?.definition == "Written as {1, 2, 3}")
     }
+
+    // MARK: Sections
+
+    @Test func jsonPerCardSectionRoundTrips() {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "S"); container.mainContext.insert(deck)
+        let c1 = Card(term: "correr", definition: "to run", deck: deck, section: "Verbs")
+        let c2 = Card(term: "hola", definition: "hello", deck: deck)   // unsectioned
+        container.mainContext.insert(c1); container.mainContext.insert(c2)
+
+        let parsed = CardListCodec.parse(CardListCodec.exportJSON([c1, c2], name: "S"))
+        #expect(parsed.cards.first?.section == "Verbs")
+        #expect(parsed.cards.last?.section == nil)               // unsectioned card omits the key
+        #expect(CardListCodec.orderedSections(parsed.cards) == ["Verbs"])
+    }
+
+    @Test func csvSectionImportThroughCardList() {
+        let parsed = CardListCodec.parse("Term,Definition,Section\ncorrer,to run,Verbs\ngato,cat,Nouns\n")
+        #expect(parsed.cards.map(\.section) == ["Verbs", "Nouns"])
+        #expect(CardListCodec.orderedSections(parsed.cards) == ["Verbs", "Nouns"])
+    }
 }

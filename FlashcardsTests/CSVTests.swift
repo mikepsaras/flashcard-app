@@ -82,4 +82,23 @@ import Testing
             CSVCodec.Row(term: "Scrum", definition: "Frame\"work"),
         ])
     }
+
+    @Test func roundTripsSectionColumn() {
+        let cards = [
+            Card(term: "correr", definition: "to run", section: "Verbs"),
+            Card(term: "gato", definition: "cat", section: "Nouns"),
+        ]
+        let csv = CSVCodec.export(cards)
+        #expect(csv.hasPrefix("Term,Definition,Section\n"))   // section column added when used
+        #expect(CSVCodec.parse(csv) == [
+            CSVCodec.Row(term: "correr", definition: "to run", section: "Verbs"),
+            CSVCodec.Row(term: "gato", definition: "cat", section: "Nouns"),
+        ])
+    }
+
+    @Test func sectionlessExportStaysTwoColumn() {
+        let csv = CSVCodec.export([Card(term: "a", definition: "b")])
+        #expect(csv.hasPrefix("Term,Definition\n"))
+        #expect(!csv.contains("Section"))
+    }
 }

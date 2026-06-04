@@ -8,14 +8,20 @@ enum CSVCodec {
     struct Row: Equatable {
         let term: String
         let definition: String
+        /// Optional 3rd CSV column; defaulted so existing 2-column call sites/tests are unaffected.
+        var section: String = ""
     }
 
     // MARK: Export
 
     static func export(_ cards: [Card]) -> String {
-        var out = "Term,Definition\n"
+        // Include the Section column only when some card is sectioned, so plain decks stay 2-column.
+        let withSections = cards.contains { !$0.section.isEmpty }
+        var out = withSections ? "Term,Definition,Section\n" : "Term,Definition\n"
         for card in cards {
-            out += escape(card.term) + "," + escape(card.definition) + "\n"
+            var line = escape(card.term) + "," + escape(card.definition)
+            if withSections { line += "," + escape(card.section) }
+            out += line + "\n"
         }
         return out
     }
@@ -47,6 +53,7 @@ enum CSVCodec {
             // (so a quoted "  spaced  " survives import intact).
             let term = value(record, 0)
             let definition = value(record, 1)
+            let section = value(record, 2)   // optional 3rd column; "" when absent
             // Trim only for header/blank detection — never mutate quoted content.
             let termKey = term.trimmingCharacters(in: .whitespacesAndNewlines)
             let defKey = definition.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -57,7 +64,7 @@ enum CSVCodec {
                 sawContent = true
                 if termKey.lowercased() == "term", defKey.lowercased() == "definition" { continue }
             }
-            rows.append(Row(term: term, definition: definition))
+            rows.append(Row(term: term, definition: definition, section: section))
         }
         return rows
     }

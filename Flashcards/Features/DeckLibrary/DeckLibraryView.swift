@@ -265,9 +265,11 @@ struct DeckLibraryView: View {
         // Name from the JSON envelope if present, else the file's own name.
         let name = parsed.name ?? url.deletingPathExtension().lastPathComponent
         let deck = Deck(name: name, deckDescription: parsed.deckDescription ?? "", section: parsed.section ?? "")
+        deck.sectionOrder = CardListCodec.orderedSections(parsed.cards)
         context.insert(deck)
-        for card in parsed.cards {
-            context.insert(Card(term: card.term, definition: card.definition, deck: deck))
+        for (index, card) in parsed.cards.enumerated() {
+            context.insert(Card(term: card.term, definition: card.definition, deck: deck,
+                                section: card.section ?? "", sortOrder: index))
         }
         context.saveAndPersist(touching: deck)
         selection = .deck(deck.persistentModelID)

@@ -54,7 +54,7 @@ enum CardListCodec {
 
     private static func parseCSV(_ text: String) -> [GeneratedCard] {
         CSVCodec.parse(text)
-            .map { GeneratedCard(term: $0.term, definition: $0.definition) }
+            .map { GeneratedCard(term: $0.term, definition: $0.definition, section: $0.section.isEmpty ? nil : $0.section) }
             .filter { !$0.term.isEmpty }
     }
 
@@ -70,7 +70,8 @@ enum CardListCodec {
     static func exportJSON(_ cards: [Card], name: String? = nil) -> String {
         let envelope = Envelope(
             name: clean(name),
-            cards: cards.map { Envelope.Item(term: $0.term, definition: $0.definition) }
+            cards: cards.map { Envelope.Item(term: $0.term, definition: $0.definition,
+                                             section: $0.section.isEmpty ? nil : $0.section) }
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -78,10 +79,24 @@ enum CardListCodec {
             ?? #"{"cards":[]}"#
     }
 
+    /// Distinct non-empty card sections in first-appearance order — used to seed a deck's
+    /// `sectionOrder` when importing.
+    static func orderedSections(_ cards: [GeneratedCard]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for card in cards {
+            guard let section = card.section, !section.isEmpty, !seen.contains(section) else { continue }
+            seen.insert(section)
+            result.append(section)
+        }
+        return result
+    }
+
     private struct Envelope: Encodable {
         var name: String?
         var cards: [Item]
-        struct Item: Encodable { var term: String; var definition: String }
+        // `section` is omitted when nil (synthesized Encodable uses encodeIfPresent for optionals).
+        struct Item: Encodable { var term: String; var definition: String; var section: String? }
     }
 }
 

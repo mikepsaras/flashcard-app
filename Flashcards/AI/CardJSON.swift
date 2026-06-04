@@ -70,7 +70,8 @@ enum CardJSON {
 
     private struct CardList: Decodable {
         let cards: [Item]
-        struct Item: Decodable { let term: String; let definition: String }
+        // `section` is optional, so JSON without it still decodes (→ nil).
+        struct Item: Decodable { let term: String; let definition: String; let section: String? }
     }
 
     static func parseCards(from text: String) throws -> [GeneratedCard] {
@@ -99,9 +100,11 @@ enum CardJSON {
     private static func mapped(_ items: [CardList.Item]) -> [GeneratedCard] {
         items
             .map {
-                GeneratedCard(
+                let section = $0.section?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return GeneratedCard(
                     term: $0.term.trimmingCharacters(in: .whitespacesAndNewlines),
-                    definition: $0.definition.trimmingCharacters(in: .whitespacesAndNewlines)
+                    definition: $0.definition.trimmingCharacters(in: .whitespacesAndNewlines),
+                    section: (section?.isEmpty ?? true) ? nil : section
                 )
             }
             .filter { !$0.term.isEmpty }

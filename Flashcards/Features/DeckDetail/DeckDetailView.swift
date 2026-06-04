@@ -210,8 +210,19 @@ struct DeckDetailView: View {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
         // Sniff JSON vs CSV — the importer accepts either.
         let parsed = CardListCodec.parse(text)
+        // Add any new sections from the import to the deck's order, then append each card to the end
+        // of its section. Seed per-section counters from existing cards (don't depend on just-
+        // inserted cards appearing in the relationship mid-loop).
+        for section in CardListCodec.orderedSections(parsed.cards) where !deck.sectionOrder.contains(section) {
+            deck.sectionOrder.append(section)
+        }
+        var nextOrder: [String: Int] = [:]
+        for card in deck.cardArray { nextOrder[card.section] = max(nextOrder[card.section] ?? 0, card.sortOrder + 1) }
         for card in parsed.cards {
-            context.insert(Card(term: card.term, definition: card.definition, deck: deck))
+            let section = card.section ?? ""
+            let order = nextOrder[section, default: 0]
+            nextOrder[section] = order + 1
+            context.insert(Card(term: card.term, definition: card.definition, deck: deck, section: section, sortOrder: order))
         }
         if !parsed.cards.isEmpty { context.saveAndPersist(touching: deck) }
         let n = parsed.cards.count
