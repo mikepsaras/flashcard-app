@@ -137,11 +137,24 @@ struct SnapshotGalleryTests {
                 DeckIconChip(icon: "", colorHex: "#3478F6", selected: true)
                 DeckIconChip(icon: DeckIconPreset.euFlag, colorHex: DeckIconPreset.euBlue, selected: true)
             }
-            EUFlagTile(size: 88)   // large, to inspect the 12-star ring
+            HStack(spacing: 16) {
+                DeckIconChip(icon: DeckIconPreset.euro, colorHex: DeckIconPreset.euBlue)
+                DeckIconChip(icon: "theme.flag.de", colorHex: "#3478F6")
+                DeckIconChip(icon: "theme.flag.fr", colorHex: "#3478F6")
+                DeckIconChip(icon: "theme.flag.it", colorHex: "#3478F6")
+                DeckIconChip(icon: "theme.flag.se", colorHex: "#3478F6")
+                DeckIconChip(icon: "theme.flag.es", colorHex: "#3478F6", selected: true)
+            }
+            HStack(spacing: 16) {
+                EuroTile(size: 64)
+                FlagTile(emoji: "🇩🇪", size: 64)
+                FlagTile(emoji: "🇮🇪", size: 64)
+                EUFlagTile(size: 64)   // large, to inspect the 12-star ring
+            }
         }
         .padding(24)
         .background(Theme.groupedBackground)
-        try Snapshot.write(row, size: CGSize(width: 480, height: 200), name: "24_deck_icons")
+        try Snapshot.write(row, size: CGSize(width: 520, height: 320), name: "24_deck_icons")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/24_deck_icons.png"))
     }
 

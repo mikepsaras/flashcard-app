@@ -94,7 +94,7 @@ struct DeckEditorView: View {
                         colorGrid
                             .disabled(isThemedIcon)
                             .opacity(isThemedIcon ? 0.35 : 1)
-                        if isThemedIcon { caption("Color is set by the EU flag theme.") }
+                        if isThemedIcon { caption("Color is set by the EU theme.") }
                     }
 
                     // Advanced settings are collapsed by default for a new deck (a clean,
@@ -203,26 +203,63 @@ struct DeckEditorView: View {
     private var isThemedIcon: Bool { DeckIconPreset.isThemed(icon) }
 
     private var iconGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 12)], spacing: 12) {
-            ForEach(DeckIconPreset.symbols, id: \.self) { sym in
-                iconCell(selected: !isThemedIcon && DeckIconPreset.symbol(for: icon) == sym) {
-                    SidebarIconChip(systemName: sym, color: Color(hex: colorHex), size: 32)
-                } action: {
-                    icon = sym
+        VStack(alignment: .leading, spacing: 16) {
+            iconGroup("Symbols") {
+                ForEach(DeckIconPreset.symbols, id: \.self) { sym in
+                    iconCell(selected: isSymbolSelected(sym)) {
+                        SidebarIconChip(systemName: sym, color: Color(hex: colorHex), size: 32)
+                    } action: {
+                        icon = sym
+                    }
+                    .accessibilityLabel(Text(sym))
                 }
-                .accessibilityLabel(Text(sym))
             }
-            // Themed EU flag — selecting it fixes the deck color to EU blue.
-            iconCell(selected: isThemedIcon) {
-                EUFlagTile(size: 32)
-            } action: {
-                icon = DeckIconPreset.euFlag
-                colorHex = DeckIconPreset.euBlue
+            iconGroup("EU & Euro") {
+                // Themed: selecting one fixes the deck color to EU blue (color picker disabled).
+                iconCell(selected: icon == DeckIconPreset.euFlag) {
+                    EUFlagTile(size: 32)
+                } action: {
+                    icon = DeckIconPreset.euFlag
+                    colorHex = DeckIconPreset.euBlue
+                }
+                .accessibilityLabel(Text("EU flag"))
+                iconCell(selected: icon == DeckIconPreset.euro) {
+                    EuroTile(size: 32)
+                } action: {
+                    icon = DeckIconPreset.euro
+                    colorHex = DeckIconPreset.euBlue
+                }
+                .accessibilityLabel(Text("Euro"))
             }
-            .accessibilityLabel(Text("EU flag"))
+            iconGroup("Flags") {
+                // Member-state flags keep their own colors; the deck's accent color stays editable.
+                ForEach(DeckIconPreset.flags) { flag in
+                    iconCell(selected: icon == flag.id) {
+                        FlagTile(emoji: flag.emoji, size: 32)
+                    } action: {
+                        icon = flag.id
+                    }
+                    .accessibilityLabel(Text(flag.name))
+                }
+            }
         }
         .padding(.vertical, 4)
         .animation(.snappy, value: isThemedIcon)
+    }
+
+    @ViewBuilder private func iconGroup<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 12)], spacing: 12) {
+                content()
+            }
+        }
+    }
+
+    /// A symbol cell is selected only when the current icon is a (non-themed, non-flag) symbol
+    /// matching it — so picking a flag or EU theme deselects the symbols.
+    private func isSymbolSelected(_ sym: String) -> Bool {
+        !DeckIconPreset.isThemed(icon) && !DeckIconPreset.isFlag(icon) && DeckIconPreset.symbol(for: icon) == sym
     }
 
     private func iconCell<Content: View>(
