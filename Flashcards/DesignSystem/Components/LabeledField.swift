@@ -113,26 +113,25 @@ struct HideVerticalScroller: NSViewRepresentable {
         DispatchQueue.main.async { Self.hide(from: nsView) }
     }
     private static func hide(from view: NSView) {
-        guard let scrollView = textScrollView(near: view) else { return }
+        guard let scrollView = textScrollView(behind: view) else { return }
         scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.verticalScroller?.isHidden = true
     }
-    private static func textScrollView(near view: NSView) -> NSScrollView? {
-        if let scroll = view.enclosingScrollView, scroll.documentView is NSTextView { return scroll }
-        var ancestor: NSView? = view.superview
-        while let current = ancestor {
-            if let scroll = scrollViewWithText(in: current) { return scroll }
-            ancestor = current.superview
-        }
-        return nil
+    /// This editor's OWN scroll view: among the window's text scroll views, the one whose frame
+    /// contains this hider view's center. A plain ancestor/DFS search returns the first match, which
+    /// mis-targets a sibling field's editor when several share a container (it left Back's scroller
+    /// visible while hiding Front's twice). Geometry pins it to the right editor.
+    private static func textScrollView(behind view: NSView) -> NSScrollView? {
+        guard let content = view.window?.contentView, view.bounds.width > 0 else { return nil }
+        let center = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+        return textScrollViews(in: content).first { $0.convert($0.bounds, to: nil).contains(center) }
     }
-    private static func scrollViewWithText(in view: NSView) -> NSScrollView? {
-        if let scroll = view as? NSScrollView, scroll.documentView is NSTextView { return scroll }
-        for subview in view.subviews {
-            if let scroll = scrollViewWithText(in: subview) { return scroll }
-        }
-        return nil
+    private static func textScrollViews(in view: NSView) -> [NSScrollView] {
+        var result: [NSScrollView] = []
+        if let scroll = view as? NSScrollView, scroll.documentView is NSTextView { result.append(scroll) }
+        for subview in view.subviews { result.append(contentsOf: textScrollViews(in: subview)) }
+        return result
     }
 }
 #endif
