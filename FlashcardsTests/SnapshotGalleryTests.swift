@@ -103,9 +103,9 @@ struct SnapshotGalleryTests {
         insights.dueNow = 3; insights.dueThisWeek = 3
         insights.dueForecast = Array(repeating: 0, count: StudyInsights.forecastDays)
         insights.sections = [
-            .init(id: "1", deckName: "Spanish", colorHex: "#3478F6", section: "Verbs", totalCards: 6, due: 3, newCount: 2, learningCount: 2, matureCount: 2),
-            .init(id: "2", deckName: "Spanish", colorHex: "#3478F6", section: "Nouns", totalCards: 4, due: 0, newCount: 1, learningCount: 2, matureCount: 1),
-            .init(id: "3", deckName: "Spanish", colorHex: "#3478F6", section: "", totalCards: 2, due: 0, newCount: 2, learningCount: 0, matureCount: 0),
+            .init(id: "1", deckName: "Spanish", colorHex: "#3478F6", icon: "character.book.closed.fill", section: "Verbs", totalCards: 6, due: 3, newCount: 2, learningCount: 2, matureCount: 2),
+            .init(id: "2", deckName: "Spanish", colorHex: "#3478F6", icon: "character.book.closed.fill", section: "Nouns", totalCards: 4, due: 0, newCount: 1, learningCount: 2, matureCount: 1),
+            .init(id: "3", deckName: "Spanish", colorHex: "#3478F6", icon: "character.book.closed.fill", section: "", totalCards: 2, due: 0, newCount: 2, learningCount: 0, matureCount: 0),
         ]
         try Snapshot.write(
             StatsContentView(insights: insights, reviewsByDay: [:])
@@ -203,6 +203,10 @@ struct SnapshotGalleryTests {
             correct[day] = max(0, n - (offset % 3))
         }
         let decks = try container.mainContext.fetch(FetchDescriptor<Deck>())
+        // Give a couple of decks custom icons so the "By deck" rows show them (default glyph, a
+        // symbol, and the themed EU tile).
+        if decks.indices.contains(0) { decks[0].icon = "graduationcap.fill" }
+        if decks.indices.contains(1) { decks[1].icon = DeckIconPreset.euFlag; decks[1].colorHex = DeckIconPreset.euBlue }
         // Spread the cards' due dates over the next two weeks and give them a mix of review
         // intervals (relative to the fixture `now`) so the forecast, per-deck "due", and the
         // maturity bars actually have data to render.

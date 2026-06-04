@@ -58,6 +58,7 @@ struct StudyInsights: Equatable {
         var id: UUID
         var name: String
         var colorHex: String
+        var icon: String = ""
         var totalCards: Int
         var due: Int
         var newCount: Int
@@ -70,6 +71,7 @@ struct StudyInsights: Equatable {
         var id: String
         var deckName: String
         var colorHex: String
+        var icon: String = ""
         var section: String          // "" ⇒ the deck's unsectioned cards
         var totalCards: Int
         var due: Int
@@ -150,17 +152,17 @@ struct StudyInsights: Equatable {
         var buckets = [0, 0, 0, 0]
         for deck in decks {
             var stat = DeckStat(id: deck.id, name: deck.displayName, colorHex: deck.colorHex,
-                                totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
+                                icon: deck.icon, totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
 
             // Per-section accumulation, for decks that use sections. Capture the deck's *scalar*
             // fields (not the @Model itself) so the `slot` helper closes over nothing non-Sendable
             // — Swift 6 strict concurrency flags that under the Release config even where Debug doesn't.
             let usesSections = !deck.sectionOrder.isEmpty
-            let deckID = deck.id.uuidString, deckName = deck.displayName, colorHex = deck.colorHex
+            let deckID = deck.id.uuidString, deckName = deck.displayName, colorHex = deck.colorHex, deckIcon = deck.icon
             var bySection: [String: SectionStat] = [:]
             func slot(_ name: String) -> SectionStat {
                 bySection[name] ?? SectionStat(id: "\(deckID)-\(name)", deckName: deckName, colorHex: colorHex,
-                                               section: name, totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
+                                               icon: deckIcon, section: name, totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
             }
 
             // Forward for every card, plus reverse when the deck studies both ways — the same units

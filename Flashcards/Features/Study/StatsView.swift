@@ -248,8 +248,7 @@ struct StatsContentView: View {
     private func deckRow(_ deck: StudyInsights.DeckStat) -> some View {
         let maturePct = deck.totalCards > 0 ? deck.matureCount * 100 / deck.totalCards : 0
         return HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color(hex: deck.colorHex)).frame(width: 22, height: 22)
+            DeckIconChip(icon: deck.icon, colorHex: deck.colorHex, size: 22)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Text(deck.name).font(Typography.body).lineLimit(1)
@@ -294,8 +293,7 @@ struct StatsContentView: View {
         let maturePct = section.totalCards > 0 ? section.matureCount * 100 / section.totalCards : 0
         let label = section.section.isEmpty ? "\(section.deckName) · No section" : "\(section.deckName) · \(section.section)"
         return HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color(hex: section.colorHex)).frame(width: 22, height: 22)
+            DeckIconChip(icon: section.icon, colorHex: section.colorHex, size: 22)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Text(label).font(Typography.body).lineLimit(1)
