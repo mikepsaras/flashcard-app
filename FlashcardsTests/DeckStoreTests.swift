@@ -209,6 +209,91 @@ import SwiftData
         let dto2 = try DeckCodec.decodeDTO(DeckCodec.encode(DeckCodec.makeDeck(from: dto1, in: other.mainContext)))
         #expect(dto1 == dto2)
     }
+
+    // MARK: Card sections (within-deck grouping)
+
+    @Test func cardSectionAndDeckSectionOrderRoundTrip() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Spanish")
+        deck.sectionOrder = ["Verbs", "Nouns"]
+        deck.showSectionsInStudy = false
+        container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "correr", definition: "to run", deck: deck, section: "Verbs"))
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.sectionOrder == ["Verbs", "Nouns"])
+        #expect(dto.showSectionsInStudy == false)
+        #expect(dto.cards.first?.section == "Verbs")
+
+        let other = DeckStore.makeContainer()
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        #expect(rebuilt.sectionOrder == ["Verbs", "Nouns"])
+        #expect(rebuilt.showSectionsInStudy == false)
+        #expect(rebuilt.cardArray.first?.section == "Verbs")
+    }
+
+    @Test func manualCardOrderRoundTripsViaFileOrder() throws {
+        // Manual order is the order of the cards array: encode writes cards by (section, sortOrder)
+        // and decode assigns sortOrder from the file position — so order round-trips with no field.
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Ordered")
+        deck.sectionOrder = ["A"]
+        container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "two", definition: "2", deck: deck, section: "A", sortOrder: 1))
+        container.mainContext.insert(Card(term: "one", definition: "1", deck: deck, section: "A", sortOrder: 0))
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.cards.map(\.term) == ["one", "two"])   // encoded in sortOrder order
+
+        let other = DeckStore.makeContainer()
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        let ordered = rebuilt.sectionGroups.first { $0.name == "A" }?.cards.map(\.term)
+        #expect(ordered == ["one", "two"])                 // order survived via file position
+    }
+
+    @Test func sectionlessDeckWithCardsReEncodesIdentically() throws {
+        // Adding card sections must not churn decks that don't use them: no section/sortOrder
+        // keys appear, and decode→encode is a fixed point (so the watcher sees no edit).
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Plain")
+        container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+
+        let data1 = try DeckCodec.encode(deck)
+        let text = String(data: data1, encoding: .utf8) ?? ""
+        #expect(!text.contains("\"section\""))
+        #expect(!text.contains("\"sectionOrder\""))
+        #expect(!text.contains("\"sortOrder\""))
+        #expect(!text.contains("\"showSectionsInStudy\""))
+
+        let dto1 = try DeckCodec.decodeDTO(data1)
+        let other = DeckStore.makeContainer()
+        let dto2 = try DeckCodec.decodeDTO(DeckCodec.encode(DeckCodec.makeDeck(from: dto1, in: other.mainContext)))
+        #expect(dto1 == dto2)
+    }
+
+    @Test func cardWithoutSectionKeyDefaultsToUnsectioned() throws {
+        // A file written before card sections has no `section` key → unsectioned, with order
+        // taken from the card's position in the file.
+        let id = UUID().uuidString
+        let json = """
+        {"formatVersion":2,"id":"\(id)","name":"Old","deckDescription":"","colorHex":"#3478F6",\
+        "createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[\
+        {"id":"\(UUID().uuidString)","term":"first","definition":"1","createdAt":"2024-01-01T00:00:00Z",\
+        "modifiedAt":"2024-01-01T00:00:00Z","easeFactor":2.5,"interval":0,"repetitions":0,"dueDate":"2024-01-01T00:00:00Z"},\
+        {"id":"\(UUID().uuidString)","term":"second","definition":"2","createdAt":"2024-01-01T00:00:00Z",\
+        "modifiedAt":"2024-01-01T00:00:00Z","easeFactor":2.5,"interval":0,"repetitions":0,"dueDate":"2024-01-01T00:00:00Z"}]}
+        """
+        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
+        #expect(dto.cards.first?.section == nil)
+        let container = DeckStore.makeContainer()
+        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
+        #expect(deck.cardArray.allSatisfy { $0.section == "" })
+        #expect(deck.sectionGroups.first?.cards.map(\.term) == ["first", "second"])
+    }
 }
 
 @MainActor

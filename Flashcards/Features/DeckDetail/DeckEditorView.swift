@@ -27,6 +27,7 @@ struct DeckEditorView: View {
     @State private var studyReversed: Bool
     @State private var gradingMode: GradingMode
     @State private var section: String
+    @State private var showSectionsInStudy: Bool
     @State private var showingAI = false
     @State private var showAdvanced: Bool
 
@@ -42,6 +43,7 @@ struct DeckEditorView: View {
             _studyReversed = State(initialValue: false)
             _gradingMode = State(initialValue: .twoButton)
             _section = State(initialValue: "")
+            _showSectionsInStudy = State(initialValue: true)
             _showAdvanced = State(initialValue: false)
         case .edit(let deck):
             _name = State(initialValue: deck.name)
@@ -54,6 +56,7 @@ struct DeckEditorView: View {
             _studyReversed = State(initialValue: deck.studyReversed)
             _gradingMode = State(initialValue: deck.gradingMode)
             _section = State(initialValue: deck.section)
+            _showSectionsInStudy = State(initialValue: deck.showSectionsInStudy)
             _showAdvanced = State(initialValue: true)
         }
     }
@@ -103,6 +106,11 @@ struct DeckEditorView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 toggleRow("Study both directions", $studyReversed)
                                 caption("Also quiz the answer back to the term, scheduled separately. A card then counts as two reviews — one each way.")
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                toggleRow("Show card sections in study", $showSectionsInStudy)
+                                caption("When a card is in a section, show that section's name as a chip on the card while studying.")
                             }
 
                             VStack(alignment: .leading, spacing: 8) {
@@ -208,7 +216,7 @@ struct DeckEditorView: View {
         let trimmedSection = String(section.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
         let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
-        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection)
+        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy)
         context.insert(deck)
         return deck
     }
@@ -222,7 +230,7 @@ struct DeckEditorView: View {
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         switch mode {
         case .new:
-            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection)
+            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy)
             context.insert(deck)
         case .edit(let deck):
             deck.name = trimmed
@@ -232,6 +240,7 @@ struct DeckEditorView: View {
             deck.studyReversed = studyReversed
             deck.gradingMode = gradingMode
             deck.section = trimmedSection
+            deck.showSectionsInStudy = showSectionsInStudy
             deck.modifiedAt = .now
         }
         context.saveAndPersist()

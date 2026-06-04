@@ -75,7 +75,7 @@ struct CardEditorView: View {
         let trimmedTerm = term.trimmingCharacters(in: .whitespacesAndNewlines)
         switch mode {
         case .new:
-            context.insert(Card(term: trimmedTerm, definition: definition, deck: deck))
+            context.insert(Card(term: trimmedTerm, definition: definition, deck: deck, sortOrder: deck.nextSortOrder(inSection: "")))
         case .edit(let card):
             card.term = trimmedTerm
             card.definition = definition

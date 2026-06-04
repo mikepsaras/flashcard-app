@@ -25,6 +25,12 @@ final class Deck {
     /// The single section this deck belongs to; the library groups decks into sections by it.
     /// Empty ⇒ "Uncategorized". CloudKit-safe: defaulted.
     var section: String = ""
+    /// Ordered card-section names *within* this deck (Reminders-style). Distinct from `section`
+    /// above (which groups the deck in the library): this lets an empty section persist and sets
+    /// the header order; each `Card.section` references one of these by name. CloudKit-safe.
+    var sectionOrder: [String] = []
+    /// Whether each card's section appears as a chip on the study card. Per deck. CloudKit-safe.
+    var showSectionsInStudy: Bool = true
     var createdAt: Date = Date.now
     var modifiedAt: Date = Date.now
 
@@ -38,7 +44,9 @@ final class Deck {
         backLabel: String = "Definition",
         studyReversed: Bool = false,
         gradingMode: GradingMode = .twoButton,
-        section: String = ""
+        section: String = "",
+        sectionOrder: [String] = [],
+        showSectionsInStudy: Bool = true
     ) {
         self.id = UUID()
         self.name = name
@@ -48,6 +56,8 @@ final class Deck {
         self.studyReversed = studyReversed
         self.gradingModeRaw = gradingMode.rawValue
         self.section = section
+        self.sectionOrder = sectionOrder
+        self.showSectionsInStudy = showSectionsInStudy
         self.createdAt = .now
         self.modifiedAt = .now
         self.cards = []
@@ -58,6 +68,43 @@ extension Deck {
     /// Non-optional view of the cards relationship for convenient use in the UI.
     var cardArray: [Card] { cards ?? [] }
     var cardCount: Int { cardArray.count }
+
+    // MARK: Card sections (within-deck grouping)
+
+    /// One section's cards for the deck-detail UI; `name == ""` is the unsectioned area.
+    struct SectionGroup: Identifiable {
+        let name: String
+        let cards: [Card]
+        var isUnsectioned: Bool { name.isEmpty }
+        var id: String { name.isEmpty ? "\u{0}unsectioned" : name }
+    }
+
+    /// Cards grouped for display: the unsectioned area first (when non-empty), then each named
+    /// section in `sectionOrder` (empty sections included so they persist), then any orphan
+    /// sections (a card whose section isn't in `sectionOrder`, e.g. from an external edit). Cards
+    /// within a group are ordered by `sortOrder`, then `createdAt` as a stable tiebreak.
+    var sectionGroups: [SectionGroup] {
+        let bySection = Dictionary(grouping: cardArray) { $0.section }
+        func ordered(_ cards: [Card]) -> [Card] {
+            cards.sorted { ($0.sortOrder, $0.createdAt) < ($1.sortOrder, $1.createdAt) }
+        }
+        var groups: [SectionGroup] = []
+        let unsectioned = ordered(bySection[""] ?? [])
+        if !unsectioned.isEmpty { groups.append(SectionGroup(name: "", cards: unsectioned)) }
+        for name in sectionOrder {
+            groups.append(SectionGroup(name: name, cards: ordered(bySection[name] ?? [])))
+        }
+        let known = Set(sectionOrder + [""])
+        for name in bySection.keys.filter({ !known.contains($0) }).sorted() {
+            groups.append(SectionGroup(name: name, cards: ordered(bySection[name] ?? [])))
+        }
+        return groups
+    }
+
+    /// The next `sortOrder` for appending a card to the end of `section` (its max + 1).
+    func nextSortOrder(inSection section: String) -> Int {
+        (cardArray.filter { $0.section == section }.map(\.sortOrder).max() ?? -1) + 1
+    }
 
     /// The deck's name for display, with a placeholder when it's blank. Centralizes the
     /// "Untitled Deck" fallback the UI would otherwise repeat at every call site.

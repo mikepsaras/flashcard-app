@@ -30,6 +30,13 @@ final class Card {
     var reverseDueDate: Date = Date.now
     var reverseLastReviewedAt: Date?
 
+    // MARK: Sectioning — grouping cards within a deck (Reminders-style)
+    /// The card's section within its deck; empty ⇒ the unsectioned area. The deck's set of
+    /// section names + their order lives on `Deck.sectionOrder`; cards reference one by name.
+    var section: String = ""
+    /// Manual position within the card's section (lower = earlier). Defaulted ⇒ CloudKit-safe.
+    var sortOrder: Int = 0
+
     // Inverse of Deck.cards (optional, per CloudKit rules).
     var deck: Deck?
 
@@ -37,7 +44,9 @@ final class Card {
         term: String = "",
         definition: String = "",
         deck: Deck? = nil,
-        dueDate: Date = .now
+        dueDate: Date = .now,
+        section: String = "",
+        sortOrder: Int = 0
     ) {
         self.id = UUID()
         self.term = term
@@ -49,6 +58,8 @@ final class Card {
         self.repetitions = 0
         self.dueDate = dueDate
         self.lastReviewedAt = nil
+        self.section = section
+        self.sortOrder = sortOrder
         self.deck = deck
     }
 }

@@ -21,16 +21,32 @@ struct DeckDetailView: View {
     @State private var showingResetConfirm = false
     @State private var cardSearch = ""
     @State private var cardPendingDeletion: Card?
+    // Section management (Reminders-style; drag-and-drop arrives in a later pass).
+    @State private var showingNewSection = false
+    @State private var newSectionName = ""
+    /// Set when "New Section…" is chosen from a card's menu: the card to drop in once it's named.
+    @State private var newSectionCardTarget: Card?
+    @State private var sectionPendingRename: String?
+    @State private var renameSectionName = ""
 
-    private var sortedCards: [Card] {
-        deck.cardArray.sorted { $0.createdAt < $1.createdAt }
-    }
+    /// Cards in display order — unsectioned first, then by section, `sortOrder` within each.
+    private var orderedCards: [Card] { deck.sectionGroups.flatMap(\.cards) }
 
-    private var visibleCards: [Card] {
-        guard !cardSearch.isEmpty else { return sortedCards }
-        return sortedCards.filter {
+    private func filteredCards(_ cards: [Card]) -> [Card] {
+        guard !cardSearch.isEmpty else { return cards }
+        return cards.filter {
             $0.term.localizedCaseInsensitiveContains(cardSearch)
             || $0.definition.localizedCaseInsensitiveContains(cardSearch)
+        }
+    }
+
+    /// Section groups for display, filtered by the card search. While searching, empty groups are
+    /// hidden; otherwise empty named sections stay visible so they can be managed.
+    private var displayGroups: [Deck.SectionGroup] {
+        deck.sectionGroups.compactMap { group in
+            let cards = filteredCards(group.cards)
+            if cardSearch.isEmpty { return Deck.SectionGroup(name: group.name, cards: cards) }
+            return cards.isEmpty ? nil : Deck.SectionGroup(name: group.name, cards: cards)
         }
     }
 
@@ -67,6 +83,8 @@ struct DeckDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { cardEditor = .new } label: { Label("New Card", systemImage: "plus") }
+                    Button { startNewSection() } label: { Label("New Section", systemImage: "folder.badge.plus") }
+                    Divider()
                     Button { showingImporter = true } label: { Label("Import JSON or CSV…", systemImage: "square.and.arrow.down") }
                     Button { showingAI = true } label: { Label("Generate Cards with AI…", systemImage: "sparkles") }
                 } label: {
@@ -81,17 +99,17 @@ struct DeckDetailView: View {
                     Divider()
                     Menu {
                         Button {
-                            exportText = CSVCodec.export(sortedCards)   // build once, on demand
+                            exportText = CSVCodec.export(orderedCards)   // build once, on demand
                             showingExporter = true
                         } label: { Label("CSV", systemImage: "tablecells") }
                         Button {
-                            exportText = CardListCodec.exportJSON(sortedCards, name: deck.name)
+                            exportText = CardListCodec.exportJSON(orderedCards, name: deck.name)
                             showingJSONExporter = true
                         } label: { Label("JSON", systemImage: "curlybraces") }
                     } label: {
                         Label("Export Cards", systemImage: "square.and.arrow.up")
                     }
-                    .disabled(sortedCards.isEmpty)
+                    .disabled(orderedCards.isEmpty)
                     Divider()
                     Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
                     Button(role: .destructive) { showingResetConfirm = true } label: {
@@ -156,6 +174,18 @@ struct DeckDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: { card in
             Text("“\(card.term.isEmpty ? "This card" : card.term)” will be permanently deleted. This can’t be undone.")
+        }
+        .alert("New Section", isPresented: $showingNewSection) {
+            TextField("Section name", text: $newSectionName)
+            Button("Cancel", role: .cancel) { newSectionCardTarget = nil }
+            Button("Add") { confirmNewSection() }
+        } message: {
+            Text("Name a section to group cards in this deck.")
+        }
+        .alert("Rename Section", isPresented: Binding(get: { sectionPendingRename != nil }, set: { if !$0 { sectionPendingRename = nil } })) {
+            TextField("Section name", text: $renameSectionName)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") { if let old = sectionPendingRename { renameSection(old, to: renameSectionName) } }
         }
     }
 
@@ -263,33 +293,23 @@ struct DeckDetailView: View {
 
     private var cardList: some View {
         List {
-            Section("Cards") {
-                ForEach(visibleCards) { card in
-                    Button { cardEditor = .edit(card) } label: {
-                        CardRowView(card: card)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        if !otherDecks.isEmpty {
-                            Menu("Move to") {
-                                ForEach(otherDecks) { target in
-                                    Button(target.displayName) { move(card, to: target) }
-                                }
-                            }
+            if deck.cardArray.isEmpty {
+                emptyRow("No cards yet. Tap + to add one.")
+            } else if !cardSearch.isEmpty && displayGroups.isEmpty {
+                emptyRow("No cards match “\(cardSearch)”.")
+            } else {
+                ForEach(displayGroups) { group in
+                    Section {
+                        ForEach(group.cards) { card in cardRow(card) }
+                            .onDelete { offsets in deleteCards(offsets, in: group.cards) }
+                        if group.cards.isEmpty {
+                            Text("No cards in this section yet — move cards here from their ••• menu.")
+                                .font(Typography.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        Button(role: .destructive) { cardPendingDeletion = card } label: { Label("Delete", systemImage: "trash") }
+                    } header: {
+                        sectionHeader(group)
                     }
-                }
-                .onDelete(perform: deleteCards)
-
-                if sortedCards.isEmpty {
-                    Text("No cards yet. Tap + to add one.")
-                        .font(Typography.callout)
-                        .foregroundStyle(.secondary)
-                } else if visibleCards.isEmpty {
-                    Text("No cards match “\(cardSearch)”.")
-                        .font(Typography.callout)
-                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -300,8 +320,60 @@ struct DeckDetailView: View {
         #endif
     }
 
-    private func deleteCards(_ offsets: IndexSet) {
-        let cards = visibleCards
+    @ViewBuilder private func cardRow(_ card: Card) -> some View {
+        Button { cardEditor = .edit(card) } label: {
+            CardRowView(card: card)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Menu("Move to Section") {
+                Button("None") { moveCard(card, toSection: "") }
+                    .disabled(card.section.isEmpty)
+                if !deck.sectionOrder.isEmpty { Divider() }
+                ForEach(deck.sectionOrder, id: \.self) { name in
+                    Button(name) { moveCard(card, toSection: name) }
+                        .disabled(card.section == name)
+                }
+                Divider()
+                Button("New Section…") { startNewSection(assigning: card) }
+            }
+            if !otherDecks.isEmpty {
+                Menu("Move to Deck") {
+                    ForEach(otherDecks) { target in
+                        Button(target.displayName) { move(card, to: target) }
+                    }
+                }
+            }
+            Button(role: .destructive) { cardPendingDeletion = card } label: { Label("Delete", systemImage: "trash") }
+        }
+    }
+
+    @ViewBuilder private func sectionHeader(_ group: Deck.SectionGroup) -> some View {
+        if group.isUnsectioned {
+            Text("Cards")
+        } else {
+            HStack {
+                Text(group.name)
+                Spacer()
+                Menu {
+                    Button { startRenameSection(group.name) } label: { Label("Rename", systemImage: "pencil") }
+                    Button(role: .destructive) { deleteSection(group.name) } label: { Label("Delete Section", systemImage: "trash") }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+        }
+    }
+
+    private func emptyRow(_ text: String) -> some View {
+        Section {
+            Text(text).font(Typography.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private func deleteCards(_ offsets: IndexSet, in cards: [Card]) {
         for index in offsets { context.delete(cards[index]) }
         context.saveAndPersist(touching: deck)
     }
@@ -312,9 +384,71 @@ struct DeckDetailView: View {
     }
 
     private func move(_ card: Card, to target: Deck) {
+        // The section belongs to this deck; moving decks drops it (the name may not exist there).
         card.deck = target
+        card.section = ""
+        card.sortOrder = target.nextSortOrder(inSection: "")
         card.modifiedAt = .now
         context.saveAndPersist(touching: deck, target)
+    }
+
+    // MARK: Card sections
+
+    private func moveCard(_ card: Card, toSection name: String) {
+        guard card.section != name else { return }
+        card.section = name
+        card.sortOrder = deck.nextSortOrder(inSection: name)
+        card.modifiedAt = .now
+        context.saveAndPersist(touching: deck)
+    }
+
+    private func startNewSection(assigning card: Card? = nil) {
+        newSectionCardTarget = card
+        newSectionName = ""
+        showingNewSection = true
+    }
+
+    private func confirmNewSection() {
+        let name = String(newSectionName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        let card = newSectionCardTarget
+        newSectionCardTarget = nil
+        guard !name.isEmpty else { return }
+        if !deck.sectionOrder.contains(name) { deck.sectionOrder.append(name) }
+        if let card {
+            card.section = name
+            card.sortOrder = deck.nextSortOrder(inSection: name)
+            card.modifiedAt = .now
+        }
+        context.saveAndPersist(touching: deck)
+    }
+
+    private func startRenameSection(_ name: String) {
+        renameSectionName = name
+        sectionPendingRename = name
+    }
+
+    private func renameSection(_ old: String, to rawNew: String) {
+        let new = String(rawNew.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        guard !new.isEmpty, new != old else { return }
+        if let idx = deck.sectionOrder.firstIndex(of: old) {
+            // Merge into an existing section if the new name is already taken; else rename in place.
+            if deck.sectionOrder.contains(new) { deck.sectionOrder.remove(at: idx) }
+            else { deck.sectionOrder[idx] = new }
+        }
+        for card in deck.cardArray where card.section == old {
+            card.section = new
+            card.modifiedAt = .now
+        }
+        context.saveAndPersist(touching: deck)
+    }
+
+    private func deleteSection(_ name: String) {
+        deck.sectionOrder.removeAll { $0 == name }
+        for card in deck.cardArray where card.section == name {
+            card.section = ""
+            card.modifiedAt = .now
+        }
+        context.saveAndPersist(touching: deck)
     }
 }
 

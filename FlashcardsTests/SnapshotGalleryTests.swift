@@ -65,6 +65,37 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/07_controls_four_button.png"))
     }
 
+    @Test func renderSectionsFeature() throws {
+        // Headline visual: the section chip on the study card.
+        try Snapshot.write(
+            FlashcardView(term: "correr", definition: "to run", isShowingDefinition: false, section: "Verbs", onShuffle: {}, onTap: {})
+                .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 620, height: 600), name: "20_card_with_section")
+
+        // The deck detail grouped into sections (Reminders-style): an unsectioned area first,
+        // then named sections in order.
+        let container = DeckStore.makeContainer()
+        let context = container.mainContext
+        let deck = Deck(name: "Spanish")
+        deck.sectionOrder = ["Verbs", "Nouns"]
+        context.insert(deck)
+        context.insert(Card(term: "hola", definition: "hello", deck: deck))
+        context.insert(Card(term: "correr", definition: "to run", deck: deck, section: "Verbs", sortOrder: 0))
+        context.insert(Card(term: "comer", definition: "to eat", deck: deck, section: "Verbs", sortOrder: 1))
+        context.insert(Card(term: "gato", definition: "cat", deck: deck, section: "Nouns", sortOrder: 0))
+        try context.save()
+
+        // Smoke / no-trap render of the sectioned deck detail. NOTE: SwiftUI `List` doesn't render
+        // via ImageRenderer, so the list area of this PNG is a placeholder — this exercises the view
+        // hierarchy without trapping; the grouping itself is covered by the DeckCodec section tests.
+        try Snapshot.write(
+            DeckDetailView(deck: deck, onStudy: {}).modelContainer(container),
+            size: CGSize(width: 720, height: 820), name: "21_deck_detail_sections")
+
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/20_card_with_section.png"))
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/21_deck_detail_sections.png"))
+    }
+
     @Test func renderFourButtonStudyScreen() throws {
         let (container, _, plan) = try makeContext(fourButton: true)
         try Snapshot.write(

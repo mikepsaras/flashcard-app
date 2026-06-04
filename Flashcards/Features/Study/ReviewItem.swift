@@ -18,4 +18,12 @@ struct ReviewItem: Identifiable {
         if configured.isEmpty { return nil }
         return direction == .forward ? configured : "Term"
     }
+
+    /// The card's section, shown as a chip on the study card — `nil` when the card's deck has
+    /// section chips turned off. Resolved per card so the cross-deck Today queue honors each
+    /// deck's own setting.
+    var section: String? {
+        guard card.deck?.showSectionsInStudy == true else { return nil }
+        return card.section.isEmpty ? nil : card.section
+    }
 }

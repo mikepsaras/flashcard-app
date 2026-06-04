@@ -98,6 +98,7 @@ struct StudySessionView: View {
                     definition: item.back,
                     isShowingDefinition: session.isShowingDefinition,
                     definitionLabel: item.backLabel ?? "",
+                    section: item.section,
                     accent: accent,
                     onShuffle: { session.shuffleRemaining() },
                     onTap: { session.flip() }

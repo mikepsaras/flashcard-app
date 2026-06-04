@@ -4,8 +4,12 @@ import SwiftData
 /// Codable representation of a deck for `.deck` files. `@Model` types can't be
 /// encoded directly, so we map through these DTOs.
 ///
-/// Format v2 adds reverse-direction scheduling + the deck's `studyReversed` flag. All
-/// the new fields are optional, so v1 files still decode (missing ⇒ defaults).
+/// Format v2 adds reverse-direction scheduling + `studyReversed`, plus — added later, the same
+/// way grading mode was — optional per-card `section` and the deck's `sectionOrder` +
+/// `showSectionsInStudy`. All of these are optional and omitted when empty/default, so files not
+/// using them re-encode identically (no phantom edits). Manual card order rides in the order of
+/// the `cards` array (unsectioned first, then by section), not an explicit field, so a sectionless
+/// deck's file is byte-for-byte unchanged. v1 files still decode (missing ⇒ defaults).
 enum DeckCodec {
     static let formatVersion = 2
 
@@ -20,6 +24,9 @@ enum DeckCodec {
         var studyReversed: Bool?
         var gradingMode: String?
         var section: String?
+        // v3: card-section names within the deck + whether to show section chips in study.
+        var sectionOrder: [String]?
+        var showSectionsInStudy: Bool?
         var createdAt: Date
         var modifiedAt: Date
         var cards: [CardDTO]
@@ -36,6 +43,9 @@ enum DeckCodec {
         var repetitions: Int
         var dueDate: Date
         var lastReviewedAt: Date?
+        // Optional within-deck section, omitted when empty. (Manual order is the order of the
+        // `cards` array — see `encode` — so there's no stored sortOrder.)
+        var section: String?
         // Reverse-direction state — optional for v1 backward compatibility.
         var reverseEaseFactor: Double?
         var reverseInterval: Int?
@@ -72,10 +82,18 @@ enum DeckCodec {
             // Omit when empty so unsectioned decks re-encode identically (no phantom edit),
             // exactly like gradingMode above.
             section: deck.section.isEmpty ? nil : deck.section,
+            // Omit when empty/default so decks not using card sections re-encode without noise.
+            sectionOrder: deck.sectionOrder.isEmpty ? nil : deck.sectionOrder,
+            showSectionsInStudy: deck.showSectionsInStudy ? nil : false,
             createdAt: deck.createdAt,
             modifiedAt: deck.modifiedAt,
+            // Encode in display order — unsectioned first, then each section in `sectionOrder`,
+            // and by `sortOrder` within a group — so the file mirrors the on-screen order.
             cards: deck.cardArray
-                .sorted { $0.createdAt < $1.createdAt }
+                .sorted { lhs, rhs in
+                    (sectionRank(lhs, in: deck), lhs.sortOrder, lhs.createdAt)
+                        < (sectionRank(rhs, in: deck), rhs.sortOrder, rhs.createdAt)
+                }
                 .map(cardDTO)
         )
         return try encoder.encode(dto)
@@ -95,13 +113,15 @@ enum DeckCodec {
         deck.studyReversed = dto.studyReversed ?? false
         deck.gradingModeRaw = dto.gradingMode ?? ""
         deck.section = dto.section ?? ""
+        deck.sectionOrder = dto.sectionOrder ?? []
+        deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
         context.insert(deck)
-        for dtoCard in dto.cards {
+        for (index, dtoCard) in dto.cards.enumerated() {
             let card = Card(term: dtoCard.term, definition: dtoCard.definition, deck: deck, dueDate: dtoCard.dueDate)
             card.id = dtoCard.id
-            apply(dtoCard, to: card)
+            apply(dtoCard, to: card, fileOrder: index)
             context.insert(card)
         }
         return deck
@@ -120,6 +140,8 @@ enum DeckCodec {
         deck.studyReversed = dto.studyReversed ?? false
         deck.gradingModeRaw = dto.gradingMode ?? ""
         deck.section = dto.section ?? ""
+        deck.sectionOrder = dto.sectionOrder ?? []
+        deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
 
@@ -127,16 +149,16 @@ enum DeckCodec {
         for card in deck.cardArray { existing[card.id] = card }
 
         var keep = Set<UUID>()
-        for dtoCard in dto.cards {
+        for (index, dtoCard) in dto.cards.enumerated() {
             keep.insert(dtoCard.id)
             if let card = existing[dtoCard.id] {
                 card.term = dtoCard.term
                 card.definition = dtoCard.definition
-                apply(dtoCard, to: card)
+                apply(dtoCard, to: card, fileOrder: index)
             } else {
                 let card = Card(term: dtoCard.term, definition: dtoCard.definition, deck: deck, dueDate: dtoCard.dueDate)
                 card.id = dtoCard.id
-                apply(dtoCard, to: card)
+                apply(dtoCard, to: card, fileOrder: index)
                 context.insert(card)
             }
         }
@@ -147,6 +169,13 @@ enum DeckCodec {
 
     // MARK: Field mapping
 
+    /// Sort key for a card's section: unsectioned first (-1), then its index in `sectionOrder`;
+    /// an unknown section sorts last. Keeps the encoded file grouped + stable.
+    private static func sectionRank(_ card: Card, in deck: Deck) -> Int {
+        if card.section.isEmpty { return -1 }
+        return deck.sectionOrder.firstIndex(of: card.section) ?? Int.max
+    }
+
     private static func cardDTO(_ card: Card) -> CardDTO {
         CardDTO(
             id: card.id, term: card.term, definition: card.definition,
@@ -154,15 +183,20 @@ enum DeckCodec {
             easeFactor: card.easeFactor, interval: card.interval,
             repetitions: card.repetitions, dueDate: card.dueDate,
             lastReviewedAt: card.lastReviewedAt,
+            // Omit section when empty so unsectioned cards stay noise-free. (Manual order is the
+            // array order — see encode() — so there's no separate sortOrder field.)
+            section: card.section.isEmpty ? nil : card.section,
             reverseEaseFactor: card.reverseEaseFactor, reverseInterval: card.reverseInterval,
             reverseRepetitions: card.reverseRepetitions, reverseDueDate: card.reverseDueDate,
             reverseLastReviewedAt: card.reverseLastReviewedAt
         )
     }
 
-    /// Copies all scheduling fields from a DTO onto a card (term/definition handled by
-    /// the caller). Missing reverse fields (v1 files) fall back to a fresh schedule.
-    private static func apply(_ dto: CardDTO, to card: Card) {
+    /// Copies all scheduling + sectioning fields from a DTO onto a card (term/definition handled
+    /// by the caller). Missing reverse fields (v1 files) fall back to a fresh schedule. `sortOrder`
+    /// comes from the card's position in the file (`fileOrder`) — manual order is the array order,
+    /// not a stored field — so existing decks keep their current order.
+    private static func apply(_ dto: CardDTO, to card: Card, fileOrder: Int) {
         card.createdAt = dto.createdAt
         card.modifiedAt = dto.modifiedAt
         card.easeFactor = dto.easeFactor
@@ -170,6 +204,8 @@ enum DeckCodec {
         card.repetitions = dto.repetitions
         card.dueDate = dto.dueDate
         card.lastReviewedAt = dto.lastReviewedAt
+        card.section = dto.section ?? ""
+        card.sortOrder = fileOrder
         card.reverseEaseFactor = dto.reverseEaseFactor ?? SM2.defaultEaseFactor
         card.reverseInterval = dto.reverseInterval ?? 0
         card.reverseRepetitions = dto.reverseRepetitions ?? 0

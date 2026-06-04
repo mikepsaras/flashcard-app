@@ -6,6 +6,8 @@ struct FlashcardView: View {
     let definition: String
     let isShowingDefinition: Bool
     var definitionLabel: String = "Definition"
+    /// The card's section, shown as a chip on the card. Hidden when nil/empty.
+    var section: String? = nil
     var accent: Color = Theme.accent
     var onShuffle: (() -> Void)?
     var onTap: () -> Void
@@ -67,6 +69,22 @@ struct FlashcardView: View {
             }
             .padding(40)
         }
+        .overlay(alignment: .top) { sectionChip }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The section chip pinned to the top of the card — an outlined capsule with the section name.
+    @ViewBuilder private var sectionChip: some View {
+        if let section, !section.isEmpty {
+            Text(section)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(accent)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(accent.opacity(0.12), in: Capsule())
+                .overlay(Capsule().strokeBorder(accent.opacity(0.30), lineWidth: 1))
+                .padding(.top, 16)
+                .accessibilityLabel("Section: \(section)")
+        }
     }
 }
