@@ -162,9 +162,13 @@ struct EuroTile: View {
             .fill(blue)
             .frame(width: size, height: size)
             .overlay {
-                Image(systemName: "eurosign")
-                    .font(.system(size: size * 0.52, weight: .bold))
+                // A chunky rounded € (matching the app's rounded type) reads far better on the tile
+                // than the thin `eurosign` SF Symbol. minimumScaleFactor guards tiny sidebar sizes.
+                Text("€")
+                    .font(.system(size: size * 0.64, weight: .heavy, design: .rounded))
                     .foregroundStyle(gold)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
