@@ -152,8 +152,11 @@ struct StatsContentView: View {
     /// picks: the recall Spread, the mature-retention Trend, or the forgetting Curve.
     private var retentionCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            HStack(spacing: Theme.Spacing.s) {
-                Text("Memory retention").font(Typography.headline).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: Theme.Spacing.s) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Memory retention").font(Typography.headline).foregroundStyle(.secondary)
+                    Text(retentionGraphSubtitle).font(Typography.caption).foregroundStyle(.secondary)
+                }
                 Spacer(minLength: 8)
                 Picker("Graph", selection: $retentionGraphRaw) {
                     ForEach(RetentionGraph.allCases) { Text($0.label).tag($0.rawValue) }
@@ -171,6 +174,16 @@ struct StatsContentView: View {
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardSurface(cornerRadius: Theme.Radius.tile)
+    }
+
+    /// Explains the selected graph's axes — these are hand-drawn charts, so the words carry the
+    /// context a Charts-framework axis label would.
+    private var retentionGraphSubtitle: String {
+        switch retentionGraph {
+        case .spread: "Cards by estimated recall now (height = how many cards)"
+        case .trend:  "Mature retention each week — last 12 weeks (Y: 50–100%)"
+        case .curve:  "Predicted recall vs. days since a review (Y: 50–100%)"
+        }
     }
 
     @ViewBuilder private var retentionGraphView: some View {
@@ -616,27 +629,61 @@ struct RecallSpreadChart: View {
     private func count(_ i: Int) -> Int { buckets.indices.contains(i) ? buckets[i] : 0 }
 }
 
-/// Mature retention over recent weeks — an area + line, with weeks that had no mature reviews left
-/// as gaps. Plain SwiftUI (Path), renders under `ImageRenderer`.
+/// A shared 100 / 75 / 50% Y-axis gutter for the retention charts (their Y axes span 50–100%).
+private struct RetentionYAxis: View {
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            Text("100%"); Spacer(); Text("75%"); Spacer(); Text("50%")
+        }
+        .font(.system(size: 8, design: .rounded))
+        .foregroundStyle(.tertiary)
+        .frame(width: 26)
+    }
+}
+
+/// Mature retention over recent weeks — an area + line on a labeled 50–100% axis, with weeks that
+/// had no mature reviews left as gaps. Plain SwiftUI (Path), renders under `ImageRenderer`.
 struct RetentionTrendChart: View {
     let trend: [Double?]
     private let floorY = 0.5   // retention rarely dips below 50%; gives the line room to vary
 
     var body: some View {
         let points: [(Int, Double)] = trend.enumerated().compactMap { i, v in v.map { (i, $0) } }
-        return GeometryReader { geo in
+        return HStack(alignment: .top, spacing: 5) {
+            RetentionYAxis()
+            VStack(spacing: 3) {
+                plot(points)
+                HStack {
+                    Text("\(trend.count) wks ago")
+                    Spacer()
+                    Text("now")
+                }
+                .font(.system(size: 8, design: .rounded))
+                .foregroundStyle(.tertiary)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Mature retention over the last \(trend.count) weeks, on a 50 to 100 percent scale")
+    }
+
+    @ViewBuilder private func plot(_ points: [(Int, Double)]) -> some View {
+        GeometryReader { geo in
             if points.count < 2 {
                 Text(points.isEmpty ? "No mature reviews yet" : "Not enough mature reviews yet")
                     .font(Typography.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 let span = CGFloat(max(trend.count - 1, 1))
-                let pos: (Int, Double) -> CGPoint = { i, v in
-                    let clamped = min(max(v, floorY), 1)
-                    return CGPoint(x: geo.size.width * CGFloat(i) / span,
-                                   y: geo.size.height * (1 - CGFloat((clamped - floorY) / (1 - floorY))))
+                let yFor: (Double) -> CGFloat = { v in
+                    geo.size.height * (1 - CGFloat((min(max(v, floorY), 1) - floorY) / (1 - floorY)))
                 }
+                let pos: (Int, Double) -> CGPoint = { i, v in CGPoint(x: geo.size.width * CGFloat(i) / span, y: yFor(v)) }
                 ZStack {
+                    ForEach([1.0, 0.75, 0.5], id: \.self) { v in
+                        let y = yFor(v)
+                        Path { $0.move(to: CGPoint(x: 0, y: y)); $0.addLine(to: CGPoint(x: geo.size.width, y: y)) }
+                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                    }
                     Path { p in
                         p.move(to: CGPoint(x: pos(points[0].0, points[0].1).x, y: geo.size.height))
                         for (i, v) in points { p.addLine(to: pos(i, v)) }
@@ -655,28 +702,50 @@ struct RetentionTrendChart: View {
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Mature retention trend over the last \(trend.count) weeks")
     }
 }
 
-/// The forgetting curve R = 0.9^(t / interval) out to ~2.5× the average interval, with a dashed
-/// marker at the due point (R = 90%). Plain SwiftUI (Path), renders under `ImageRenderer`.
+/// The forgetting curve R = 0.9^(t / interval) out to ~4× the average interval, on a labeled
+/// 50–100% axis, with a dashed marker at the due point (where recall hits the 90% target). Plain
+/// SwiftUI (Path), renders under `ImageRenderer`.
 struct ForgettingCurveChart: View {
     let averageInterval: Double
+    private let floorR = 0.5   // map [50%, 100%] to the height so the curve isn't flat
 
     var body: some View {
-        GeometryReader { geo in
-            let interval = max(averageInterval, 1)
-            let horizon = interval * 4          // show enough intervals for the exponential to bend
-            let steps = 60
-            let floorR = 0.5                    // map [50%, 100%] to the height so the curve isn't flat
-            let pos: (Double) -> CGPoint = { t in
-                let norm = (min(max(pow(0.9, t / interval), floorR), 1) - floorR) / (1 - floorR)
-                return CGPoint(x: geo.size.width * CGFloat(t / horizon),
-                               y: geo.size.height * (1 - CGFloat(norm)))
+        let interval = max(averageInterval, 1)
+        let horizon = interval * 4
+        return HStack(alignment: .top, spacing: 5) {
+            RetentionYAxis()
+            VStack(spacing: 3) {
+                plot(interval: interval, horizon: horizon)
+                HStack {
+                    Text("0d")
+                    Spacer()
+                    Text("\(Int(horizon.rounded()))d")
+                }
+                .font(.system(size: 8, design: .rounded))
+                .foregroundStyle(.tertiary)
             }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Predicted recall over \(Int(horizon.rounded())) days; due at about \(Int(interval.rounded())) days, on a 50 to 100 percent scale")
+    }
+
+    private func plot(interval: Double, horizon: Double) -> some View {
+        GeometryReader { geo in
+            let steps = 60
+            let yFor: (Double) -> CGFloat = { r in
+                geo.size.height * (1 - CGFloat((min(max(r, floorR), 1) - floorR) / (1 - floorR)))
+            }
+            let pos: (Double) -> CGPoint = { t in CGPoint(x: geo.size.width * CGFloat(t / horizon), y: yFor(pow(0.9, t / interval))) }
+            let dueX = geo.size.width * CGFloat(interval / horizon)
             ZStack {
+                ForEach([1.0, 0.75, 0.5], id: \.self) { v in
+                    let y = yFor(v)
+                    Path { $0.move(to: CGPoint(x: 0, y: y)); $0.addLine(to: CGPoint(x: geo.size.width, y: y)) }
+                        .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                }
                 Path { p in
                     p.move(to: CGPoint(x: 0, y: geo.size.height))
                     for s in 0...steps { p.addLine(to: pos(horizon * Double(s) / Double(steps))) }
@@ -689,17 +758,14 @@ struct ForgettingCurveChart: View {
                         if s == 0 { p.move(to: cg) } else { p.addLine(to: cg) }
                     }
                 }.stroke(Theme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                let dueX = geo.size.width * CGFloat(interval / horizon)
                 Path { p in p.move(to: CGPoint(x: dueX, y: 0)); p.addLine(to: CGPoint(x: dueX, y: geo.size.height)) }
                     .stroke(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-            }
-            .overlay(alignment: .topTrailing) {
-                Text("avg interval \(Int(interval.rounded()))d")
-                    .font(.system(size: 9, design: .rounded)).foregroundStyle(.secondary)
+                Text("due ~\(Int(interval.rounded()))d")
+                    .font(.system(size: 8, design: .rounded)).foregroundStyle(.secondary)
+                    .fixedSize()
+                    .position(x: dueX, y: 7)
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Forgetting curve; average interval \(Int(averageInterval.rounded())) days")
     }
 }
 
