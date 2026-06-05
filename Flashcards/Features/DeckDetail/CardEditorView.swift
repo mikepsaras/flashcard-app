@@ -116,17 +116,13 @@ struct CardEditorView: View {
     /// The syntax hint. Each example is rendered in its own style (so you see the result), but
     /// "links" is styled text — NOT a live Markdown link, which would try to open `url:` and fail.
     private var markdownHint: Text {
-        Text("Markdown: ")
-            + Text("bold").bold()
+        Text("Supports Markdown & LaTeX — ")
+            + Text("**bold**").bold()
             + Text(", ")
-            + Text("italic").italic()
-            + Text(", ")
-            + Text("code").monospaced()
-            + Text(", ")
-            + Text("links").underline().foregroundStyle(Theme.accent)
-            + Text(", and ")
-            + Text("• bullet").foregroundStyle(Theme.accent)
-            + Text(" lists.")
+            + Text("`code`").monospaced()
+            + Text(", headings, lists, and math ")
+            + Text("$x^2$").monospaced().foregroundStyle(Theme.accent)
+            + Text(". See Help ▸ Formatting.")
     }
 
     private func save(addAnother: Bool = false) {

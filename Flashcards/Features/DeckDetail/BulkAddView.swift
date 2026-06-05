@@ -53,6 +53,8 @@ struct BulkAddView: View {
                         cardRow(index, $rows[index])
                     }
                     addControls
+                    Text("Front & back support Markdown and LaTeX ($…$) — a preview appears as you format.")
+                        .font(.caption).foregroundStyle(.secondary).padding(.top, 2)
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -128,10 +130,38 @@ struct BulkAddView: View {
                     .foregroundStyle(.secondary)
                     .focused($focused, equals: .back(id))
             }
+            if hasFormatting(row.wrappedValue.front) || hasFormatting(row.wrappedValue.back) {
+                bulkPreview(front: row.wrappedValue.front, back: row.wrappedValue.back)
+            }
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.cardSurface))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.06)))
+    }
+
+    /// Whether a field contains markdown/LaTeX worth previewing — so plain rows stay compact and only
+    /// formatted ones reveal a live render.
+    private func hasFormatting(_ s: String) -> Bool {
+        s.contains(where: { "$*_#`>[".contains($0) })
+            || s.range(of: "(^|\\n)\\s*([-+]\\s|\\d+[.)]\\s)", options: .regularExpression) != nil
+    }
+
+    /// Live render of a formatted row, in the same markdown+LaTeX engine the card uses.
+    @ViewBuilder private func bulkPreview(front: String, back: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Preview", systemImage: "eye")
+                .font(.system(.caption2, weight: .medium)).foregroundStyle(.tertiary)
+            VStack(alignment: .leading, spacing: 6) {
+                if !front.isEmpty { MarkdownText(text: front, baseSize: 15, weight: .semibold) }
+                if !back.isEmpty {
+                    MarkdownText(text: back, baseSize: 14, mathColor: MathColor.secondary).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(Theme.windowBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .padding(.top, 2)
     }
 
     /// A captioned field box for a bulk-add row (label above, the field inside the standard box).
