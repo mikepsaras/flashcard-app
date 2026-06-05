@@ -114,10 +114,11 @@ struct DeckDetailView: View {
         .background(Theme.groupedBackground)
         #if os(macOS)
         .background {
-            // Window-scoped shortcuts (plain ⌘N stays the app-global New Deck):
-            //   ⌘⇧N → open the card composer (it grows from one card to many).
+            // Window-scoped shortcut: ⌘N → open the card composer (it grows from one card to many).
+            // New Deck is the app-global ⌘⇧N menu command — a distinct chord — and the global menu
+            // no longer claims ⌘N, so this binding is the only ⌘N and can't collide.
             Button("") { openComposer() }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .keyboardShortcut("n", modifiers: .command)
                 .opacity(0)
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
@@ -382,7 +383,9 @@ struct DeckDetailView: View {
     private var maturityStrip: some View {
         let insights = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:])
         return VStack(alignment: .leading, spacing: 8) {
-            MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
+            // No hover popover here — the New / Learning / Mature counts are printed in the legend
+            // just below, and "Cards"/"Due" sit right above, so a popover would be redundant.
+            MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount, showsPopover: false)
             HStack(spacing: Theme.Spacing.m) {
                 maturityLegend("New", Theme.accent, insights.newCount)
                 maturityLegend("Learning", Theme.learning, insights.learningCount)

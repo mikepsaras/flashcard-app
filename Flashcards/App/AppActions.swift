@@ -9,7 +9,7 @@ final class AppActions {
     static let shared = AppActions()
     private init() {}
 
-    /// Bumped by the ⌘N menu command; the library opens the new-deck editor in response.
+    /// Bumped by the ⌘⇧N menu command; the library opens the new-deck editor in response.
     var newDeckTick = 0
 
     /// Bumped by the Help ▸ Formatting Guide menu command (⌘?); RootView opens the guide window.

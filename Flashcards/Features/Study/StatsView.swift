@@ -49,9 +49,10 @@ struct StatsContentView: View {
     let insights: StudyInsights
     let reviewsByDay: [String: Int]
     var now: Date = .now
+    var calendar: Calendar = .current
 
-    @AppStorage(DefaultsKey.heatmapRange) private var heatmapRangeRaw = HeatmapRange.year.rawValue
-    private var heatmapRange: HeatmapRange { HeatmapRange(rawValue: heatmapRangeRaw) ?? .year }
+    /// 0 ⇒ the trailing-12-months view ("Past year"); otherwise a calendar year (e.g. 2025) to show.
+    @AppStorage(DefaultsKey.heatmapYear) private var heatmapYear = 0
 
     @AppStorage(DefaultsKey.retentionGraph) private var retentionGraphRaw = RetentionGraph.spread.rawValue
     private var retentionGraph: RetentionGraph { RetentionGraph(rawValue: retentionGraphRaw) ?? .spread }
@@ -268,22 +269,53 @@ struct StatsContentView: View {
         }
     }
 
+    /// Past calendar years (before this year) that have at least one reviewed day — the year-picker
+    /// options, most-recent first. Empty ⇒ no picker (just the trailing-year view). Read from the
+    /// day-keys' "YYYY-…" prefix, so no calendar math per entry.
+    private var availableYears: [Int] {
+        let current = calendar.component(.year, from: now)
+        var years = Set<Int>()
+        for (key, count) in reviewsByDay where count > 0 {
+            if let year = Int(key.prefix(4)), year < current { years.insert(year) }
+        }
+        return years.sorted(by: >)
+    }
+
+    /// The selected year, falling back to "Past year" (0) when the stored choice has no data.
+    private var resolvedYear: Int { availableYears.contains(heatmapYear) ? heatmapYear : 0 }
+
+    /// Right edge of the heatmap: today for the trailing-year view, else Dec 31 of the chosen year.
+    private var heatmapAnchor: Date {
+        guard resolvedYear != 0 else { return now }
+        return calendar.date(from: DateComponents(year: resolvedYear, month: 12, day: 31)) ?? now
+    }
+
     private var heatmapCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             HStack(spacing: Theme.Spacing.s) {
                 Text("Activity").font(Typography.headline).foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Picker("Range", selection: $heatmapRangeRaw) {
-                    ForEach(HeatmapRange.allCases) { Text($0.label).tag($0.rawValue) }
+                // Year browsing appears only once there's history in an earlier calendar year;
+                // otherwise the heatmap is simply the trailing 12 months, with no chrome.
+                if !availableYears.isEmpty {
+                    Menu {
+                        Button("Past year") { heatmapYear = 0 }
+                        Divider()
+                        ForEach(availableYears, id: \.self) { year in
+                            Button(String(year)) { heatmapYear = year }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text(resolvedYear == 0 ? "Past year" : String(resolvedYear))
+                            Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
+                        }
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                #if os(macOS)
-                .controlSize(.small)
-                #endif
             }
-            ActivityHeatmap(reviewsByDay: reviewsByDay, now: now, weekCap: heatmapRange.weeks, cell: heatmapRange.cellSize)
+            ActivityHeatmap(reviewsByDay: reviewsByDay, anchorDate: heatmapAnchor, now: now, calendar: calendar)
         }
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -479,61 +511,39 @@ struct DueForecastChart: View {
     }
 }
 
-/// The Activity heatmap's selectable range (in weeks), persisted via `@AppStorage`. The raw value
-/// is the week count, so `weeks` is just `rawValue`.
-enum HeatmapRange: Int, CaseIterable, Identifiable {
-    case threeMonths = 13, sixMonths = 26, year = 53
-    var id: Int { rawValue }
-    var weeks: Int { rawValue }
-    var label: String {
-        switch self {
-        case .threeMonths: "3M"
-        case .sixMonths: "6M"
-        case .year: "1Y"
-        }
-    }
-    /// Bigger cells for shorter ranges, so each range's grid fills the card rather than leaving a
-    /// strip of empty space.
-    var cellSize: CGFloat {
-        switch self {
-        case .threeMonths: 44
-        case .sixMonths: 28
-        case .year: 14
-        }
-    }
-}
-
 /// GitHub-style contribution grid: weeks of day cells, tinted by that day's review count. Fills
 /// the available width (as many weeks as fit, up to the selected range). Drawn in plain SwiftUI (no
 /// Charts dependency, no scroll view), so it renders under `ImageRenderer`.
 struct ActivityHeatmap: View {
     let reviewsByDay: [String: Int]
+    /// The last day shown (right edge). Defaults to today — the trailing-12-months view. A calendar-
+    /// year selection passes Dec 31 of that year, so the grid spans that whole year instead.
+    var anchorDate: Date = .now
+    /// Real "today": used to leave future cells blank and to find today's column. Distinct from
+    /// `anchorDate` so a past-year view (anchored earlier) still knows where, if anywhere, today is.
     var now: Date = .now
     var calendar: Calendar = .current
-    /// Upper bound on weeks shown, from the user's range pick (3M/6M/1Y); still clamped to whatever
-    /// fits the width, so a narrow window never overflows.
-    var weekCap = 53
-    /// Cell size — larger for shorter ranges so a 3M/6M grid fills its card instead of leaving a
-    /// strip of dead space (the range picker passes the matching size).
-    var cell: CGFloat = 13
+    /// Requested number of week columns (a year ≈ 53); still clamped to whatever fits the width.
+    var weeks: Int = 53
+    var cell: CGFloat = 14
 
     private let gap: CGFloat = 3
     private let maxWeeks = 53
 
     var body: some View {
         GeometryReader { geo in
-            let weeks = min(max(Int((geo.size.width + gap) / (cell + gap)), 1), min(maxWeeks, weekCap))
-            let today = calendar.startOfDay(for: now)
-            let weekday = calendar.component(.weekday, from: today)
-            let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
-            let firstDay = calendar.date(byAdding: .day, value: -((weeks - 1) * 7), to: startOfWeek) ?? today
+            let columns = min(max(Int((geo.size.width + gap) / (cell + gap)), 1), min(maxWeeks, weeks))
+            let anchor = calendar.startOfDay(for: anchorDate)
+            let weekday = calendar.component(.weekday, from: anchor)
+            let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: anchor) ?? anchor
+            let firstDay = calendar.date(byAdding: .day, value: -((columns - 1) * 7), to: startOfWeek) ?? anchor
             // Scale colors to the user's busiest day. Computed once per render and threaded down —
             // not recomputed inside `color(_:)` for each of the ~371 cells.
             let maxCount = max(reviewsByDay.values.max() ?? 0, 1)
-            let gridWidth = CGFloat(weeks) * cell + CGFloat(weeks - 1) * gap
+            let gridWidth = CGFloat(columns) * cell + CGFloat(columns - 1) * gap
             VStack(alignment: .leading, spacing: 4) {
-                monthLabels(weeks: weeks, firstDay: firstDay)
-                grid(weeks: weeks, firstDay: firstDay, maxCount: maxCount, gridWidth: gridWidth)
+                monthLabels(weeks: columns, firstDay: firstDay)
+                grid(weeks: columns, firstDay: firstDay, maxCount: maxCount, gridWidth: gridWidth)
                 legend
             }
             .frame(width: gridWidth, alignment: .leading)
@@ -541,7 +551,7 @@ struct ActivityHeatmap: View {
         }
         .frame(height: 7 * cell + 6 * gap + 30)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Activity heatmap of daily reviews over the past year")
+        .accessibilityLabel("Activity heatmap of daily reviews")
     }
 
     /// The day grid, drawn in a single `Canvas` — one view and one draw pass instead of ~371
@@ -815,11 +825,14 @@ struct ForgettingCurveChart: View {
 }
 
 /// A thin stacked bar showing the New / Learning / Mature proportions of the library. On macOS,
-/// hovering a single colored segment pops up just that band's count.
+/// hovering a single colored segment pops up just that band's count — unless `showsPopover` is off
+/// (e.g. the deck page, which already prints the counts as "N Cards / N Due" beside the bar).
 struct MaturityBar: View {
     let new: Int
     let learning: Int
     let mature: Int
+    /// macOS hover popover per segment. Disabled where the counts are already shown alongside.
+    var showsPopover = true
 
     #if os(macOS)
     @State private var hovered: Int?   // which segment (0=New, 1=Learning, 2=Mature) is hovered
@@ -847,6 +860,7 @@ struct MaturityBar: View {
             // Each segment is independently hoverable; the popover sits above it (cursor stays on
             // the bar) and shows just this band's count.
             .onHover { inside in
+                guard showsPopover else { return }
                 if inside { hovered = index } else if hovered == index { hovered = nil }
             }
             .popover(isPresented: valuePopover(index), arrowEdge: .top) {
@@ -861,7 +875,7 @@ struct MaturityBar: View {
 
     #if os(macOS)
     private func valuePopover(_ index: Int) -> Binding<Bool> {
-        Binding(get: { hovered == index }, set: { if !$0 && hovered == index { hovered = nil } })
+        Binding(get: { showsPopover && hovered == index }, set: { if !$0 && hovered == index { hovered = nil } })
     }
     #endif
 }

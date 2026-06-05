@@ -15,8 +15,9 @@ enum DefaultsKey {
     static let reminderMinute = "reminderMinute"
     /// Hidden developer mode (unlocked by tapping the version 7×), gating the test-data tools.
     static let developerMode = "developerMode"
-    /// Insights: the Activity heatmap's visible range (a `HeatmapRange` raw value, in weeks).
-    static let heatmapRange = "heatmapRange"
+    /// Insights: which year the Activity heatmap shows — 0 for the trailing 12 months ("Past year"),
+    /// or a calendar year (e.g. 2025). Replaces the old 3M/6M/1Y range key.
+    static let heatmapYear = "heatmapYear"
     /// Insights: which Memory-retention graph to show (a `RetentionGraph` raw value).
     static let retentionGraph = "retentionGraph"
     /// Advanced: show the card JSON/CSV import & export affordances (off by default). Opening and

@@ -158,23 +158,28 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/24_deck_icons.png"))
     }
 
-    @Test func renderHeatmapRanges() throws {
-        let now = Date(timeIntervalSince1970: 1_700_000_000)
+    @Test func renderHeatmapYears() throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)   // 2023-11-14
         let cal = Calendar.current
         var reviews: [String: Int] = [:]
-        for offset in 0..<180 where offset % 5 != 0 {
+        // ~14 months of activity so both the trailing year and the prior calendar year fill in.
+        for offset in 0..<430 where offset % 5 != 0 {
             reviews[StudyStats.dayKey(cal.date(byAdding: .day, value: -offset, to: now)!)] = (offset % 7) + 1
         }
-        // 3M (cell 44) and 6M (cell 28) in a 900-wide card — should fill / center, not strip-left.
+        let priorYear = cal.component(.year, from: now) - 1
         let view = VStack(spacing: 20) {
-            ActivityHeatmap(reviewsByDay: reviews, now: now, weekCap: 13, cell: 44)
-            ActivityHeatmap(reviewsByDay: reviews, now: now, weekCap: 26, cell: 28)
+            // Trailing 12 months — the default "Past year" view, anchored at today.
+            ActivityHeatmap(reviewsByDay: reviews, anchorDate: now, now: now)
+            // A specific past calendar year, anchored at Dec 31 of that year.
+            ActivityHeatmap(reviewsByDay: reviews,
+                            anchorDate: cal.date(from: DateComponents(year: priorYear, month: 12, day: 31))!,
+                            now: now)
         }
         .frame(width: 900)
         .padding(20)
         .background(Theme.groupedBackground)
-        try Snapshot.write(view, size: CGSize(width: 940, height: 680), name: "25_heatmap_ranges")
-        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/25_heatmap_ranges.png"))
+        try Snapshot.write(view, size: CGSize(width: 940, height: 380), name: "25_heatmap_years")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/25_heatmap_years.png"))
     }
 
     @Test func renderFourButtonStudyScreen() throws {

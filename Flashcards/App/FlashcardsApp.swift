@@ -46,8 +46,10 @@ struct FlashcardsApp: App {
         .windowResizability(.automatic)
         .commands {
             CommandGroup(replacing: .newItem) {
+                // ⌘⇧N is the app-global New Deck. Plain ⌘N is reserved for New Card, bound
+                // window-scoped inside a deck (DeckDetailView) — distinct chords, so no collision.
                 Button("New Deck") { AppActions.shared.newDeckTick += 1 }
-                    .keyboardShortcut("n", modifiers: .command)
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
             }
             CommandGroup(replacing: .help) {
                 Button("Flashcards Formatting Guide") { AppActions.shared.showFormattingGuideTick += 1 }
