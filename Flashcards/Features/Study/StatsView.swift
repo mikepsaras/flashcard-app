@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// Cross-deck study insights — streak, activity heatmap, review totals, accuracy, and a
 /// library breakdown by card maturity. A top-level sidebar destination. This wrapper holds the
@@ -9,6 +10,8 @@ import SwiftData
 struct StatsView: View {
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @AppStorage(StudyStats.revisionKey) private var statsRevision = 0
+    @State private var showingExporter = false
+    @State private var exportText = ""
 
     var body: some View {
         let _ = statsRevision   // re-render when stats are reset (the log isn't otherwise observed)
@@ -40,6 +43,30 @@ struct StatsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { exportCSV() } label: { Label("Export CSV", systemImage: "square.and.arrow.up") }
+                    .disabled(insights.totalCards == 0 && insights.reviewsAllTime == 0)
+            }
+        }
+        .fileExporter(
+            isPresented: $showingExporter,
+            document: CSVDocument(text: exportText),
+            contentType: .commaSeparatedText,
+            defaultFilename: "Flashcards Insights"
+        ) { _ in }
+    }
+
+    /// Builds the Insights CSV (summary + per-deck/category/section tables + daily log) and opens the
+    /// save panel. Recomputed fresh from the current logs on tap.
+    private func exportCSV() {
+        let reviews = StudyStats.reviewsByDay()
+        let insights = StudyInsights.make(
+            decks: decks, reviewsByDay: reviews, correctByDay: StudyStats.correctByDay(),
+            matureByDay: StudyStats.matureReviewsByDay(), matureCorrectByDay: StudyStats.matureCorrectByDay()
+        )
+        exportText = StatsCSV.export(insights: insights, reviewsByDay: reviews, correctByDay: StudyStats.correctByDay())
+        showingExporter = true
     }
 }
 

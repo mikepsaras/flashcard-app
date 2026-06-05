@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import Flashcards
 
 @MainActor
@@ -100,5 +101,26 @@ import Testing
         let csv = CSVCodec.export([Card(term: "a", definition: "b")])
         #expect(csv.hasPrefix("Term,Definition\n"))
         #expect(!csv.contains("Section"))
+    }
+
+    // MARK: Insights export
+
+    @Test func statsCSVHasSummaryDeckAndDailyBlocks() {
+        var insights = StudyInsights()
+        insights.currentStreak = 5
+        insights.reviewsAllTime = 100
+        insights.totalCards = 8
+        insights.newCount = 1; insights.learningCount = 2; insights.matureCount = 5
+        insights.dueNow = 2
+        insights.perDeck = [.init(id: UUID(), name: "World, Capitals", colorHex: "#34C759",
+                                  totalCards: 8, due: 2, newCount: 1, learningCount: 2, matureCount: 5)]
+        let csv = StatsCSV.export(insights: insights, reviewsByDay: ["2026-06-01": 8], correctByDay: ["2026-06-01": 6])
+
+        #expect(csv.contains("Metric,Value"))
+        #expect(csv.contains("Current streak (days),5"))
+        #expect(csv.contains("Deck,Cards,Due,New,Learning,Mature"))
+        #expect(csv.contains("\"World, Capitals\",8,2,1,2,5"))   // comma in the name → quoted
+        #expect(csv.contains("Date,Reviews,Correct"))
+        #expect(csv.contains("2026-06-01,8,6"))
     }
 }

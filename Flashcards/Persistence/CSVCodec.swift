@@ -148,3 +148,66 @@ struct CSVDocument: FileDocument {
         FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 }
+
+/// Exports the whole Insights page as one CSV: a Summary block, then By-deck / By-category /
+/// By-section tables, then the daily activity log — each its own header + rows, separated by a
+/// blank line (a common "dashboard → spreadsheet" shape). Pure + static, so it's unit-tested.
+enum StatsCSV {
+    static func export(insights: StudyInsights, reviewsByDay: [String: Int], correctByDay: [String: Int]) -> String {
+        var out = ""
+        func row(_ fields: [String]) { out += fields.map(escape).joined(separator: ",") + "\n" }
+        func blank() { out += "\n" }
+
+        row(["Metric", "Value"])
+        row(["Current streak (days)", "\(insights.currentStreak)"])
+        row(["Longest streak (days)", "\(insights.longestStreak)"])
+        row(["Reviewed today", "\(insights.reviewsToday)"])
+        row(["Reviewed this week", "\(insights.reviewsThisWeek)"])
+        row(["Reviewed all-time", "\(insights.reviewsAllTime)"])
+        row(["Accuracy", pct(insights.accuracyAllTime)])
+        row(["Predicted recall now", pct(insights.predictedRetention)])
+        row(["Mature retention", pct(insights.trueRetention)])
+        row(["Total cards", "\(insights.totalCards)"])
+        row(["New", "\(insights.newCount)"])
+        row(["Learning", "\(insights.learningCount)"])
+        row(["Mature", "\(insights.matureCount)"])
+        row(["Due now", "\(insights.dueNow)"])
+        row(["Due in 7 days", "\(insights.dueThisWeek)"])
+
+        if !insights.perDeck.isEmpty {
+            blank(); row(["Deck", "Cards", "Due", "New", "Learning", "Mature"])
+            for d in insights.perDeck.sorted(by: { ($0.due, $0.totalCards) > ($1.due, $1.totalCards) }) {
+                row([d.name, "\(d.totalCards)", "\(d.due)", "\(d.newCount)", "\(d.learningCount)", "\(d.matureCount)"])
+            }
+        }
+        if !insights.categories.isEmpty {
+            blank(); row(["Category", "Cards", "Due", "New", "Learning", "Mature"])
+            for c in insights.categories {
+                row([c.name, "\(c.totalCards)", "\(c.due)", "\(c.newCount)", "\(c.learningCount)", "\(c.matureCount)"])
+            }
+        }
+        if !insights.sections.isEmpty {
+            blank(); row(["Deck", "Section", "Cards", "Due", "New", "Learning", "Mature"])
+            for s in insights.sections {
+                row([s.deckName, s.section.isEmpty ? "(none)" : s.section, "\(s.totalCards)", "\(s.due)", "\(s.newCount)", "\(s.learningCount)", "\(s.matureCount)"])
+            }
+        }
+        if !reviewsByDay.isEmpty {
+            blank(); row(["Date", "Reviews", "Correct"])
+            for day in reviewsByDay.keys.sorted() {
+                row([day, "\(reviewsByDay[day] ?? 0)", "\(correctByDay[day] ?? 0)"])
+            }
+        }
+        return out
+    }
+
+    private static func pct(_ value: Double?) -> String {
+        guard let value else { return "" }
+        return "\(Int((value * 100).rounded()))%"
+    }
+
+    private static func escape(_ s: String) -> String {
+        let needsQuoting = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")
+        return needsQuoting ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+    }
+}
