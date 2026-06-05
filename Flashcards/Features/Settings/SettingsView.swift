@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var showingFolderPicker = false
     @State private var pendingFolderURL: URL?
     @State private var showingResetStats = false
+    @State private var showingResetProgress = false
     @State private var showingDeleteAll = false
 
     // Hidden developer mode (unlocked by tapping the version 7×) + its test-data tools.
@@ -89,7 +90,13 @@ struct SettingsView: View {
             Button("Reset Statistics", role: .destructive) { StudyStats.reset() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Clears your study streak and review history. Your decks and cards are kept.")
+            Text("Clears your streak, heatmap, accuracy, and mature retention. Your decks, cards, and their review schedules are kept.")
+        }
+        .confirmationDialog("Reset all progress?", isPresented: $showingResetProgress, titleVisibility: .visible) {
+            Button("Reset All Progress", role: .destructive) { DeckStore.shared.resetAllProgress(context) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every card in every deck becomes due again and its spaced-repetition history is cleared — due dates, maturity, and recall. Your cards and decks are kept. This can’t be undone.")
         }
         .confirmationDialog("Delete all decks?", isPresented: $showingDeleteAll, titleVisibility: .visible) {
             Button("Delete Everything", role: .destructive) {
@@ -222,11 +229,12 @@ struct SettingsView: View {
     private var dataSection: some View {
         Section {
             Button("Reset Statistics") { showingResetStats = true }
+            Button("Reset All Progress") { showingResetProgress = true }
             Button("Delete All Decks", role: .destructive) { showingDeleteAll = true }
         } header: {
             Text("Data")
         } footer: {
-            Text("Reset Statistics clears your streak and review history but keeps your decks. Delete All Decks permanently removes every deck and card, and clears statistics.")
+            Text("Reset Statistics clears your activity history (streak, heatmap, accuracy, mature retention). Reset All Progress restarts every card's review schedule across all decks — due dates, maturity, and recall — keeping the cards. Delete All Decks removes every deck and card permanently.")
         }
     }
 

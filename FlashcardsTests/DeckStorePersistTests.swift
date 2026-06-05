@@ -80,4 +80,35 @@ final class DeckStorePersistTests {
         _ = store.persist(ctx, to: dir)
         #expect(diskDTO(dir) == snapshot)
     }
+
+    /// Global "Reset All Progress" clears every card's schedule across all decks AND the reset
+    /// actually reaches disk for every deck (the persist modifiedAt-gate must not skip them).
+    @Test func resetAllProgressClearsSchedulesAndPersistsAllDecks() throws {
+        let container = DeckStore.makeContainer()
+        let ctx = container.mainContext
+        let d1 = Deck(name: "One"); ctx.insert(d1)
+        let c1 = Card(term: "a", definition: "1", deck: d1, dueDate: .now); ctx.insert(c1)
+        c1.interval = 25; c1.repetitions = 3; c1.lastReviewedAt = .now      // reviewed + mature
+        let d2 = Deck(name: "Two"); ctx.insert(d2)
+        let c2 = Card(term: "b", definition: "2", deck: d2, dueDate: .now); ctx.insert(c2)
+        c2.interval = 6; c2.repetitions = 2; c2.lastReviewedAt = .now
+        try? ctx.save()
+        let dir = freshDir()
+        let store = DeckStore()
+        _ = store.persist(ctx, to: dir)
+
+        store.resetAllProgress(ctx, to: dir)
+
+        // In memory every card is back to new.
+        #expect(c1.interval == 0 && c1.repetitions == 0 && c1.lastReviewedAt == nil)
+        #expect(c2.interval == 0 && c2.lastReviewedAt == nil)
+        // And it reached disk for BOTH decks — the modifiedAt-gate didn't skip either.
+        let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension == "cards" }
+        #expect(files.count == 2)
+        for f in files {
+            let dto = try DeckCodec.decodeDTO(Data(contentsOf: f))
+            #expect(dto.cards.allSatisfy { $0.interval == 0 && $0.lastReviewedAt == nil })
+        }
+    }
 }

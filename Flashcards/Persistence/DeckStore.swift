@@ -416,6 +416,20 @@ final class DeckStore {
         persistedModifiedAt.removeAll()
     }
 
+    /// Restarts the spaced-repetition schedule of every card in every deck — the global version of a
+    /// deck's "Reset Progress" (due dates, maturity, and recall rings all reset; cards and decks kept).
+    /// Bumps each deck's `modifiedAt` so `persist` re-writes it: the modifiedAt-gate skips decks whose
+    /// modifiedAt is unchanged, and `resetSchedule` bumps only the *card's* modifiedAt, not the deck's.
+    func resetAllProgress(_ context: ModelContext, now: Date = .now, to directory: URL = DeckStore.libraryURL()) {
+        let decks = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+        for deck in decks {
+            for card in deck.cardArray { card.resetSchedule(now: now) }
+            deck.modifiedAt = now
+        }
+        try? context.save()
+        persist(context, to: directory)
+    }
+
     // MARK: Import / share
 
     /// Imports a `.deck` file (from anywhere) into the context, giving it a fresh

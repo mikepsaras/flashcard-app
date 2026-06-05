@@ -249,8 +249,12 @@ struct StudyInsights: Equatable {
                 insights.totalCards += 1
                 stat.totalCards += 1
                 let isNew = fLast == nil && rLast == nil
-                // Best interval the card earned in any direction — independent of the deck's
-                // current `studyReversed` toggle.
+                // Best interval the card earned in any direction — independent of the deck's current
+                // `studyReversed` toggle. This "is the card mature *now*" definition is intentionally
+                // distinct from true-retention's "was this *review* of a mature unit?" (which uses the
+                // studied direction's interval at review time — see StudySessionView.currentIsMature).
+                // Both are Anki-style; they diverge only for a reverse card studied in its weaker
+                // direction. Keep them separate — unifying would make one of them wrong.
                 let isMature = !isNew && max(fInterval, rInterval) >= matureIntervalDays
                 if isNew { insights.newCount += 1; stat.newCount += 1 }
                 else if isMature { insights.matureCount += 1; stat.matureCount += 1 }
