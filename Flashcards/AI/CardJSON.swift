@@ -10,6 +10,13 @@ enum CardJSON {
     /// and avoid duplicates without blowing up the request size.
     static let maxContextCards = 60
 
+    /// Accepted key spellings (JSON) and header names (CSV) for a card's two sides and its section,
+    /// so a card list from any source or AI imports cleanly. Matched case-insensitively; the FIRST
+    /// of each is the canonical name the app writes on export. Shared by the JSON and CSV parsers.
+    static let frontKeys = ["term", "front", "question", "q", "prompt", "word"]
+    static let backKeys = ["definition", "back", "answer", "a", "def", "meaning", "translation"]
+    static let sectionKeys = ["section", "category", "group", "topic"]
+
     /// `count == nil` lets the model choose how many cards to create ("auto"). `expanding`
     /// switches the instructions to "add new cards that don't duplicate the existing ones".
     static func system(count: Int?, expanding: Bool = false) -> String {
@@ -18,10 +25,15 @@ enum CardJSON {
         let countSentence = count.map { " Produce exactly \($0) flashcards." } ?? ""
         let base = """
         You are a flashcard generator.\(countSentence) From the user's notes or topic, \
-        create high-quality study cards. Respond with ONLY a JSON object of the form \
-        {"cards":[{"term":"...","definition":"..."}]}. Each "term" is a concise prompt \
-        (a word, concept, or question); each "definition" is a clear, accurate answer. \
-        Do not include markdown, code fences, or commentary.
+        create high-quality study cards. Reply with ONLY a JSON object of the form \
+        {"cards":[{"term":"...","definition":"..."}]} — no prose around it, and do NOT wrap the \
+        JSON in code fences. Each "term" is the card's front (a word, concept, or question); each \
+        "definition" is the back (a clear, accurate answer). \
+        Inside the term/definition text you MAY use lightweight Markdown (**bold**, *italic*, \
+        `code`, bullet lists) and LaTeX math — inline as $…$, a display equation as $$…$$ — \
+        wherever it makes a card clearer, such as formulas, code, or emphasis. Use formatting only \
+        when it helps; plain text is fine otherwise. Keep the JSON valid — in particular, escape \
+        backslashes in any LaTeX so each string stays well-formed.
         """
         guard expanding else { return base }
         return base + " " + """
@@ -70,8 +82,41 @@ enum CardJSON {
 
     private struct CardList: Decodable {
         let cards: [Item]
-        // `section` is optional, so JSON without it still decodes (→ nil).
-        struct Item: Decodable { let term: String; let definition: String; let section: String? }
+        /// One card, decoded by hand so any accepted key spelling works case-insensitively
+        /// (term/front/question/q/…, definition/back/answer/a/…, section/category/…). Model output
+        /// and hand-written JSON rarely agree on the exact key names, so we don't pin them.
+        struct Item: Decodable {
+            let term: String
+            let definition: String
+            let section: String?
+
+            private struct AnyKey: CodingKey {
+                var stringValue: String
+                var intValue: Int?
+                init(stringValue: String) { self.stringValue = stringValue }
+                init?(intValue: Int) { return nil }
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: AnyKey.self)
+                // Index the object's keys by lowercased name so the lookup is case-insensitive.
+                var byLower: [String: AnyKey] = [:]
+                for key in container.allKeys { byLower[key.stringValue.lowercased()] = key }
+                func value(_ names: [String]) -> String? {
+                    for name in names {
+                        if let key = byLower[name],
+                           let string = try? container.decode(String.self, forKey: key),
+                           !string.isEmpty {
+                            return string
+                        }
+                    }
+                    return nil
+                }
+                term = value(CardJSON.frontKeys) ?? ""
+                definition = value(CardJSON.backKeys) ?? ""
+                section = value(CardJSON.sectionKeys)
+            }
+        }
     }
 
     static func parseCards(from text: String) throws -> [GeneratedCard] {

@@ -319,7 +319,7 @@ struct DeckDetailView: View {
         let n = parsed.cards.count
         importMessage = n > 0
             ? "Added \(n) card\(n == 1 ? "" : "s") to “\(deck.displayName)”."
-            : "No cards found in that file. Use JSON or CSV with term/definition pairs."
+            : "No cards found in that file. Use JSON or CSV with term/definition (or front/back) pairs."
     }
 
     // MARK: Header

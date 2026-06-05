@@ -139,6 +139,41 @@ import Foundation
         }
     }
 
+    // MARK: Prompt — formatting policy
+
+    @Test func systemPromptAllowsMarkdownAndLatex() {
+        let system = CardJSON.system(count: nil)
+        #expect(system.contains("Markdown"))
+        #expect(system.contains("LaTeX"))
+        #expect(system.contains("$$"))   // the display-math delimiter is advertised
+        // …but the JSON envelope itself must still be unwrapped (no fences around the reply).
+        #expect(system.lowercased().contains("code fences"))
+    }
+
+    // MARK: Key tolerance (front/back, question/answer, case-insensitive)
+
+    @Test func parsesFrontBackAndQuestionAnswerKeys() throws {
+        let json = #"{"cards":[{"front":"A","back":"B"},{"question":"Q","answer":"C"}]}"#
+        let cards = try CardJSON.parseCards(from: json)
+        #expect(cards.count == 2)
+        #expect(cards[0].term == "A" && cards[0].definition == "B")
+        #expect(cards[1].term == "Q" && cards[1].definition == "C")
+    }
+
+    @Test func cardKeysAreCaseInsensitive() throws {
+        let cards = try CardJSON.parseCards(from: #"[{"Term":"A","DEFINITION":"B"}]"#)
+        #expect(cards.first?.term == "A")
+        #expect(cards.first?.definition == "B")
+    }
+
+    @Test func mixedSynonymKeysWithSectionParse() throws {
+        // q/a shorthand + a "category" alias for the section.
+        let cards = try CardJSON.parseCards(from: #"{"cards":[{"q":"hola","a":"hello","category":"Greetings"}]}"#)
+        #expect(cards.first?.term == "hola")
+        #expect(cards.first?.definition == "hello")
+        #expect(cards.first?.section == "Greetings")
+    }
+
     // MARK: De-duplication (deck expansion)
 
     @Test func removingDuplicatesDropsExistingTerms() {

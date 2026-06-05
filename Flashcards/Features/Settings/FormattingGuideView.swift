@@ -33,6 +33,7 @@ struct FormattingGuideView: View {
                 }
 
                 latexCheatSheet
+                importSection
             }
             .padding(28)
             .frame(maxWidth: 640, alignment: .leading)
@@ -122,4 +123,60 @@ struct FormattingGuideView: View {
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.06)))
         }
     }
+
+    /// Bringing cards IN: the JSON/CSV shapes the importer accepts, and a ready-made prompt to hand
+    /// to any chatbot. Card text in these files may use the same Markdown + LaTeX shown above. The
+    /// import/export affordances live behind Settings → Advanced.
+    private var importSection: some View {
+        group("Importing a card list") {
+            VStack(alignment: .leading, spacing: 12) {
+                guideText("Drop a JSON or CSV file into a deck (enable Settings → Advanced). The "
+                    + "card text may use the same Markdown and LaTeX shown above.")
+
+                codeBlock("""
+                {
+                  "cards": [
+                    { "term": "Ohm's law", "definition": "$V = IR$" },
+                    { "term": "Mitochondria", "definition": "The cell's **powerhouse**" }
+                  ]
+                }
+                """)
+
+                guideText("The key names are flexible — front/back, question/answer, or q/a all "
+                    + "work. CSV with a Term,Definition header row (and an optional third Section "
+                    + "column) works too.")
+
+                Text("Prompt you can give any AI")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                codeBlock(Self.aiPromptTemplate)
+            }
+        }
+    }
+
+    private func guideText(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func codeBlock(_ text: String) -> some View {
+        Text(text)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Theme.fieldSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.06)))
+    }
+
+    /// A copy-paste prompt for the "ask your own chatbot, then upload the JSON" workflow.
+    static let aiPromptTemplate = """
+    Make flashcards about <your topic>. Reply with ONLY JSON, no prose or code fences, in exactly \
+    this shape:
+    {"cards":[{"term":"...","definition":"..."}]}
+    - "term" is the front (a word, concept, or question); "definition" is the back (the answer).
+    - You may use Markdown (**bold**, *italic*, lists) and LaTeX ($…$ inline, $$…$$ display) in the text.
+    """
 }

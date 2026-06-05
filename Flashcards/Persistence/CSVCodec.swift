@@ -59,10 +59,13 @@ enum CSVCodec {
             let defKey = definition.trimmingCharacters(in: .whitespacesAndNewlines)
             if termKey.isEmpty && defKey.isEmpty { continue }   // blank row (incl. leading blanks)
             // The header is the FIRST non-blank row — detected here rather than at record
-            // index 0, so a leading blank line can't push the header into the data.
+            // index 0, so a leading blank line can't push the header into the data. Any accepted
+            // pair of column names is recognised (Term/Front/Question + Definition/Back/Answer),
+            // so a "Front,Back" or "Question,Answer" header isn't imported as a card.
             if !sawContent {
                 sawContent = true
-                if termKey.lowercased() == "term", defKey.lowercased() == "definition" { continue }
+                if CardJSON.frontKeys.contains(termKey.lowercased()),
+                   CardJSON.backKeys.contains(defKey.lowercased()) { continue }
             }
             rows.append(Row(term: term, definition: definition, section: section))
         }

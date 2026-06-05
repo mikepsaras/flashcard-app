@@ -104,4 +104,19 @@ import Foundation
         #expect(parsed.cards.map(\.section) == ["Verbs", "Nouns"])
         #expect(CardListCodec.orderedSections(parsed.cards) == ["Verbs", "Nouns"])
     }
+
+    // MARK: Key / header tolerance
+
+    @Test func parsesCSVWithFrontBackHeader() {
+        let parsed = CardListCodec.parse("Front,Back\nSprint,A time-box\nScrum,A framework\n")
+        #expect(parsed.cards.count == 2)
+        #expect(parsed.cards.first?.term == "Sprint")
+        #expect(parsed.cards.first?.definition == "A time-box")
+    }
+
+    @Test func parsesJSONWithQuestionAnswerKeys() {
+        let parsed = CardListCodec.parse(#"{"cards":[{"question":"Capital of France","answer":"Paris"}]}"#)
+        #expect(parsed.cards.first?.term == "Capital of France")
+        #expect(parsed.cards.first?.definition == "Paris")
+    }
 }
