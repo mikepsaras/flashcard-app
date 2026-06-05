@@ -29,7 +29,7 @@ struct DeckCardListView: View {
     let cardSearch: String
     let otherDecks: [Deck]
     var onAddCards: (_ section: String) -> Void
-    var onNewSection: (_ assigning: Card?) -> Void
+    var onNewSection: (_ cards: [Card]) -> Void
     var onRequestBulkDelete: () -> Void
     #if os(iOS)
     @Environment(\.editMode) private var editMode
@@ -91,15 +91,20 @@ struct DeckCardListView: View {
 
     private var cardList: some View {
         List(selection: $selection) {
-            if deck.cardArray.isEmpty {
+            // Empty only when there are no cards AND no sections — a deck with sections (but no cards
+            // yet) shows its section structure so you can build it out before adding cards.
+            if deck.cardArray.isEmpty && deck.sectionOrder.isEmpty {
                 Section {
                     VStack(spacing: 10) {
                         Text("No cards yet.")
                             .font(Typography.callout)
                             .foregroundStyle(.secondary)
-                        Button { onAddCards("") } label: { Label("Add a Card", systemImage: "plus") }
-                            .buttonStyle(.bordered)
-                            .font(Typography.callout)
+                        HStack(spacing: 10) {
+                            Button { onAddCards("") } label: { Label("Add a Card", systemImage: "plus") }
+                            Button { onNewSection([]) } label: { Label("New Section", systemImage: "folder.badge.plus") }
+                        }
+                        .buttonStyle(.bordered)
+                        .font(Typography.callout)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
@@ -125,6 +130,7 @@ struct DeckCardListView: View {
                             .font(Typography.caption)
                             .foregroundStyle(.secondary)
                             .deleteDisabled(true)
+                            .contextMenu { cardMenu(for: nil) }
                     case .card(let card):
                         cardRow(card)
                     }
@@ -170,30 +176,7 @@ struct DeckCardListView: View {
         let row = CardRowView(card: card)
             .contentShape(Rectangle())
             .tag(card.id)
-            .contextMenu {
-                Button { editingCard = card } label: { Label("Edit", systemImage: "pencil") }
-                Button { duplicate(card) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
-                Divider()
-                Menu("Move to Section") {
-                    Button("None") { moveCard(card, toSection: "") }
-                        .disabled(card.section.isEmpty)
-                    if !deck.sectionOrder.isEmpty { Divider() }
-                    ForEach(deck.sectionOrder, id: \.self) { name in
-                        Button(name) { moveCard(card, toSection: name) }
-                            .disabled(card.section == name)
-                    }
-                    Divider()
-                    Button("New Section…") { onNewSection(card) }
-                }
-                if !otherDecks.isEmpty {
-                    Menu("Move to Deck") {
-                        ForEach(otherDecks) { target in
-                            Button(target.displayName) { move(card, to: target) }
-                        }
-                    }
-                }
-                Button(role: .destructive) { cardPendingDeletion = card } label: { Label("Delete", systemImage: "trash") }
-            }
+            .contextMenu { cardMenu(for: card) }
         #if os(iOS)
         // iOS: a tap opens the editor — but only outside Edit mode, where taps drive multi-select.
         if editMode?.wrappedValue.isEditing == true {
@@ -210,6 +193,43 @@ struct DeckCardListView: View {
         // SwiftUI gesture.
         row
         #endif
+    }
+
+    /// The card context menu, reused for an actual card and for empty areas (an empty deck or an
+    /// empty section's drop hint). With no card the card-specific actions grey out; "Add Card" and
+    /// "New Section…" stay available so you can build out a deck that has no cards yet.
+    @ViewBuilder private func cardMenu(for card: Card?) -> some View {
+        let targets = card.map { contextTargets($0) } ?? []
+        Button { if let card { editingCard = card } } label: { Label("Edit", systemImage: "pencil") }
+            .disabled(card == nil)
+        Button { duplicate(targets) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+            .disabled(card == nil)
+        Divider()
+        Button { onAddCards(card?.section ?? "") } label: { Label("Add Card", systemImage: "plus") }
+        Button { onNewSection(targets) } label: { Label("New Section…", systemImage: "folder.badge.plus") }
+        Menu("Move to Section") {
+            Button("None") { moveToSection(targets, "") }
+                .disabled(card?.section.isEmpty ?? true)
+            if !deck.sectionOrder.isEmpty { Divider() }
+            ForEach(deck.sectionOrder, id: \.self) { name in
+                Button(name) { moveToSection(targets, name) }
+                    .disabled(card?.section == name)
+            }
+        }
+        .disabled(card == nil)
+        if !otherDecks.isEmpty {
+            Menu("Move to Deck") {
+                ForEach(otherDecks) { target in
+                    Button(target.displayName) { moveCardsToDeck(targets, target) }
+                }
+            }
+            .disabled(card == nil)
+        }
+        Divider()
+        Button(role: .destructive) {
+            if targets.count > 1 { onRequestBulkDelete() } else if let card { cardPendingDeletion = card }
+        } label: { Label(card.map(deleteLabel) ?? "Delete", systemImage: "trash") }
+            .disabled(card == nil)
     }
 
     /// A section header rendered as a row in the flattened list (styled to read like a `Section`
@@ -249,6 +269,21 @@ struct DeckCardListView: View {
     }
 
     // MARK: Mutations
+
+    /// The cards a context-menu action affects: the whole selection when the right-clicked card is
+    /// part of a multi-selection (like Finder/Mail), otherwise just that card.
+    private func contextTargets(_ card: Card) -> [Card] {
+        guard selection.contains(card.id), selection.count > 1 else { return [card] }
+        // In display order (unsectioned first, then by section + sortOrder) so duplicates/moves keep
+        // the cards' on-screen order — `cardArray` is the *unordered* relationship.
+        return deck.sectionGroups.flatMap(\.cards).filter { selection.contains($0.id) }
+    }
+
+    /// "Delete" / "Delete N Cards" — the menu label reflects how many cards the action removes.
+    private func deleteLabel(_ card: Card) -> String {
+        let count = contextTargets(card).count
+        return count > 1 ? "Delete \(count) Cards" : "Delete"
+    }
 
     private func deleteFlat(_ offsets: IndexSet) {
         let rows = flatRows
@@ -302,12 +337,16 @@ struct DeckCardListView: View {
         context.saveAndPersist(touching: deck)
     }
 
-    /// Duplicates a card within the same deck + section, with a fresh schedule, placed at the end
-    /// of its section.
-    private func duplicate(_ card: Card) {
-        let copy = Card(term: card.term, definition: card.definition, deck: deck,
-                        section: card.section, sortOrder: deck.nextSortOrder(inSection: card.section))
-        context.insert(copy)
+    /// Duplicates each card within its deck + section (fresh schedule, appended to the section).
+    /// Operates on the whole selection when invoked on a multi-selection.
+    private func duplicate(_ cards: [Card]) {
+        var nextOrder: [String: Int] = [:]
+        for card in cards {
+            let order = nextOrder[card.section] ?? deck.nextSortOrder(inSection: card.section)
+            nextOrder[card.section] = order + 1
+            context.insert(Card(term: card.term, definition: card.definition, deck: deck,
+                                section: card.section, sortOrder: order))
+        }
         context.saveAndPersist(touching: deck)
     }
 
@@ -319,27 +358,43 @@ struct DeckCardListView: View {
     }
     #endif
 
-    private func move(_ card: Card, to target: Deck) {
-        // The section belongs to this deck; moving decks drops it (the name may not exist there).
-        card.deck = target
-        card.section = ""
-        card.sortOrder = target.nextSortOrder(inSection: "")
-        card.modifiedAt = .now
+    /// Moves the cards into `target`, dropping their section (its names belong to this deck) and
+    /// clearing the selection. Operates on the whole selection from a multi-selection.
+    private func moveCardsToDeck(_ cards: [Card], _ target: Deck) {
+        guard !cards.isEmpty else { return }
+        var order = target.nextSortOrder(inSection: "")
+        for card in cards {
+            card.deck = target
+            card.section = ""
+            card.sortOrder = order
+            card.modifiedAt = .now
+            order += 1
+        }
+        selection.removeAll()
         context.saveAndPersist(touching: deck, target)
     }
 
     // MARK: Card sections
 
-    private func moveCard(_ card: Card, toSection name: String) {
-        guard card.section != name else { return }
-        card.section = name
-        card.sortOrder = deck.nextSortOrder(inSection: name)
-        card.modifiedAt = .now
-        context.saveAndPersist(touching: deck)
+    /// Moves the cards into the named section (or "" for unsectioned), appending in order. Operates
+    /// on the whole selection from a multi-selection; cards already in the section are left untouched.
+    private func moveToSection(_ cards: [Card], _ name: String) {
+        var order = deck.nextSortOrder(inSection: name)
+        var changed = false
+        withAnimation(.snappy) {
+            for card in cards where card.section != name {
+                card.section = name
+                card.sortOrder = order
+                card.modifiedAt = .now
+                order += 1
+                changed = true
+            }
+        }
+        if changed { context.saveAndPersist(touching: deck) }
     }
 
     private func moveSection(_ name: String, by offset: Int) {
-        deck.moveSection(name, by: offset)
+        withAnimation(.snappy) { deck.moveSection(name, by: offset) }
         context.saveAndPersist(touching: deck)
     }
 

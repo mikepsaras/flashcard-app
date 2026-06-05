@@ -24,7 +24,7 @@ struct DeckDetailView: View {
     @State private var showingNewSection = false
     @State private var newSectionName = ""
     /// Set when "New Section…" is chosen from a card's menu: the card to drop in once it's named.
-    @State private var newSectionCardTarget: Card?
+    @State private var newSectionCardTargets: [Card] = []
     @State private var showingBulkAdd = false
     @State private var bulkAddSection = ""
     // Card selection drives bulk actions. macOS: click selects, Return opens, Delete removes the
@@ -275,7 +275,7 @@ struct DeckDetailView: View {
         }
         .alert("New Section", isPresented: $showingNewSection) {
             TextField("Section name", text: $newSectionName)
-            Button("Cancel", role: .cancel) { newSectionCardTarget = nil }
+            Button("Cancel", role: .cancel) { newSectionCardTargets = [] }
             Button("Add") { confirmNewSection() }
         } message: {
             Text("Name a section to group cards in this deck.")
@@ -387,22 +387,24 @@ struct DeckDetailView: View {
 
     // MARK: Card sections
 
-    private func startNewSection(assigning card: Card? = nil) {
-        newSectionCardTarget = card
+    private func startNewSection(assigning cards: [Card] = []) {
+        newSectionCardTargets = cards
         newSectionName = ""
         showingNewSection = true
     }
 
     private func confirmNewSection() {
         let name = String(newSectionName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
-        let card = newSectionCardTarget
-        newSectionCardTarget = nil
+        let cards = newSectionCardTargets
+        newSectionCardTargets = []
         guard !name.isEmpty else { return }
         if !deck.sectionOrder.contains(name) { deck.sectionOrder.append(name) }
-        if let card {
+        var order = deck.nextSortOrder(inSection: name)
+        for card in cards {
             card.section = name
-            card.sortOrder = deck.nextSortOrder(inSection: name)
+            card.sortOrder = order
             card.modifiedAt = .now
+            order += 1
         }
         context.saveAndPersist(touching: deck)
     }
