@@ -71,6 +71,23 @@ final class StudySession {
         limit > 0 ? Array(items.prefix(limit)) : items
     }
 
+    /// Orders a due set so reviews always come before new cards, and throttles how many *new*
+    /// units (never reviewed in their direction) are introduced: every due review is kept, then
+    /// up to `newPerDay - introducedToday` new units (`newPerDay <= 0` ⇒ unlimited new). Callers
+    /// pass the set most-due first; reviews and new each keep that order. Putting reviews first
+    /// means new cards never crowd out due reviews under the session cap (new cards sort early,
+    /// since an unreviewed card's due date is its creation date). Pure + static ⇒ unit-testable.
+    static func prioritizingReviews(_ items: [ReviewItem], newPerDay: Int, introducedToday: Int) -> [ReviewItem] {
+        var reviews: [ReviewItem] = []
+        var newUnits: [ReviewItem] = []
+        for item in items {
+            if item.card.lastReviewedAt(item.direction) == nil { newUnits.append(item) }
+            else { reviews.append(item) }
+        }
+        let allowedNew = newPerDay > 0 ? max(0, newPerDay - introducedToday) : newUnits.count
+        return reviews + newUnits.prefix(allowedNew)
+    }
+
     // MARK: Derived state
     var total: Int { items.count }
     var answered: Int { index }

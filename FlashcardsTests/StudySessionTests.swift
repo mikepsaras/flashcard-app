@@ -297,4 +297,27 @@ final class StudySessionTests {
         let items = forwardItems(3)
         #expect(StudySession.cap(items, limit: 100).count == 3)
     }
+
+    // MARK: New-card throttle / review priority (S0.2)
+
+    @Test func prioritizingReviewsKeepsReviewsFirstAndCapsNew() {
+        let cards = makeCards(6)
+        cards[0].lastReviewedAt = .now      // two already-reviewed units…
+        cards[1].lastReviewedAt = .now
+        let items = cards.map { ReviewItem(card: $0, direction: .forward) }   // …then four new
+
+        // 2 new/day, none used yet ⇒ 2 reviews + 2 new, reviews leading.
+        let out = StudySession.prioritizingReviews(items, newPerDay: 2, introducedToday: 0)
+        #expect(out.count == 4)
+        #expect(out.prefix(2).allSatisfy { $0.card.lastReviewedAt != nil })    // reviews first
+        #expect(out.dropFirst(2).allSatisfy { $0.card.lastReviewedAt == nil }) // then new
+
+        // Quota already spent ⇒ reviews only.
+        let reviewsOnly = StudySession.prioritizingReviews(items, newPerDay: 2, introducedToday: 2)
+        #expect(reviewsOnly.count == 2)
+        #expect(reviewsOnly.allSatisfy { $0.card.lastReviewedAt != nil })
+
+        // 0 ⇒ unlimited new (introducedToday ignored).
+        #expect(StudySession.prioritizingReviews(items, newPerDay: 0, introducedToday: 99).count == 6)
+    }
 }

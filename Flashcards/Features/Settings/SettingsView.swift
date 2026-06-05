@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @AppStorage(AIProvider.selectedProviderKey) private var aiProviderRaw = AIProvider.openAI.rawValue
     @AppStorage(DefaultsKey.studySessionLimit) private var sessionLimit = 0
+    @AppStorage(DefaultsKey.newCardsPerDay) private var newCardsPerDay = DefaultsKey.newCardsPerDayDefault
     @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
     @AppStorage(DefaultsKey.remindersEnabled) private var remindersEnabled = false
     @AppStorage(DefaultsKey.reminderHour) private var reminderHour = 19
@@ -158,10 +159,19 @@ struct SettingsView: View {
             } label: {
                 Label("Cards per session", systemImage: "rectangle.stack")
             }
+            Picker(selection: $newCardsPerDay) {
+                Text("Unlimited").tag(0)
+                Text("10").tag(10)
+                Text("20").tag(20)
+                Text("30").tag(30)
+                Text("50").tag(50)
+            } label: {
+                Label("New cards per day", systemImage: "sparkles")
+            }
         } header: {
             Text("Studying")
         } footer: {
-            Text("A session cap studies the most-due cards in batches. Grading buttons (2 or 4) are set per deck, in the deck’s editor.")
+            Text("A session cap studies the most-due cards in batches. New cards are introduced gradually, up to the daily limit, so a big import doesn’t flood your reviews. Grading buttons (2 or 4) are set per deck, in the deck’s editor.")
         }
     }
 

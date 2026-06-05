@@ -108,7 +108,13 @@ struct TodayDetailView: View {
             // Cross-deck due units, including reverse where enabled. Built in memory so
             // reverse due dates (a #Predicate can't reach through the relationship) count.
             let decks = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
-            return decks.flatMap { $0.dueReviewItems }.sorted { $0.dueDate < $1.dueDate }
+            let due = decks.flatMap { $0.dueReviewItems }.sorted { $0.dueDate < $1.dueDate }
+            // Reviews first, then new cards throttled to the day's remaining quota (S0.2).
+            return StudySession.prioritizingReviews(
+                due,
+                newPerDay: DefaultsKey.newCardsPerDayValue(),
+                introducedToday: StudyStats.newCardsIntroducedToday()
+            )
         }
     }
 }

@@ -7,6 +7,17 @@ import Foundation
 enum DefaultsKey {
     /// Study: max cards per session (0 = unlimited).
     static let studySessionLimit = "studySessionLimit"
+    /// Study: max *new* cards introduced per day across all study (0 = unlimited). Reviews are
+    /// never capped by this — only first-time cards. Read via `newCardsPerDayValue` so an unset
+    /// key resolves to the default rather than `integer(forKey:)`'s 0 ("unlimited").
+    static let newCardsPerDay = "newCardsPerDay"
+    /// Default new-cards/day when the user hasn't chosen one — the standard SRS introduction pace.
+    static let newCardsPerDayDefault = 20
+
+    /// The effective new-cards-per-day limit, applying the default when the key is unset.
+    static func newCardsPerDayValue(_ defaults: UserDefaults = .standard) -> Int {
+        defaults.object(forKey: newCardsPerDay) as? Int ?? newCardsPerDayDefault
+    }
     /// Library: deck sort order (a `DeckSort` raw value).
     static let deckSort = "deckSort"
     /// Reminders: daily-reminder toggle + time.

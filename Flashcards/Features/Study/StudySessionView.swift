@@ -288,11 +288,16 @@ struct StudySessionView: View {
         // Capture maturity from the *pre-grade* schedule (before grade() advances the card) so the
         // "true retention" tally buckets by the card's maturity at review time, Anki-style.
         let wasMature = currentIsMature()
+        let wasNew = currentIsNew()
         session.grade(grade)
         // Practice runs (nothing due) don't advance schedules, and must not feed the daily
         // review count / accuracy / streak either — otherwise "Study Again" or studying an
         // already-caught-up deck would keep a streak alive with nothing actually due.
-        if !session.isPractice { StudyStats.recordReview(correct: grade.isCorrect, mature: wasMature) }
+        if !session.isPractice {
+            StudyStats.recordReview(correct: grade.isCorrect, mature: wasMature)
+            // Count a first-ever review toward today's new-card quota (S0.2 throttle).
+            if wasNew { StudyStats.recordNewCardIntroduced() }
+        }
         #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(grade.isCorrect ? .success : .warning)
         #endif
@@ -303,8 +308,11 @@ struct StudySessionView: View {
         // Mirror performGrade: only real (non-practice) reviews were recorded, so only those are
         // reversed — and with the same correctness + maturity — keeping the count / accuracy /
         // retention / streak honest. After undo, `session.current` is the restored (pre-grade)
-        // item again, so its maturity matches what `recordReview` saw.
-        if !session.isPractice { StudyStats.unrecordReview(correct: undone.isCorrect, mature: currentIsMature()) }
+        // item again, so its maturity / newness matches what the grade recorded.
+        if !session.isPractice {
+            StudyStats.unrecordReview(correct: undone.isCorrect, mature: currentIsMature())
+            if currentIsNew() { StudyStats.unrecordNewCardIntroduced() }
+        }
     }
 
     /// Whether `session.current` is a *mature* review unit — its direction's interval is at or past
@@ -314,6 +322,13 @@ struct StudySessionView: View {
         guard let item = session.current else { return false }
         let interval = item.direction == .forward ? item.card.interval : item.card.reverseInterval
         return interval >= StudyInsights.matureIntervalDays
+    }
+
+    /// Whether `session.current` is a *new* unit — its direction has never been reviewed. Read
+    /// before grading (and after undo, when the item is restored) to mirror `currentIsMature`.
+    private func currentIsNew() -> Bool {
+        guard let item = session.current else { return false }
+        return item.card.lastReviewedAt(item.direction) == nil
     }
 
     private func finish() {

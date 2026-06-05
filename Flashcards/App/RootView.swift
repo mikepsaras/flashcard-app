@@ -199,8 +199,17 @@ struct RootView: View {
                 context.saveAndPersist(touching: deck)
             }
         ) {
-            let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
-            return due.isEmpty ? deck.allReviewItems : due
+            let dueSorted = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
+            // Genuinely nothing due ⇒ practice over the whole deck (unchanged). Otherwise study
+            // the due set with new-card introductions throttled to the daily quota (S0.2). The
+            // practice fallback is gated on the *unthrottled* due check, so an exhausted new
+            // quota yields an empty (finished) run — never a practice pass that bypasses it.
+            if dueSorted.isEmpty { return deck.allReviewItems }
+            return StudySession.prioritizingReviews(
+                dueSorted,
+                newPerDay: DefaultsKey.newCardsPerDayValue(),
+                introducedToday: StudyStats.newCardsIntroducedToday()
+            )
         }
     }
 }

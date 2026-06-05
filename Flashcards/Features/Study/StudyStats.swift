@@ -16,6 +16,10 @@ enum StudyStats {
     /// rate). Kept separate so they need no model/file change and start empty (filling as you study).
     static let matureStorageKey = "reviewMatureByDay"
     static let matureCorrectStorageKey = "reviewMatureCorrectByDay"
+    /// New cards first studied each day — a parallel store backing the per-day new-card limit
+    /// (S0.2), so the queue stops introducing new cards once the day's quota is met (surviving
+    /// relaunch). Separate store, no model/file change; starts empty.
+    static let newIntroducedStorageKey = "newCardsIntroducedByDay"
     /// Bumped whenever the logs are cleared (reset), so views that read raw UserDefaults rather
     /// than `@AppStorage` re-render. Study sessions already re-render on their own when they end.
     static let revisionKey = "studyStatsRevision"
@@ -65,6 +69,23 @@ enum StudyStats {
         }
     }
 
+    /// Records one *new* card introduced today (its first-ever review), for the per-day new-card
+    /// limit. Call alongside `recordReview` only when the graded unit had never been reviewed.
+    static func recordNewCardIntroduced(now: Date = .now, defaults: UserDefaults = .standard) {
+        bump(newIntroducedStorageKey, now: now, by: 1, defaults: defaults)
+    }
+
+    /// Reverses one new-card introduction (used when a first-review grade is undone), mirroring
+    /// `unrecordReview` so a grade-then-undo can't permanently consume the day's new-card quota.
+    static func unrecordNewCardIntroduced(now: Date = .now, defaults: UserDefaults = .standard) {
+        bump(newIntroducedStorageKey, now: now, by: -1, defaults: defaults)
+    }
+
+    /// New cards introduced today, for the per-day new-card limit. 0 when none yet.
+    static func newCardsIntroducedToday(now: Date = .now, defaults: UserDefaults = .standard) -> Int {
+        dict(newIntroducedStorageKey, defaults)[dayKey(now)] ?? 0
+    }
+
     /// Overwrites the day-logs wholesale — used only by the developer test-data tools to seed a
     /// year of synthetic activity. Bumps the revision so live stat views re-read immediately.
     static func overwriteLogs(
@@ -85,6 +106,7 @@ enum StudyStats {
         defaults.removeObject(forKey: correctStorageKey)
         defaults.removeObject(forKey: matureStorageKey)
         defaults.removeObject(forKey: matureCorrectStorageKey)
+        defaults.removeObject(forKey: newIntroducedStorageKey)
         defaults.set(defaults.integer(forKey: revisionKey) + 1, forKey: revisionKey)
     }
 

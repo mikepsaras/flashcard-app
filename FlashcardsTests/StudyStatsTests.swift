@@ -77,6 +77,21 @@ import Foundation
         }
     }
 
+    @Test func newCardIntroducedCounterRoundTrips() {
+        withIsolatedDefaults { defaults in
+            #expect(StudyStats.newCardsIntroducedToday(now: now, defaults: defaults) == 0)
+            StudyStats.recordNewCardIntroduced(now: now, defaults: defaults)
+            StudyStats.recordNewCardIntroduced(now: now, defaults: defaults)
+            #expect(StudyStats.newCardsIntroducedToday(now: now, defaults: defaults) == 2)
+            StudyStats.unrecordNewCardIntroduced(now: now, defaults: defaults)
+            #expect(StudyStats.newCardsIntroducedToday(now: now, defaults: defaults) == 1)
+            // Floor at zero — extra unrecords (e.g. stray undos) can't drive the quota negative.
+            StudyStats.unrecordNewCardIntroduced(now: now, defaults: defaults)
+            StudyStats.unrecordNewCardIntroduced(now: now, defaults: defaults)
+            #expect(StudyStats.newCardsIntroducedToday(now: now, defaults: defaults) == 0)
+        }
+    }
+
     @Test func currentStreakReadsFromStorage() {
         withIsolatedDefaults { defaults in
             #expect(StudyStats.currentStreak(now: now, defaults: defaults) == 0)
