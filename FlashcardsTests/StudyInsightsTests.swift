@@ -65,6 +65,17 @@ final class StudyInsightsTests {
         #expect(r.units == 0)
     }
 
+    @Test func categoriesAggregateDecksByLibraryCategory() {
+        let a = Deck(name: "A", section: "Languages"); container.mainContext.insert(a)
+        let b = Deck(name: "B", section: "Languages"); container.mainContext.insert(b)
+        let c = Deck(name: "C", section: "Science"); container.mainContext.insert(c)
+        for deck in [a, b, c] { container.mainContext.insert(Card(term: "x", definition: "y", deck: deck)) }
+        let s = StudyInsights.make(decks: [a, b, c], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(s.categories.count == 2)
+        #expect(s.categories.first { $0.name == "Languages" }?.totalCards == 2)   // two decks folded in
+        #expect(s.categories.contains { $0.name == "Science" && $0.totalCards == 1 })
+    }
+
     @Test func reverseIntervalCountsTowardMaturityWhenStudyReversed() {
         let deck = makeDeck(studyReversed: true)
         // Forward interval short, reverse interval mature ⇒ counts as Mature.

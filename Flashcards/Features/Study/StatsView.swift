@@ -57,6 +57,10 @@ struct StatsContentView: View {
     @AppStorage(DefaultsKey.retentionGraph) private var retentionGraphRaw = RetentionGraph.spread.rawValue
     private var retentionGraph: RetentionGraph { RetentionGraph(rawValue: retentionGraphRaw) ?? .spread }
 
+    // Optional "Your library" breakdowns — collapsed by default, expansion persisted.
+    @AppStorage(DefaultsKey.insightsShowCategories) private var showCategories = false
+    @AppStorage(DefaultsKey.insightsShowSections) private var showSections = false
+
     private struct Stat: Identifiable {
         var id: String { label }
         let label: String
@@ -71,38 +75,95 @@ struct StatsContentView: View {
         insights.totalCards > 0 ? "\(insights.matureCount * 100 / insights.totalCards)%" : "—"
     }
 
-    private var stats: [Stat] {
+    /// Four headline KPIs (down from eight); the streak / due / recall story lives in the hero, and
+    /// the rest is the sections below.
+    private var overviewStats: [Stat] {
         [
-            Stat(label: "Day streak", value: "\(insights.currentStreak)", icon: "flame.fill", tint: .orange),
-            Stat(label: "Longest streak", value: "\(insights.longestStreak)", icon: "trophy.fill", tint: Theme.accent),
+            Stat(label: "Reviewed today", value: "\(insights.reviewsToday)", icon: "checkmark.circle.fill", tint: Theme.success),
             Stat(label: "This week", value: "\(insights.reviewsThisWeek)", icon: "calendar",
                  tint: Theme.accent, delta: insights.reviewsThisWeek - insights.reviewsLastWeek),
-            Stat(label: "Reviewed today", value: "\(insights.reviewsToday)", icon: "checkmark.circle.fill", tint: Theme.success),
             Stat(label: "Accuracy", value: percent(insights.accuracyAllTime), icon: "target", tint: Theme.accent),
             Stat(label: "Mature", value: maturePercent, icon: "checkmark.seal.fill", tint: Theme.success),
-            Stat(label: "Due now", value: "\(insights.dueNow)", icon: "clock.fill", tint: insights.dueNow > 0 ? .orange : .secondary),
-            Stat(label: "Due in 7 days", value: "\(insights.dueThisWeek)", icon: "calendar.badge.clock",
-                 tint: insights.dueThisWeek > 0 ? .orange : .secondary),
         ]
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            hero
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Spacing.m)],
                 spacing: Theme.Spacing.m
             ) {
-                ForEach(stats) { tile($0) }
+                ForEach(overviewStats) { tile($0) }
             }
-            retentionCard
-            forecastCard
             heatmapCard
-            if !insights.perDeck.isEmpty { perDeckCard }
-            if !insights.sections.isEmpty { bySectionCard }
-            maturityCard
+            memoryCard
+            libraryCard
         }
         .frame(maxWidth: 940)          // keep the dashboard readable instead of stretching edge-to-edge
         .frame(maxWidth: .infinity)    // ...and centered in wide / fullscreen windows
+    }
+
+    // MARK: Hero
+
+    /// The narrative beat on top: streak headline, a one-line summary, and the predicted-recall ring.
+    private var hero: some View {
+        HStack(alignment: .center, spacing: Theme.Spacing.m) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: heroIcon).font(.system(size: 28)).foregroundStyle(heroTint)
+                    Text(heroHeadline).font(.system(size: 30, weight: .bold, design: .rounded))
+                }
+                Text(heroSummary).font(Typography.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 12)
+            heroRing
+        }
+        .padding(Theme.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(colors: [Theme.accent.opacity(0.16), Theme.accent.opacity(0.05)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(heroHeadline). \(heroSummary).")
+    }
+
+    private var heroHeadline: String {
+        insights.currentStreak > 0 ? "\(insights.currentStreak)-day streak" : "Your progress"
+    }
+    private var heroIcon: String { insights.currentStreak > 0 ? "flame.fill" : "chart.bar.fill" }
+    private var heroTint: Color { insights.currentStreak > 0 ? .orange : Theme.accent }
+    private var heroSummary: String {
+        var parts = ["\(insights.dueNow) due today"]
+        if insights.reviewsAllTime > 0 { parts.append("\(insights.reviewsAllTime) reviewed all-time") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Non-interactive predicted-recall ring for the hero (the tappable, horizon-cycling one lives on
+    /// the deck page; here it's just a summary of recall right now).
+    private var heroRing: some View {
+        let recall = insights.predictedRetention
+        let pct = Int(((recall ?? 0) * 100).rounded())
+        let tint = retentionTint(recall)
+        return VStack(spacing: 5) {
+            ZStack {
+                Circle().stroke(Color.primary.opacity(0.1), lineWidth: 6)
+                if let recall {
+                    Circle().trim(from: 0, to: max(recall, 0.001))
+                        .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                Text(recall == nil ? "—" : "\(pct)%")
+                    .font(.system(size: 15, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(tint)
+            }
+            .frame(width: 60, height: 60)
+            Text("recall now").font(.system(size: 10, weight: .medium, design: .rounded)).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(recall == nil ? "Predicted recall: no data yet" : "Predicted recall now: \(pct) percent")
     }
 
     // MARK: Tiles
@@ -136,48 +197,28 @@ struct StatsContentView: View {
 
     // MARK: Cards
 
-    private var forecastCard: some View {
-        card("Due forecast", subtitle: forecastSubtitle) {
-            DueForecastChart(forecast: insights.dueForecast, now: now)
-        }
-    }
-
-    private var forecastSubtitle: String {
-        insights.dueThisWeek > 0
-            ? "\(insights.dueThisWeek) review\(insights.dueThisWeek == 1 ? "" : "s") due in the next 7 days"
-            : "Nothing due in the next 7 days"
-    }
-
-    /// The two retention numbers — predicted recall *now* (estimated from each card's schedule) and
-    /// measured *mature* retention (Anki's "true retention") — sit as a legend under a graph the user
-    /// picks: the recall Spread, the mature-retention Trend, or the forgetting Curve.
-    private var retentionCard: some View {
+    /// Predicted recall *now* and measured *mature* retention as a legend under a graph that cycles
+    /// Spread → Trend → Curve on tap (a chip names the current one) — no segmented control / tabs.
+    private var memoryCard: some View {
         // Until something's been reviewed, both numbers are nil — show a "study to see this" state
-        // rather than hiding the card, so its place on the dashboard (and what it tracks) is visible.
+        // rather than hiding the card, so its place on the page (and what it tracks) is visible.
         let hasData = insights.predictedRetention != nil || insights.trueRetention != nil
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             HStack(alignment: .top, spacing: Theme.Spacing.s) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Memory retention").font(Typography.headline).foregroundStyle(.secondary)
+                    Text("Memory").font(Typography.headline).foregroundStyle(.secondary)
                     if hasData {
                         Text(retentionGraphSubtitle).font(Typography.caption).foregroundStyle(.secondary)
                     }
                 }
                 Spacer(minLength: 8)
-                if hasData {
-                    Picker("Graph", selection: $retentionGraphRaw) {
-                        ForEach(RetentionGraph.allCases) { Text($0.label).tag($0.rawValue) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    #if os(macOS)
-                    .controlSize(.small)
-                    #endif
-                }
+                if hasData { graphChip }
             }
             if hasData {
-                retentionGraphView.frame(height: 140)
+                retentionGraphView
+                    .frame(height: 140)
+                    .contentShape(Rectangle())
+                    .onTapGesture { cycleRetentionGraph() }
                 retentionLegend
                 if let takeaway = insights.retentionTakeaway {
                     HStack(alignment: .top, spacing: 6) {
@@ -199,6 +240,28 @@ struct StatsContentView: View {
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardSurface(cornerRadius: Theme.Radius.tile)
+    }
+
+    /// A tappable chip naming the current graph; tapping it (or the graph itself) cycles to the next.
+    private var graphChip: some View {
+        Button { cycleRetentionGraph() } label: {
+            HStack(spacing: 3) {
+                Text(retentionGraph.label)
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .semibold))
+            }
+            .font(.system(.caption, design: .rounded, weight: .medium))
+            .foregroundStyle(Theme.accent)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(Theme.accent.opacity(Theme.Opacity.fillSubtle), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Graph: \(retentionGraph.label). Tap to change.")
+    }
+
+    private func cycleRetentionGraph() {
+        let all = RetentionGraph.allCases
+        let idx = all.firstIndex(of: retentionGraph) ?? 0
+        retentionGraphRaw = all[(idx + 1) % all.count].rawValue
     }
 
     /// Shown before any reviews exist: keeps the card on the dashboard and says what will appear.
@@ -322,12 +385,82 @@ struct StatsContentView: View {
         .cardSurface(cornerRadius: Theme.Radius.tile)
     }
 
-    private var perDeckCard: some View {
-        card("By deck") {
-            VStack(spacing: Theme.Spacing.s) {
-                ForEach(sortedDecks) { deckRow($0) }
+    /// "Your library" — overall maturity, the per-deck table (always), and optional By-category /
+    /// By-section disclosures (collapsed by default; each only offered when it has substance). Folds
+    /// what used to be three separate cards (By deck · By section · Card maturity) into one.
+    private var libraryCard: some View {
+        card("Your library") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                VStack(alignment: .leading, spacing: 8) {
+                    MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
+                    HStack(spacing: Theme.Spacing.l) {
+                        legend("New", Theme.Maturity.new, insights.newCount)
+                        legend("Learning", Theme.Maturity.learning, insights.learningCount)
+                        legend("Mature", Theme.Maturity.mature, insights.matureCount)
+                        Spacer(minLength: 0)
+                    }
+                }
+                if !insights.perDeck.isEmpty {
+                    Divider()
+                    VStack(spacing: Theme.Spacing.s) {
+                        ForEach(sortedDecks) { deckRow($0) }
+                    }
+                }
+                if insights.categories.count >= 2 {
+                    breakdownDisclosure("By category", isExpanded: $showCategories) {
+                        ForEach(sortedCategories) { categoryRow($0) }
+                    }
+                }
+                if !insights.sections.isEmpty {
+                    breakdownDisclosure("By section", isExpanded: $showSections) {
+                        ForEach(sortedSections) { sectionRow($0) }
+                    }
+                }
             }
         }
+    }
+
+    /// A collapsed-by-default sub-breakdown inside "Your library" (the optional By-category / By-section).
+    @ViewBuilder private func breakdownDisclosure<C: View>(_ title: String, isExpanded: Binding<Bool>, @ViewBuilder _ rows: @escaping () -> C) -> some View {
+        Divider()
+        DisclosureGroup(isExpanded: isExpanded) {
+            VStack(spacing: Theme.Spacing.s) { rows() }.padding(.top, Theme.Spacing.s)
+        } label: {
+            Text(title).font(.system(.subheadline, design: .rounded, weight: .medium)).foregroundStyle(.secondary)
+        }
+    }
+
+    private var sortedCategories: [StudyInsights.CategoryStat] {
+        insights.categories.sorted { ($0.due, $0.totalCards) > ($1.due, $1.totalCards) }
+    }
+
+    private func categoryRow(_ cat: StudyInsights.CategoryStat) -> some View {
+        let maturePct = cat.totalCards > 0 ? cat.matureCount * 100 / cat.totalCards : 0
+        return HStack(spacing: 10) {
+            Image(systemName: "folder.fill").font(.system(size: 15)).foregroundStyle(Theme.accent).frame(width: 22)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(cat.name).font(Typography.body).lineLimit(1)
+                    Spacer(minLength: 4)
+                    if cat.due > 0 {
+                        Text("\(cat.due) due")
+                            .font(.system(.caption2, design: .rounded, weight: .bold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(.orange.opacity(Theme.Opacity.fillSubtle), in: Capsule())
+                    }
+                    Text("\(cat.totalCards)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+                HStack(spacing: 8) {
+                    MaturityBar(new: cat.newCount, learning: cat.learningCount, mature: cat.matureCount).frame(height: 6)
+                    Text("\(maturePct)%")
+                        .font(.system(.caption2, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.secondary).monospacedDigit().frame(width: 34, alignment: .trailing)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(cat.name): \(cat.totalCards) cards, \(cat.due) due, \(maturePct) percent mature")
     }
 
     /// Most actionable first: most due, then largest.
@@ -366,14 +499,6 @@ struct StatsContentView: View {
         .accessibilityLabel("\(deck.name): \(deck.totalCards) cards, \(deck.due) due, \(maturePct) percent mature")
     }
 
-    private var bySectionCard: some View {
-        card("By section") {
-            VStack(spacing: Theme.Spacing.s) {
-                ForEach(sortedSections) { sectionRow($0) }
-            }
-        }
-    }
-
     /// Most actionable first: most due, then largest.
     private var sortedSections: [StudyInsights.SectionStat] {
         insights.sections.sorted { ($0.due, $0.totalCards) > ($1.due, $1.totalCards) }
@@ -409,20 +534,6 @@ struct StatsContentView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label): \(section.totalCards) cards, \(section.due) due, \(maturePct) percent mature")
-    }
-
-    private var maturityCard: some View {
-        card("Card maturity") {
-            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
-                HStack(spacing: Theme.Spacing.l) {
-                    legend("New", Theme.Maturity.new, insights.newCount)
-                    legend("Learning", Theme.Maturity.learning, insights.learningCount)
-                    legend("Mature", Theme.Maturity.mature, insights.matureCount)
-                    Spacer(minLength: 0)
-                }
-            }
-        }
     }
 
     private func card<Content: View>(_ title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) -> some View {

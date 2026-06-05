@@ -28,4 +28,7 @@ enum DefaultsKey {
     static let showGradeIntervals = "showGradeIntervals"
     /// Deck page: the memory-retention ring's look-ahead (a `RetentionHorizon` raw value, in days).
     static let retentionHorizon = "retentionHorizon"
+    /// Insights: whether the optional "By category" / "By section" library breakdowns are expanded.
+    static let insightsShowCategories = "insightsShowCategories"
+    static let insightsShowSections = "insightsShowSections"
 }

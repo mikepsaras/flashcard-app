@@ -52,6 +52,9 @@ struct StudyInsights: Equatable {
     var perDeck: [DeckStat] = []
     /// Per-section breakdown (only for decks that use sections), for the "By section" table.
     var sections: [SectionStat] = []
+    /// Per-category breakdown — whole decks grouped by their library Category (`Deck.section`), for
+    /// the optional "By category" table. Only meaningful when ≥2 categories exist.
+    var categories: [CategoryStat] = []
 
     /// One deck's at-a-glance composition for the per-deck breakdown.
     struct DeckStat: Equatable, Identifiable {
@@ -73,6 +76,17 @@ struct StudyInsights: Equatable {
         var colorHex: String
         var icon: String = ""
         var section: String          // "" ⇒ the deck's unsectioned cards
+        var totalCards: Int
+        var due: Int
+        var newCount: Int
+        var learningCount: Int
+        var matureCount: Int
+    }
+
+    /// One library Category's aggregate (the sum of its decks) for the per-category breakdown.
+    struct CategoryStat: Equatable, Identifiable {
+        var id: String               // the category name; "" ⇒ Uncategorized
+        var name: String
         var totalCards: Int
         var due: Int
         var newCount: Int
@@ -203,6 +217,7 @@ struct StudyInsights: Equatable {
         var retentionUnits = 0
         var intervalSum = 0.0
         var buckets = [0, 0, 0, 0]
+        var byCategory: [String: CategoryStat] = [:]   // deck-level Category → aggregate
         for deck in decks {
             var stat = DeckStat(id: deck.id, name: deck.displayName, colorHex: deck.colorHex,
                                 icon: deck.icon, totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
@@ -279,6 +294,17 @@ struct StudyInsights: Equatable {
             }
             insights.perDeck.append(stat)
 
+            // Fold this deck into its library Category aggregate ("" ⇒ Uncategorized).
+            let category = deck.section
+            var cat = byCategory[category] ?? CategoryStat(id: category, name: category.isEmpty ? "Uncategorized" : category,
+                                                           totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
+            cat.totalCards += stat.totalCards
+            cat.due += stat.due
+            cat.newCount += stat.newCount
+            cat.learningCount += stat.learningCount
+            cat.matureCount += stat.matureCount
+            byCategory[category] = cat
+
             // Sections listed in the deck's own order, unsectioned last; empty (and orphan) sections
             // omitted — mirroring the deck-detail grouping.
             if usesSections {
@@ -288,6 +314,8 @@ struct StudyInsights: Equatable {
             }
         }
         insights.dueForecast = forecast
+        // Most-actionable first: most due, then largest.
+        insights.categories = byCategory.values.sorted { ($0.due, $0.totalCards) > ($1.due, $1.totalCards) }
         insights.scheduledUnits = retentionUnits
         insights.predictedRetention = retentionUnits > 0 ? retentionSum / Double(retentionUnits) : nil
         insights.recallBuckets = buckets
