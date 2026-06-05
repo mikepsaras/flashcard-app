@@ -13,6 +13,7 @@ enum SidebarItem: Hashable {
 struct RootView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openWindow) private var openWindow
     @Environment(PersistenceMonitor.self) private var persistenceMonitor
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @State private var studyPlan: StudyPlan?
@@ -69,6 +70,11 @@ struct RootView: View {
                 watcher.start { DeckStore.shared.reconcile(into: context) }
                 if studyPlan == nil { DeckStore.shared.reconcile(into: context) }
             }
+            #if os(macOS)
+            .onChange(of: AppActions.shared.showFormattingGuideTick) { _, _ in
+                openWindow(id: "formatting-guide")
+            }
+            #endif
             .alert(
                 "Couldn’t Save",
                 isPresented: Binding(

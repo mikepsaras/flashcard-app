@@ -49,6 +49,10 @@ struct FlashcardsApp: App {
                 Button("New Deck") { AppActions.shared.newDeckTick += 1 }
                     .keyboardShortcut("n", modifiers: .command)
             }
+            CommandGroup(replacing: .help) {
+                Button("Flashcards Formatting Guide") { AppActions.shared.showFormattingGuideTick += 1 }
+                    .keyboardShortcut("?", modifiers: .command)
+            }
         }
         #endif
 
@@ -57,6 +61,12 @@ struct FlashcardsApp: App {
             SettingsView()
                 .modelContainer(container)
         }
+
+        // Reference window for markdown/LaTeX, opened from the Help menu (⌘?).
+        Window("Formatting Guide", id: "formatting-guide") {
+            FormattingGuideView()
+        }
+        .defaultSize(width: 620, height: 740)
         #endif
     }
 }

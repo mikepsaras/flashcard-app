@@ -51,6 +51,7 @@ struct SettingsView: View {
             dataSection
             advancedSection
             if developerMode { developerSection }
+            helpSection
             aboutSection
         }
         .formStyle(.grouped)
@@ -235,6 +236,26 @@ struct SettingsView: View {
             Text("Advanced")
         } footer: {
             Text("Adds buttons for importing cards from and exporting cards to JSON or CSV files — in a deck’s menus and when creating a deck. Opening and sharing .cards deck files stays available either way.")
+        }
+    }
+
+    private var helpSection: some View {
+        Section {
+            #if os(macOS)
+            Button { AppActions.shared.showFormattingGuideTick += 1 } label: {
+                Label("Formatting Guide", systemImage: "textformat")
+            }
+            #else
+            NavigationLink {
+                FormattingGuideView()
+            } label: {
+                Label("Formatting Guide", systemImage: "textformat")
+            }
+            #endif
+        } header: {
+            Text("Help")
+        } footer: {
+            Text("The Markdown and LaTeX syntax you can use on card fronts and backs.")
         }
     }
 
