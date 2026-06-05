@@ -115,7 +115,6 @@ struct DeckLibraryView: View {
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.top, 8)
             .padding(.bottom, 6)
-            .background(.bar)
         }
         #else
         .toolbar {
