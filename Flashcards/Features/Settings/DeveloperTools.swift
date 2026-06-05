@@ -113,7 +113,7 @@ enum DeveloperTools {
     // MARK: SM-2 state presets
 
     private enum CardState: CaseIterable {
-        case new, learning, mature, due, overdue
+        case new, learning, mature, due, overdue, upcoming
         static var random: CardState { allCases.randomElement() ?? .new }
     }
 
@@ -141,6 +141,7 @@ enum DeveloperTools {
         case .mature:   review(interval: Int.random(in: 21...120), dueOffsetDays: Int.random(in: 1...30),  lastDaysAgo: Int.random(in: 1...40))
         case .due:      review(interval: Int.random(in: 5...30),   dueOffsetDays: 0,                        lastDaysAgo: Int.random(in: 1...10))
         case .overdue:  review(interval: Int.random(in: 5...30),   dueOffsetDays: -Int.random(in: 1...14),  lastDaysAgo: Int.random(in: 5...20))
+        case .upcoming: review(interval: Int.random(in: 4...20),   dueOffsetDays: Int.random(in: 2...13),   lastDaysAgo: Int.random(in: 1...8))
         }
     }
 
@@ -150,38 +151,85 @@ enum DeveloperTools {
     private struct DeckSpec { var name: String; var colorHex: String; var reversed = false; var sections: [String] = []; var cards: [CardSpec] }
 
     private static let sampleSpecs: [DeckSpec] = [
-        DeckSpec(name: "Spanish Verbs", colorHex: "#FF9500", sections: ["Present", "Past"], cards: [
-            CardSpec(term: "hablar", definition: "to speak", section: "Present", state: .learning),
-            CardSpec(term: "comer", definition: "to eat", section: "Present", state: .new),
-            CardSpec(term: "vivir", definition: "to live", section: "Present", state: .mature),
-            CardSpec(term: "hablé", definition: "I spoke", section: "Past", state: .due),
-            CardSpec(term: "comí", definition: "I ate", section: "Past", state: .overdue),
-            CardSpec(term: "viví", definition: "I lived", section: "Past", state: .learning),
+        DeckSpec(name: "Spanish Essentials", colorHex: "#FF9500", sections: ["Verbs", "Nouns", "Adjectives"], cards: [
+            CardSpec(term: "hablar", definition: "to speak", section: "Verbs", state: .mature),
+            CardSpec(term: "comer", definition: "to eat", section: "Verbs", state: .learning),
+            CardSpec(term: "vivir", definition: "to live", section: "Verbs", state: .due),
+            CardSpec(term: "tener", definition: "to have", section: "Verbs", state: .new),
+            CardSpec(term: "la casa", definition: "the house", section: "Nouns", state: .mature),
+            CardSpec(term: "el perro", definition: "the dog", section: "Nouns", state: .overdue),
+            CardSpec(term: "el agua", definition: "the water", section: "Nouns", state: .learning),
+            CardSpec(term: "rápido", definition: "fast", section: "Adjectives", state: .upcoming),
+            CardSpec(term: "feliz", definition: "happy", section: "Adjectives", state: .new),
         ]),
-        DeckSpec(name: "World Capitals (Reverse)", colorHex: "#34C759", reversed: true, cards: [
+        DeckSpec(name: "World Capitals", colorHex: "#34C759", reversed: true, cards: [
             CardSpec(term: "France", definition: "Paris", state: .mature),
-            CardSpec(term: "Japan", definition: "Tokyo", state: .learning),
-            CardSpec(term: "Egypt", definition: "Cairo", state: .new),
+            CardSpec(term: "Japan", definition: "Tokyo", state: .mature),
+            CardSpec(term: "Egypt", definition: "Cairo", state: .learning),
             CardSpec(term: "Peru", definition: "Lima", state: .due),
             CardSpec(term: "Norway", definition: "Oslo", state: .overdue),
+            CardSpec(term: "Kenya", definition: "Nairobi", state: .upcoming),
+            CardSpec(term: "Canada", definition: "Ottawa", state: .new),
+            CardSpec(term: "Brazil", definition: "Brasília", state: .new),
         ]),
-        DeckSpec(name: "Due & Overdue", colorHex: "#FF2D55", cards: [
-            CardSpec(term: "Photosynthesis", definition: "How plants convert light into chemical energy.", state: .due),
-            CardSpec(term: "Mitochondria", definition: "The powerhouse of the cell.", state: .overdue),
-            CardSpec(term: "Osmosis", definition: "Diffusion of water across a semipermeable membrane.", state: .due),
-            CardSpec(term: "Enzyme", definition: "A protein that catalyzes a biochemical reaction.", state: .overdue),
+        DeckSpec(name: "Biology", colorHex: "#FF2D55", sections: ["Cells", "Genetics"], cards: [
+            CardSpec(term: "Mitochondria", definition: "The powerhouse of the cell.", section: "Cells", state: .mature),
+            CardSpec(term: "Ribosome", definition: "Site of protein synthesis.", section: "Cells", state: .learning),
+            CardSpec(term: "Osmosis", definition: "Diffusion of water across a semipermeable membrane.", section: "Cells", state: .due),
+            CardSpec(term: "Nucleus", definition: "Holds the cell's genetic material.", section: "Cells", state: .new),
+            CardSpec(term: "Allele", definition: "A variant form of a gene.", section: "Genetics", state: .upcoming),
+            CardSpec(term: "Genotype", definition: "The genetic makeup of an organism.", section: "Genetics", state: .overdue),
+            CardSpec(term: "Phenotype", definition: "Observable characteristics of an organism.", section: "Genetics", state: .learning),
+            CardSpec(term: "Mutation", definition: "A change in a DNA sequence.", section: "Genetics", state: .new),
         ]),
-        DeckSpec(name: "Mature Set", colorHex: "#AF52DE", cards: [
-            CardSpec(term: "TCP", definition: "Connection-oriented, reliable transport protocol.", state: .mature),
-            CardSpec(term: "UDP", definition: "Connectionless, best-effort transport protocol.", state: .mature),
-            CardSpec(term: "DNS", definition: "Resolves domain names to IP addresses.", state: .mature),
-            CardSpec(term: "HTTP", definition: "Application-layer protocol for the web.", state: .mature),
+        DeckSpec(name: "Computer Science", colorHex: "#3478F6", sections: ["Algorithms", "Networking"], cards: [
+            CardSpec(term: "Big-O notation", definition: "Describes an algorithm's worst-case growth rate.", section: "Algorithms", state: .mature),
+            CardSpec(term: "Binary search", definition: "O(log n) search over a sorted array.", section: "Algorithms", state: .mature),
+            CardSpec(term: "Quicksort", definition: "Divide-and-conquer sort, avg O(n log n).", section: "Algorithms", state: .due),
+            CardSpec(term: "Hash table", definition: "Key → value store with avg O(1) lookup.", section: "Algorithms", state: .learning),
+            CardSpec(term: "TCP", definition: "Connection-oriented, reliable transport protocol.", section: "Networking", state: .mature),
+            CardSpec(term: "UDP", definition: "Connectionless, best-effort transport protocol.", section: "Networking", state: .upcoming),
+            CardSpec(term: "DNS", definition: "Resolves domain names to IP addresses.", section: "Networking", state: .new),
+            CardSpec(term: "TLS", definition: "Encrypts data in transit.", section: "Networking", state: .new),
         ]),
-        DeckSpec(name: "Fresh Deck", colorHex: "#5AC8FA", cards: [
+        DeckSpec(name: "Chemistry", colorHex: "#AF52DE", cards: [
+            CardSpec(term: "Avogadro's number", definition: "6.022 × 10²³ particles per mole.", state: .mature),
+            CardSpec(term: "pH of pure water", definition: "7 (neutral).", state: .mature),
+            CardSpec(term: "Catalyst", definition: "Speeds a reaction without being consumed.", state: .learning),
+            CardSpec(term: "Ionic bond", definition: "Electrostatic attraction between oppositely charged ions.", state: .due),
+            CardSpec(term: "Noble gases", definition: "Group 18 — full valence shell, inert.", state: .upcoming),
+            CardSpec(term: "Oxidation", definition: "Loss of electrons.", state: .new),
+        ]),
+        DeckSpec(name: "Math Formulas", colorHex: "#5AC8FA", cards: [
+            CardSpec(term: "Quadratic formula", definition: "$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$", state: .mature),
+            CardSpec(term: "Pythagorean theorem", definition: "$a^2 + b^2 = c^2$", state: .mature),
+            CardSpec(term: "Area of a circle", definition: "$A = \\pi r^2$", state: .learning),
+            CardSpec(term: "Euler's identity", definition: "$e^{i\\pi} + 1 = 0$", state: .due),
+            CardSpec(term: "Derivative of x^n", definition: "$\\frac{d}{dx} x^n = n x^{n-1}$", state: .upcoming),
+            CardSpec(term: "Sum 1 to n", definition: "$\\frac{n(n+1)}{2}$", state: .new),
+        ]),
+        DeckSpec(name: "French Phrases", colorHex: "#FF375F", reversed: true, cards: [
+            CardSpec(term: "Bonjour", definition: "Hello / Good day", state: .learning),
+            CardSpec(term: "Merci", definition: "Thank you", state: .mature),
+            CardSpec(term: "S'il vous plaît", definition: "Please", state: .due),
+            CardSpec(term: "Au revoir", definition: "Goodbye", state: .learning),
+            CardSpec(term: "Excusez-moi", definition: "Excuse me", state: .new),
+            CardSpec(term: "Je ne sais pas", definition: "I don't know", state: .new),
+        ]),
+        DeckSpec(name: "Medical Terms", colorHex: "#30B0C7", cards: [
+            CardSpec(term: "Tachycardia", definition: "Abnormally fast heart rate.", state: .mature),
+            CardSpec(term: "Hypertension", definition: "High blood pressure.", state: .mature),
+            CardSpec(term: "Dyspnea", definition: "Shortness of breath.", state: .mature),
+            CardSpec(term: "Edema", definition: "Swelling from fluid retention.", state: .upcoming),
+            CardSpec(term: "Ischemia", definition: "Inadequate blood supply to tissue.", state: .due),
+            CardSpec(term: "Necrosis", definition: "Death of body tissue.", state: .learning),
+        ]),
+        DeckSpec(name: "Fresh Deck", colorHex: "#FFCC00", cards: [
             CardSpec(term: "Photon", definition: "A quantum of light.", state: .new),
-            CardSpec(term: "Quark", definition: "An elementary particle and fundamental constituent of matter.", state: .new),
+            CardSpec(term: "Quark", definition: "An elementary particle of matter.", state: .new),
             CardSpec(term: "Boson", definition: "A force-carrier particle.", state: .new),
+            CardSpec(term: "Lepton", definition: "An elementary particle such as the electron.", state: .new),
         ]),
-        DeckSpec(name: "Empty Deck", colorHex: "#3478F6", cards: []),
+        DeckSpec(name: "Empty Deck", colorHex: "#8E8E93", cards: []),
     ]
 }

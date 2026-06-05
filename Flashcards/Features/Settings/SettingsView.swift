@@ -347,7 +347,7 @@ struct SettingsView: View {
     private func runLoadSample() {
         let r = DeveloperTools.loadSampleLibrary(into: context)
         context.saveAndPersist()
-        devStatus = "Loaded \(r.decks) sample decks (\(r.cards) cards)."
+        devStatus = "Loaded \(r.decks) decks · \(r.cards) cards. Tip: also “Seed review history” for full Insights."
     }
 
     private func runStress() {
