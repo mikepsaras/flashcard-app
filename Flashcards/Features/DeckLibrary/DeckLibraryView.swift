@@ -91,10 +91,14 @@ struct DeckLibraryView: View {
         .onChange(of: AppActions.shared.newDeckTick) { _, _ in editorMode = .new }
         .dropDestination(for: URL.self) { urls, _ in importDroppedDecks(urls) }
         #if os(macOS)
-        // Leave the sidebar toggle at the system default position (inside the sidebar);
-        // a custom .navigation toggle lands *outside* the panel. "+ New Deck" goes at the
-        // bottom of the sidebar — the native spot for adding a sidebar item.
-        .safeAreaInset(edge: .bottom) {
+        // Delete / Backspace on a selected deck starts the delete confirmation.
+        .onDeleteCommand {
+            if case .deck(let id) = selection, let deck = decks.first(where: { $0.persistentModelID == id }) {
+                deckPendingDeletion = deck
+            }
+        }
+        // New-deck (+) and sort controls pinned to the TOP of the sidebar.
+        .safeAreaInset(edge: .top, spacing: 0) {
             HStack(spacing: 0) {
                 addMenu
                     .menuStyle(.borderlessButton)
@@ -109,6 +113,7 @@ struct DeckLibraryView: View {
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.vertical, 8)
             .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
         }
         #else
         .toolbar {
