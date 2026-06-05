@@ -1,11 +1,12 @@
 import SwiftUI
 import SwiftData
 
-/// Enter many cards at once — Front/Back rows styled like the rest of the editors (fieldBox fields on
-/// the grouped background). The **Add Row** split button adds the number of rows set in the little
-/// counter beside it; its menu reuses the previous row's Back or Front, so several cards that share a
-/// side (e.g. five backed "Germany") don't need it retyped. Pasting a multi-line list into a Front
-/// field splits it into rows (a tab or the first comma splits Front/Back).
+/// The unified card composer — adds one card or many. Opens with `startCount` cards (1 from "New
+/// Card", a few from "Add Multiple Cards…") and grows via "Add Card"; a single card shows no "Card N"
+/// header so it reads like a plain editor. Front is single-line (so pasting a list splits it into
+/// cards, and Return adds the next); Back is the rich multi-line field. The Add-Card split button's
+/// menu reuses the previous card's front/back for shared-side batches. (Editing one existing card
+/// stays in `CardEditorView`.)
 struct BulkAddView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -33,9 +34,9 @@ struct BulkAddView: View {
     @State private var sharedValue = ""
     @FocusState private var focused: Field?
 
-    init(deck: Deck, section: String = "") {
+    init(deck: Deck, section: String = "", startCount: Int = 3) {
         self.deck = deck
-        _rows = State(initialValue: [Row(), Row(), Row()])
+        _rows = State(initialValue: (0..<max(startCount, 1)).map { _ in Row() })
         _section = State(initialValue: section)
     }
 
@@ -60,7 +61,7 @@ struct BulkAddView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Theme.groupedBackground)
-            .navigationTitle("Add Cards")
+            .navigationTitle(rows.count == 1 ? "New Card" : "Add Cards")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -105,12 +106,13 @@ struct BulkAddView: View {
     @ViewBuilder private func cardRow(_ index: Int, _ row: Binding<Row>) -> some View {
         let id = row.wrappedValue.id
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Card \(index + 1)")
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if rows.count > 1 {
+            // A single card reads as a clean editor (no header); 2+ get numbered headers + remove.
+            if rows.count > 1 {
+                HStack {
+                    Text("Card \(index + 1)")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
                     Button { delete(id) } label: {
                         Image(systemName: "minus.circle.fill").font(.system(size: 16))
                     }
@@ -125,11 +127,7 @@ struct BulkAddView: View {
                     .onSubmit { addRowIfLast(id) }
                     .onChange(of: row.wrappedValue.front) { _, v in if v.contains("\n") { paste(v, into: id) } }
             }
-            bulkField("Back") {
-                TextField("", text: row.back, axis: .vertical)
-                    .foregroundStyle(.secondary)
-                    .focused($focused, equals: .back(id))
-            }
+            MultilineField(label: "Back", placeholder: "", text: row.back, minHeight: 64)
             if hasFormatting(row.wrappedValue.front) || hasFormatting(row.wrappedValue.back) {
                 bulkPreview(front: row.wrappedValue.front, back: row.wrappedValue.back)
             }
@@ -166,9 +164,9 @@ struct BulkAddView: View {
 
     /// A captioned field box for a bulk-add row (label above, the field inside the standard box).
     @ViewBuilder private func bulkField<Content: View>(_ label: String, @ViewBuilder _ field: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 7) {
             Text(label)
-                .font(.system(.caption, weight: .medium))
+                .font(.system(.subheadline, weight: .medium))
                 .foregroundStyle(.secondary)
             field()
                 .textFieldStyle(.plain)
@@ -185,7 +183,7 @@ struct BulkAddView: View {
                 Button { startShared(.back) } label: { Label("Same back…", systemImage: "rectangle.on.rectangle") }
                 Button { startShared(.front) } label: { Label("Same front…", systemImage: "rectangle.on.rectangle") }
             } label: {
-                Label("Add Row", systemImage: "plus")
+                Label("Add Card", systemImage: "plus")
             } primaryAction: {
                 addRows(count: addCount)
             }
@@ -207,9 +205,9 @@ struct BulkAddView: View {
                     if addCountText != String(newValue) { addCountText = String(newValue) }
                 }
             #if os(macOS)
-            Stepper("Rows to add", value: $addCount, in: 1...100).labelsHidden()
+            Stepper("Cards to add", value: $addCount, in: 1...100).labelsHidden()
             #endif
-            Text(addCount == 1 ? "row" : "rows").font(Typography.caption).foregroundStyle(.secondary)
+            Text(addCount == 1 ? "card" : "cards").font(Typography.caption).foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
         .padding(.top, 4)

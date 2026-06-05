@@ -47,6 +47,7 @@ struct DeckDetailView: View {
     @State private var renameSectionName = ""
     @State private var showingBulkAdd = false
     @State private var bulkAddSection = ""
+    @State private var bulkAddStartCount = 1
     // Card selection drives bulk actions. macOS: click selects, Return opens, Delete removes the
     // selection. iOS: a tap opens; multi-select + bulk delete happen in Edit mode. The list uses
     // the *native* selection (never a tap gesture) so it can't break the native onMove drag —
@@ -115,12 +116,12 @@ struct DeckDetailView: View {
         #if os(macOS)
         .background {
             // Window-scoped shortcuts (plain ⌘N stays the app-global New Deck):
-            //   ⌘⇧N  → New Card (single editor)
-            //   ⌥⌘⇧N → Add Multiple Cards (the multi-row grid)
+            //   ⌘⇧N  → New Card (composer with one card)
+            //   ⌥⌘⇧N → Add Multiple Cards (composer pre-grown to a few)
             ZStack {
-                Button("") { cardEditor = .new }
+                Button("") { openComposer(count: 1) }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
-                Button("") { bulkAddSection = ""; showingBulkAdd = true }
+                Button("") { openComposer(count: 3) }
                     .keyboardShortcut("n", modifiers: [.command, .shift, .option])
             }
             .opacity(0)
@@ -140,8 +141,8 @@ struct DeckDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button { cardEditor = .new } label: { Label("New Card", systemImage: "plus") }
-                    Button { bulkAddSection = ""; showingBulkAdd = true } label: { Label("Add Multiple Cards…", systemImage: "rectangle.stack.badge.plus") }
+                    Button { openComposer(count: 1) } label: { Label("New Card", systemImage: "plus") }
+                    Button { openComposer(count: 3) } label: { Label("Add Multiple Cards…", systemImage: "rectangle.stack.badge.plus") }
                     Button { startNewSection() } label: { Label("New Section", systemImage: "folder.badge.plus") }
                     Divider()
                     if showImportExport {
@@ -216,7 +217,7 @@ struct DeckDetailView: View {
             AIGenerationView(target: .existing(deck))
         }
         .sheet(isPresented: $showingBulkAdd) {
-            BulkAddView(deck: deck, section: bulkAddSection)
+            BulkAddView(deck: deck, section: bulkAddSection, startCount: bulkAddStartCount)
         }
         .fileExporter(
             isPresented: $showingExporter,
@@ -285,6 +286,13 @@ struct DeckDetailView: View {
             Button("Cancel", role: .cancel) {}
             Button("Rename") { if let old = sectionPendingRename { renameSection(old, to: renameSectionName) } }
         }
+    }
+
+    /// Opens the unified card composer (BulkAddView) seeded with `count` cards in `section`.
+    private func openComposer(section: String = "", count: Int) {
+        bulkAddSection = section
+        bulkAddStartCount = count
+        showingBulkAdd = true
     }
 
     private func resetProgress() {
@@ -409,8 +417,8 @@ struct DeckDetailView: View {
                             .font(Typography.callout)
                             .foregroundStyle(.secondary)
                         HStack(spacing: 12) {
-                            Button { cardEditor = .new } label: { Label("Add a Card", systemImage: "plus") }
-                            Button { bulkAddSection = ""; showingBulkAdd = true } label: { Label("Add Several", systemImage: "rectangle.stack.badge.plus") }
+                            Button { openComposer(count: 1) } label: { Label("Add a Card", systemImage: "plus") }
+                            Button { openComposer(count: 3) } label: { Label("Add Several", systemImage: "rectangle.stack.badge.plus") }
                         }
                         .buttonStyle(.bordered)
                         .font(Typography.callout)
@@ -536,7 +544,7 @@ struct DeckDetailView: View {
             Spacer(minLength: 4)
             if !name.isEmpty {
                 Menu {
-                    Button { bulkAddSection = name; showingBulkAdd = true } label: { Label("Add Cards…", systemImage: "plus") }
+                    Button { openComposer(section: name, count: 1) } label: { Label("Add Cards…", systemImage: "plus") }
                     Divider()
                     Button { startRenameSection(name) } label: { Label("Rename", systemImage: "pencil") }
                     Button { moveSection(name, by: -1) } label: { Label("Move Up", systemImage: "arrow.up") }
