@@ -896,4 +896,29 @@ import SwiftData
             #expect(deck.sectionOrder == ["C", "A", "B"])
         }
     }
+
+    @Test func absorbCarriesCardsAndSections() {
+        let container = DeckStore.makeContainer()
+        let context = container.mainContext
+        let target = Deck(name: "Target")
+        target.sectionOrder = ["Shared"]
+        context.insert(target)
+        context.insert(Card(term: "t1", definition: "", deck: target, section: "Shared", sortOrder: 0))
+
+        let source = Deck(name: "Source")
+        source.sectionOrder = ["Shared", "OnlyInSource"]
+        context.insert(source)
+        context.insert(Card(term: "s1", definition: "", deck: source, section: "Shared", sortOrder: 0))
+        context.insert(Card(term: "s2", definition: "", deck: source, section: "OnlyInSource", sortOrder: 0))
+        context.insert(Card(term: "s3", definition: "", deck: source, section: "", sortOrder: 0))   // unsectioned
+
+        withExtendedLifetime(container) {
+            target.absorb(source)
+            #expect(source.cardArray.isEmpty)                                  // all cards moved out
+            #expect(Set(target.cardArray.map(\.term)) == ["t1", "s1", "s2", "s3"])
+            #expect(target.sectionOrder == ["Shared", "OnlyInSource"])         // unique name appended; shared not duped
+            #expect(order(target, "Shared") == ["t1", "s1"])                   // target's own card stays first
+            #expect(order(target, "OnlyInSource") == ["s2"])                   // carried-over section intact
+        }
+    }
 }

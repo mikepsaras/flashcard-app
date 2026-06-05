@@ -128,6 +128,23 @@ extension Deck {
         sectionOrder.swapAt(index, destination)
     }
 
+    /// Absorbs all of `other`'s cards into this deck (used by "Merge Into…"), preserving `other`'s
+    /// section structure: any of its section names this deck lacks are appended to `sectionOrder`, and
+    /// each card keeps its section, landing after this deck's existing cards in that section. Pure
+    /// model mutation — the caller deletes the now-empty `other` and persists. Unit-tested.
+    func absorb(_ other: Deck) {
+        for name in other.sectionOrder where !sectionOrder.contains(name) { sectionOrder.append(name) }
+        var nextOrder: [String: Int] = [:]
+        for card in cardArray { nextOrder[card.section] = max(nextOrder[card.section] ?? 0, card.sortOrder + 1) }
+        for card in other.cardArray {   // value-type snapshot, so reassigning `deck` mid-loop is safe
+            let order = nextOrder[card.section, default: 0]
+            nextOrder[card.section] = order + 1
+            card.deck = self
+            card.sortOrder = order
+            card.modifiedAt = .now
+        }
+    }
+
     /// The deck's name for display, with a placeholder when it's blank. Centralizes the
     /// "Untitled Deck" fallback the UI would otherwise repeat at every call site.
     var displayName: String { name.isEmpty ? "Untitled Deck" : name }

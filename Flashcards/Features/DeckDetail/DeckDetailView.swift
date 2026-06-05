@@ -54,6 +54,11 @@ struct DeckDetailView: View {
     // FB7367473: a row with any tap gesture silently disables drag-reorder on macOS.
     @State private var selection = Set<UUID>()
     @State private var showingBulkDeleteConfirm = false
+    // Merge this deck into another (••• → Merge Into…), and move/cut the selected cards to a new or
+    // existing deck (the selection toolbar).
+    @State private var mergeTarget: Deck?
+    @State private var showingMoveToNewDeck = false
+    @State private var moveToNewDeckName = ""
     #if os(iOS)
     @Environment(\.editMode) private var editMode
     #endif
@@ -104,7 +109,96 @@ struct DeckDetailView: View {
         }
     }
 
-    private var content: some View {
+    // MARK: Toolbar (split into small pieces so the `content` modifier chain stays type-checkable)
+
+    @ToolbarContentBuilder
+    private var cardToolbar: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) { addMenu }
+        ToolbarItem(placement: .automatic) { moreMenu }
+        #if os(macOS)
+        // Bulk move / delete appear once cards are selected (click / ⌘-click / ⇧-click).
+        ToolbarItem(placement: .automatic) { if !selection.isEmpty { moveSelectionMenu } }
+        ToolbarItem(placement: .automatic) { if !selection.isEmpty { bulkDeleteButton } }
+        #else
+        // onMove needs edit mode on iOS (macOS reorders by direct row drag); Edit mode also drives
+        // the multi-select the bottom-bar actions operate on.
+        ToolbarItem(placement: .topBarLeading) { EditButton() }
+        ToolbarItem(placement: .bottomBar) {
+            if editMode?.wrappedValue.isEditing == true && !selection.isEmpty { moveSelectionMenu }
+        }
+        ToolbarItem(placement: .bottomBar) {
+            if editMode?.wrappedValue.isEditing == true && !selection.isEmpty { bulkDeleteButton }
+        }
+        #endif
+    }
+
+    private var addMenu: some View {
+        Menu {
+            Button { openComposer() } label: { Label("New Card", systemImage: "plus") }
+            Button { startNewSection() } label: { Label("New Section", systemImage: "folder.badge.plus") }
+            Divider()
+            if showImportExport {
+                Button { showingImporter = true } label: { Label("Import JSON or CSV…", systemImage: "square.and.arrow.down") }
+            }
+            Button { showingAI = true } label: { Label("Generate Cards with AI…", systemImage: "sparkles") }
+        } label: {
+            Label("Add Card", systemImage: "plus")
+        }
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            if let fileURL = DeckStore.shared.fileURL(for: deck) {
+                ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
+            }
+            if showImportExport {
+                Divider()
+                exportMenu
+            }
+            Divider()
+            Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
+            if !otherDecks.isEmpty {
+                Menu {
+                    ForEach(otherDecks) { target in
+                        Button(target.displayName) { mergeTarget = target }
+                    }
+                } label: { Label("Merge Into…", systemImage: "arrow.triangle.merge") }
+            }
+            Button(role: .destructive) { showingResetConfirm = true } label: {
+                Label("Reset Progress", systemImage: "arrow.counterclockwise")
+            }
+            .disabled(!deck.cardArray.contains { $0.hasBeenReviewed })
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+        }
+    }
+
+    private var exportMenu: some View {
+        Menu {
+            Button {
+                exportText = CSVCodec.export(cardsToExport)   // build once, on demand
+                showingExporter = true
+            } label: { Label("CSV", systemImage: "tablecells") }
+            Button {
+                exportText = CardListCodec.exportJSON(cardsToExport, name: deck.name)
+                showingJSONExporter = true
+            } label: { Label("JSON", systemImage: "curlybraces") }
+        } label: {
+            Label(selection.isEmpty ? "Export Cards" : "Export \(selection.count) Selected", systemImage: "square.and.arrow.up")
+        }
+        .disabled(cardsToExport.isEmpty)
+    }
+
+    private var bulkDeleteButton: some View {
+        Button(role: .destructive) { showingBulkDeleteConfirm = true } label: {
+            Label("Delete \(selection.count)", systemImage: "trash")
+        }
+    }
+
+    // `content` is split into four chained pieces below. A single long modifier chain (toolbar +
+    // 4 sheets + 2 exporters + importer + 8 alerts/dialogs) overflows the Swift type-checker
+    // ("unable to type-check in reasonable time"); each piece is a short, independently-checked chain.
+    private var coreContent: some View {
         VStack(spacing: 0) {
             header
             #if os(macOS)
@@ -134,74 +228,11 @@ struct DeckDetailView: View {
         // navigation screens, so card search is safe there.
         .searchable(text: $cardSearch, prompt: "Search cards")
         #endif
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button { openComposer() } label: { Label("New Card", systemImage: "plus") }
-                    Button { startNewSection() } label: { Label("New Section", systemImage: "folder.badge.plus") }
-                    Divider()
-                    if showImportExport {
-                        Button { showingImporter = true } label: { Label("Import JSON or CSV…", systemImage: "square.and.arrow.down") }
-                    }
-                    Button { showingAI = true } label: { Label("Generate Cards with AI…", systemImage: "sparkles") }
-                } label: {
-                    Label("Add Card", systemImage: "plus")
-                }
-            }
-            ToolbarItem(placement: .automatic) {
-                Menu {
-                    if let fileURL = DeckStore.shared.fileURL(for: deck) {
-                        ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
-                    }
-                    if showImportExport {
-                        Divider()
-                        Menu {
-                            Button {
-                                exportText = CSVCodec.export(cardsToExport)   // build once, on demand
-                                showingExporter = true
-                            } label: { Label("CSV", systemImage: "tablecells") }
-                            Button {
-                                exportText = CardListCodec.exportJSON(cardsToExport, name: deck.name)
-                                showingJSONExporter = true
-                            } label: { Label("JSON", systemImage: "curlybraces") }
-                        } label: {
-                            Label(selection.isEmpty ? "Export Cards" : "Export \(selection.count) Selected",
-                                  systemImage: "square.and.arrow.up")
-                        }
-                        .disabled(cardsToExport.isEmpty)
-                    }
-                    Divider()
-                    Button { showingDeckEditor = true } label: { Label("Edit Deck", systemImage: "slider.horizontal.3") }
-                    Button(role: .destructive) { showingResetConfirm = true } label: {
-                        Label("Reset Progress", systemImage: "arrow.counterclockwise")
-                    }
-                    .disabled(!deck.cardArray.contains { $0.hasBeenReviewed })
-                } label: {
-                    Label("More", systemImage: "ellipsis.circle")
-                }
-            }
-            #if os(macOS)
-            // Bulk delete appears once cards are selected (click / ⌘-click / ⇧-click).
-            ToolbarItem(placement: .automatic) {
-                if !selection.isEmpty {
-                    Button(role: .destructive) { showingBulkDeleteConfirm = true } label: {
-                        Label("Delete \(selection.count)", systemImage: "trash")
-                    }
-                }
-            }
-            #else
-            // onMove needs edit mode on iOS (macOS reorders by direct row drag); Edit mode also
-            // drives the multi-select that the bottom-bar Delete acts on.
-            ToolbarItem(placement: .topBarLeading) { EditButton() }
-            ToolbarItem(placement: .bottomBar) {
-                if editMode?.wrappedValue.isEditing == true && !selection.isEmpty {
-                    Button(role: .destructive) { showingBulkDeleteConfirm = true } label: {
-                        Label("Delete \(selection.count)", systemImage: "trash")
-                    }
-                }
-            }
-            #endif
-        }
+        .toolbar { cardToolbar }
+    }
+
+    private var withSheets: some View {
+        coreContent
         .sheet(item: $cardEditor) { mode in
             CardEditorView(deck: deck, mode: mode)
         }
@@ -233,6 +264,10 @@ struct DeckDetailView: View {
         ) { result in
             handleImport(result)
         }
+    }
+
+    private var withDialogs: some View {
+        withSheets
         .alert("Import", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -268,6 +303,28 @@ struct DeckDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("The selected card\(selection.count == 1 ? "" : "s") will be permanently deleted. This can’t be undone.")
+        }
+    }
+
+    private var content: some View {
+        withDialogs
+        .confirmationDialog(
+            mergeTarget.map { "Merge “\(deck.displayName)” into “\($0.displayName)”?" } ?? "",
+            isPresented: Binding(get: { mergeTarget != nil }, set: { if !$0 { mergeTarget = nil } }),
+            titleVisibility: .visible,
+            presenting: mergeTarget
+        ) { target in
+            Button("Merge", role: .destructive) { merge(into: target) }
+            Button("Cancel", role: .cancel) {}
+        } message: { target in
+            Text("All \(deck.cardCount) card\(deck.cardCount == 1 ? "" : "s") move into “\(target.displayName)”, and “\(deck.displayName)” is deleted. This can’t be undone.")
+        }
+        .alert("Move to New Deck", isPresented: $showingMoveToNewDeck) {
+            TextField("Deck name", text: $moveToNewDeckName)
+            Button("Cancel", role: .cancel) {}
+            Button("Move") { moveCards(selectedCards, toNewDeckNamed: moveToNewDeckName) }
+        } message: {
+            Text("Create a new deck from the \(selection.count) selected card\(selection.count == 1 ? "" : "s").")
         }
         .alert("New Section", isPresented: $showingNewSection) {
             TextField("Section name", text: $newSectionName)
@@ -665,6 +722,61 @@ struct DeckDetailView: View {
         card.sortOrder = target.nextSortOrder(inSection: "")
         card.modifiedAt = .now
         context.saveAndPersist(touching: deck, target)
+    }
+
+    // MARK: Bulk move / merge
+
+    /// The cards the current selection refers to, in display order.
+    private var selectedCards: [Card] { orderedCards.filter { selection.contains($0.id) } }
+
+    /// "Move N" menu for the current selection — into a new deck or any existing one. Shown in the
+    /// selection toolbar (macOS) / the edit-mode bottom bar (iOS).
+    private var moveSelectionMenu: some View {
+        Menu {
+            Button { moveToNewDeckName = ""; showingMoveToNewDeck = true } label: { Label("New Deck…", systemImage: "plus") }
+            if !otherDecks.isEmpty {
+                Divider()
+                ForEach(otherDecks) { target in
+                    Button(target.displayName) { moveCards(selectedCards, to: target) }
+                }
+            }
+        } label: {
+            Label("Move \(selection.count)", systemImage: "tray.and.arrow.up")
+        }
+    }
+
+    /// Moves `cards` into `target` (bulk "Move"), dropping their section — its names belong to this
+    /// deck — and clears the selection. The bulk mirror of the single-card `move(_:to:)`.
+    private func moveCards(_ cards: [Card], to target: Deck) {
+        guard !cards.isEmpty else { return }
+        var order = target.nextSortOrder(inSection: "")
+        for card in cards {
+            card.deck = target
+            card.section = ""
+            card.sortOrder = order
+            card.modifiedAt = .now
+            order += 1
+        }
+        selection.removeAll()
+        context.saveAndPersist(touching: deck, target)
+    }
+
+    /// "Cut into a new deck": create a deck (inheriting this one's color) from `cards`, then move them.
+    private func moveCards(_ cards: [Card], toNewDeckNamed rawName: String) {
+        guard !cards.isEmpty else { return }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let new = Deck(name: name.isEmpty ? "New Deck" : name, colorHex: deck.colorHex)
+        context.insert(new)
+        moveCards(cards, to: new)
+    }
+
+    /// Merges this deck into `target` (carrying section structure via `Deck.absorb`), then deletes the
+    /// now-empty deck. The view falls back to the placeholder once `deck` is gone (its modelContext-nil
+    /// guard, plus RootView clearing the dangling selection when the deck count drops).
+    private func merge(into target: Deck) {
+        target.absorb(deck)
+        context.delete(deck)
+        context.saveAndPersist(touching: target)
     }
 
     // MARK: Card sections
