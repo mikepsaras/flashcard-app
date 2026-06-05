@@ -94,6 +94,10 @@ final class StudySession {
         if trackLearning && !isPractice {
             let updated = SM2.schedule(current: card.schedulingState(direction), grade: grade, now: now)
             card.apply(updated, direction: direction, reviewedAt: now)
+            // Mark the deck modified so the (saveAndPersist-bypassing) study persist re-writes it:
+            // `DeckStore` skips encoding decks whose `modifiedAt` is unchanged, and apply() only bumps
+            // the *card's* modifiedAt.
+            card.deck?.modifiedAt = now
         }
 
         if grade.isCorrect { correctCount += 1 } else { wrongCount += 1 }

@@ -415,8 +415,10 @@ import SwiftData
         store.persist(container.mainContext, to: dir)
         #expect(try modificationDate(url) == past)
 
-        // A real change DOES rewrite the file.
+        // A real change DOES rewrite the file. Every in-app card edit bumps the deck's modifiedAt
+        // (via saveAndPersist); persist uses that to decide which decks to re-encode.
         deck.cardArray.first?.term = "changed"
+        deck.modifiedAt = .now
         try container.mainContext.save()
         try FileManager.default.setAttributes([.modificationDate: past], ofItemAtPath: url.path)
         store.persist(container.mainContext, to: dir)

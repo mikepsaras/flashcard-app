@@ -80,6 +80,19 @@ final class DeckStore {
     /// (a failed write means a disk problem), so left as-is rather than adding a recovery path.
     private var unsavedDeckIDs: Set<UUID> = []
 
+    /// Each deck's `modifiedAt` as of its last successful persist. `persist` skips re-encoding (and
+    /// even touching the cards of) any deck whose `modifiedAt` is unchanged — JSON-encoding every
+    /// deck on every change was the dominant cost of saving a large library (measured ~310ms for
+    /// 2,000 cards). Updated on load/reconcile/successful-write so it mirrors disk; cleared on folder
+    /// switches.
+    ///
+    /// SAFETY INVARIANT: every persist-worthy change MUST bump the deck's `modifiedAt`, or the skip
+    /// would silently drop it. In-app edits route through `ModelContext.saveAndPersist(touching:)`
+    /// (which bumps it); **study grading** persists directly (bypassing that), so it bumps the graded
+    /// card's `deck.modifiedAt` itself (`StudySession.grade`). `DeckStorePersistTests` asserts a write
+    /// actually lands after each kind of mutation, including study.
+    private var persistedModifiedAt: [UUID: Date] = [:]
+
     // MARK: Container (no database on disk)
 
     static func makeContainer() -> ModelContainer {
@@ -115,6 +128,7 @@ final class DeckStore {
     /// written to `newURL`.
     func migrate(from oldURL: URL, to newURL: URL, context: ModelContext) {
         guard oldURL.standardizedFileURL != newURL.standardizedFileURL else { return }
+        persistedModifiedAt.removeAll()   // old-folder signatures don't apply to the new folder
 
         // Remember the originals so we can remove them after a successful move.
         var oldFileByID: [UUID: URL] = [:]
@@ -169,6 +183,7 @@ final class DeckStore {
             urlByDeckID[deck.id] = nil
         }
         unsavedDeckIDs.removeAll()
+        persistedModifiedAt.removeAll()
         try? context.save()
         Self.migrateLegacyExtension(in: newURL)
         loadAll(into: context, from: newURL)
@@ -227,7 +242,8 @@ final class DeckStore {
             else { continue }
             seen.insert(dto.id)
             urlByDeckID[dto.id] = url
-            DeckCodec.makeDeck(from: dto, in: context)
+            let deck = DeckCodec.makeDeck(from: dto, in: context)
+            persistedModifiedAt[dto.id] = deck.modifiedAt   // matches disk → first persist can skip it
             loaded += 1
         }
         return loaded
@@ -267,6 +283,7 @@ final class DeckStore {
         for deck in existing where diskDTOs[deck.id] == nil && !unsavedDeckIDs.contains(deck.id) {
             context.delete(deck)
             urlByDeckID[deck.id] = nil
+            persistedModifiedAt[deck.id] = nil
             changed = true
         }
 
@@ -284,8 +301,12 @@ final class DeckStore {
                     DeckCodec.update(deck, from: dto, in: context)
                     changed = true
                 }
+                // The in-memory deck now matches the file — record its modifiedAt so the next persist
+                // doesn't needlessly re-encode/rewrite what we just merged in from (or matched on) disk.
+                persistedModifiedAt[id] = deck.modifiedAt
             } else {
-                DeckCodec.makeDeck(from: dto, in: context)
+                let deck = DeckCodec.makeDeck(from: dto, in: context)
+                persistedModifiedAt[id] = deck.modifiedAt
                 changed = true
             }
         }
@@ -310,6 +331,18 @@ final class DeckStore {
         for deck in decks {
             let filename = Self.uniqueFilename(for: deck, used: &usedNames)
             let fileURL = directory.appendingPathComponent(filename)
+            // Skip re-encoding a deck unchanged since its last successful write AND still mapped to the
+            // same file — the modifiedAt check avoids the O(cards) JSON encode (and even touching the
+            // deck's cards) for every untouched deck, the dominant cost of saving a large library on
+            // each edit. The URL check forces a rewrite when a deck's canonical filename shifts without
+            // its content changing (e.g. a sibling rename frees up the shorter name), so the rename
+            // still lands + the old file prunes.
+            if persistedModifiedAt[deck.id] == deck.modifiedAt,
+               urlByDeckID[deck.id] == fileURL,
+               FileManager.default.fileExists(atPath: fileURL.path) {
+                written.insert(filename.lowercased())
+                continue
+            }
             guard let data = try? DeckCodec.encode(deck) else {
                 failedIDs.insert(deck.id)
                 failedNames.append(deck.displayName)
@@ -322,6 +355,7 @@ final class DeckStore {
             if let existing = try? Data(contentsOf: fileURL), existing == data {
                 written.insert(filename.lowercased())
                 urlByDeckID[deck.id] = fileURL
+                persistedModifiedAt[deck.id] = deck.modifiedAt
                 continue
             }
             // Only count a file as "written" after the atomic write succeeds — otherwise the
@@ -329,9 +363,11 @@ final class DeckStore {
             if (try? data.write(to: fileURL, options: .atomic)) != nil {
                 written.insert(filename.lowercased())
                 urlByDeckID[deck.id] = fileURL
+                persistedModifiedAt[deck.id] = deck.modifiedAt
             } else {
                 failedIDs.insert(deck.id)
                 failedNames.append(deck.displayName)
+                persistedModifiedAt[deck.id] = nil   // write failed → force a fresh encode next time
             }
         }
         // Only prune files with the current extension; legacy `.deck` files are converted by
@@ -377,6 +413,7 @@ final class DeckStore {
         }
         urlByDeckID.removeAll()
         unsavedDeckIDs.removeAll()
+        persistedModifiedAt.removeAll()
     }
 
     // MARK: Import / share
