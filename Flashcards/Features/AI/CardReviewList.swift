@@ -9,7 +9,10 @@ struct CardReviewList: View {
     private var selectedCount: Int { cards.filter { included.contains($0.id) }.count }
 
     var body: some View {
-        List {
+        // Recomputed each render so warnings update live as the user edits a card. Cheap for the
+        // small review batch (≤100 cards); computed once here, not per row.
+        let warnings = CardQualityLinter.warnings(for: cards)
+        return List {
             Section {
                 ForEach($cards) { $card in
                     HStack(alignment: .top, spacing: 12) {
@@ -26,6 +29,14 @@ struct CardReviewList: View {
                             TextField("Definition", text: $card.definition, axis: .vertical)
                                 .font(Typography.callout)
                                 .foregroundStyle(.secondary)
+                            if let cardWarnings = warnings[card.id] {
+                                ForEach(cardWarnings, id: \.self) { warning in
+                                    Label(warning.message, systemImage: "exclamationmark.triangle.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.orange)
+                                        .accessibilityLabel("Suggestion: \(warning.message)")
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 2)

@@ -198,4 +198,44 @@ import Foundation
         let generated = [GeneratedCard(term: "A", definition: "1"), GeneratedCard(term: "B", definition: "2")]
         #expect(CardGenerator.removingDuplicates(generated, of: [GeneratedCard(term: "C", definition: "3")]).count == 2)
     }
+
+    // MARK: Card quality linter (S0.4)
+
+    @Test func linterFlagsCircularEnumerationAndShortCards() {
+        let cards = [
+            GeneratedCard(term: "What is the powerhouse of the cell?", definition: "The mitochondrion"),
+            GeneratedCard(term: "Photosynthesis", definition: "Photosynthesis is the process plants use."),
+            GeneratedCard(term: "List the noble gases", definition: "- Helium\n- Neon\n- Argon\n- Krypton"),
+            GeneratedCard(term: "Define entropy", definition: ""),
+        ]
+        let w = CardQualityLinter.warnings(for: cards)
+        #expect(w[cards[0].id] == nil)                                  // a clean atomic card
+        #expect(w[cards[1].id]?.contains(.circular) == true)
+        #expect(w[cards[2].id]?.contains(.enumeration) == true)
+        #expect(w[cards[3].id]?.contains(.shortAnswer) == true)
+    }
+
+    @Test func linterFlagsNearDuplicateTermsAcrossPunctuation() {
+        let cards = [
+            GeneratedCard(term: "What is HTTP?", definition: "A protocol"),
+            GeneratedCard(term: "what is http", definition: "Hypertext transfer protocol"),
+        ]
+        let w = CardQualityLinter.warnings(for: cards)
+        #expect(w[cards[0].id]?.contains(.duplicate) == true)
+        #expect(w[cards[1].id]?.contains(.duplicate) == true)
+    }
+
+    @Test func linterPassesCleanAtomicCards() {
+        let cards = [
+            GeneratedCard(term: "Capital of France?", definition: "Paris"),
+            GeneratedCard(term: "Capital of Japan?", definition: "Tokyo"),
+        ]
+        #expect(CardQualityLinter.warnings(for: cards).isEmpty)
+    }
+
+    @Test func linterDoesNotFlagAcronymInItsOwnExpansion() {
+        // "HTML — HyperText Markup Language" is a good card, not circular.
+        let cards = [GeneratedCard(term: "HTML", definition: "HyperText Markup Language (HTML)")]
+        #expect(CardQualityLinter.warnings(for: cards)[cards[0].id]?.contains(.circular) != true)
+    }
 }

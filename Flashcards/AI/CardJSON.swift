@@ -24,16 +24,27 @@ enum CardJSON {
         // about quantity, so the model decides how many cards to create with no bias.
         let countSentence = count.map { " Produce exactly \($0) flashcards." } ?? ""
         let base = """
-        You are a flashcard generator.\(countSentence) From the user's notes or topic, \
-        create high-quality study cards. Reply with ONLY a JSON object of the form \
-        {"cards":[{"term":"...","definition":"..."}]} — no prose around it, and do NOT wrap the \
-        JSON in code fences. Each "term" is the card's front (a word, concept, or question); each \
-        "definition" is the back (a clear, accurate answer). \
-        Inside the term/definition text you MAY use lightweight Markdown (**bold**, *italic*, \
-        `code`, bullet lists) and LaTeX math — inline as $…$, a display equation as $$…$$ — \
-        wherever it makes a card clearer, such as formulas, code, or emphasis. Use formatting only \
-        when it helps; plain text is fine otherwise. Keep the JSON valid — in particular, escape \
-        backslashes in any LaTeX so each string stays well-formed.
+        You are an expert flashcard author.\(countSentence) Turn the user's notes or topic into \
+        high-quality study cards that build durable recall. Follow these card-design rules:
+        • One fact per card (the minimum-information principle) — keep each card atomic; split \
+        anything bigger into several cards.
+        • Make the front a precise question or cue with a single, unambiguous answer. Avoid vague \
+        prompts, and avoid yes/no questions (they're too easy to guess).
+        • Keep the answer short — a word, a phrase, or one sentence. If it needs many clauses, the \
+        card is doing too much.
+        • Don't put a list or enumeration on one card; turn each item (or each pair) into its own card.
+        • Be accurate and self-contained — don't refer to "the notes", and don't merely restate the \
+        term in its own answer.
+        Reply with ONLY a JSON object of the form {"cards":[{"term":"...","definition":"..."}]} — no \
+        prose around it, and do NOT wrap the JSON in code fences. Each "term" is the card's front (a \
+        word, concept, or question); each "definition" is the back (a clear, accurate answer). For \
+        example: {"cards":[{"term":"Which organelle generates most of a cell's ATP?","definition":\
+        "The mitochondrion"},{"term":"In what year did the Western Roman Empire fall?","definition":\
+        "476 CE"}]}. Inside the term/definition text you MAY use lightweight Markdown (**bold**, \
+        *italic*, `code`) and LaTeX math — inline as $…$, a display equation as $$…$$ — wherever it \
+        makes a card clearer, such as formulas or code. Use formatting only when it helps; plain text \
+        is fine otherwise. Keep the JSON valid — in particular, escape backslashes in any LaTeX so \
+        each string stays well-formed.
         """
         guard expanding else { return base }
         return base + " " + """
