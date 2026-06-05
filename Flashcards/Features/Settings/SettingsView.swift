@@ -57,11 +57,11 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showingStressSheet) { stressSheet }
-        .confirmationDialog("Seed a year of review history?", isPresented: $showingSeedHistory, titleVisibility: .visible) {
+        .confirmationDialog("Seed review history?", isPresented: $showingSeedHistory, titleVisibility: .visible) {
             Button("Replace Statistics", role: .destructive) { runSeedHistory() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Overwrites your current streak, accuracy, and retention history with ~1 year of synthetic activity. Your decks are kept.")
+            Text("Overwrites your current streak, accuracy, and retention history with ~3 years of synthetic activity (so the heatmap's year picker has several years to browse). Your decks are kept.")
         }
         .confirmationDialog("Remove all test data?", isPresented: $showingRemoveTestData, titleVisibility: .visible) {
             Button("Remove Test Data", role: .destructive) { runRemoveTestData() }
@@ -359,7 +359,7 @@ struct SettingsView: View {
 
     private func runSeedHistory() {
         DeveloperTools.seedReviewHistory()
-        devStatus = "Seeded ~1 year of review history."
+        devStatus = "Seeded ~3 years of review history."
     }
 
     private func runRemoveTestData() {

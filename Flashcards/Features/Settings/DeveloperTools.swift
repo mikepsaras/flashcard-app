@@ -68,8 +68,9 @@ enum DeveloperTools {
     // MARK: Review history (heatmap / streak / accuracy / retention)
 
     /// Writes `days` days of synthetic activity into the StudyStats logs (with realistic gaps),
-    /// lighting up the heatmap, streak, accuracy, and both retention metrics. Replaces existing stats.
-    static func seedReviewHistory(days: Int = 365, now: Date = .now, defaults: UserDefaults = .standard) {
+    /// lighting up the heatmap, streak, accuracy, and both retention metrics. Defaults to ~3 years so
+    /// the Insights heatmap's year picker has several calendar years to browse. Replaces existing stats.
+    static func seedReviewHistory(days: Int = 1095, now: Date = .now, defaults: UserDefaults = .standard) {
         let logs = historyLogs(days: days, now: now)
         StudyStats.overwriteLogs(reviews: logs.reviews, correct: logs.correct,
                                  mature: logs.mature, matureCorrect: logs.matureCorrect, defaults: defaults)

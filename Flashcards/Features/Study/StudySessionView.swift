@@ -151,6 +151,12 @@ struct StudySessionView: View {
 
     private func studyContent(compact: Bool) -> some View {
         VStack(spacing: Theme.Spacing.m) {
+            // Dashed progress at the top, right under the title bar — one capsule per card, tinted by
+            // the grade it got. (The session count is in the title subtitle; recall lives on the deck page.)
+            ProgressDashBar(colors: session.gradeLog.map(\.studyColor), total: session.total)
+                .padding(.horizontal, Theme.Spacing.m)
+                .padding(.top, Theme.Spacing.xs)
+
             if session.isPractice { practiceBanner }
 
             if let item = session.current {
@@ -170,11 +176,6 @@ struct StudySessionView: View {
                 .padding(.horizontal, compact ? Theme.Spacing.m : Theme.Spacing.xl)
                 .padding(.vertical, Theme.Spacing.s)
             }
-
-            // The per-card accuracy dash bar — the progress indicator that stays in study mode (the
-            // session count moved up to the title subtitle; predicted recall lives on the deck page).
-            ProgressDashBar(colors: session.gradeLog.map(\.studyColor), total: session.total)
-                .padding(.horizontal, Theme.Spacing.m)
 
             StudyControlsBar(
                 canUndo: session.canUndo,
