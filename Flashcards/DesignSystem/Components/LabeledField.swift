@@ -87,14 +87,15 @@ struct MultilineField: View {
                 .padding(.vertical, 6)
                 .fieldBox()
                 .overlay(alignment: .topLeading) {
-                    // Native-style placeholder: gone as soon as you focus the field or type. Its inset
-                    // matches where the editor actually draws text so it sits exactly on the cursor.
+                    // Native-style placeholder: gone as soon as you focus the field or type. It sits at
+                    // (13, 14) — 8pt h-padding + 5pt line-fragment = 13; 6pt v-padding + 8pt text inset
+                    // = 14 — and the editor's text is inset to the SAME spot, so the two coincide.
                     if text.isEmpty && !isFocused && !placeholder.isEmpty {
                         Text(placeholder)
                             .font(Typography.body)
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, placeholderInset.x)
-                            .padding(.top, placeholderInset.y)
+                            .padding(.horizontal, 13)
+                            .padding(.top, 14)
                             .allowsHitTesting(false)
                     }
                 }
@@ -102,27 +103,14 @@ struct MultilineField: View {
         .onAppear { if autofocus { isFocused = true } }
         .onChange(of: refocus) { _, _ in isFocused = true }
     }
-
-    /// Inset of the placeholder, matched to where the TextEditor actually draws text so the two
-    /// coincide. x = the editor's 8pt padding + the text container's 5pt line-fragment padding.
-    /// y differs by platform: macOS zeroes the NSTextView text-container inset (see
-    /// `TextEditorConfigurator`), so text sits at the 6pt padding; iOS's UITextView adds its own
-    /// 8pt top inset on top of that 6pt.
-    private var placeholderInset: (x: CGFloat, y: CGFloat) {
-        #if os(macOS)
-        (13, 6)
-        #else
-        (13, 14)
-        #endif
-    }
 }
 
 #if os(macOS)
 /// Tunes the macOS `TextEditor`'s backing NSTextView / scroll view, which SwiftUI doesn't expose:
 /// (1) a native **overlay** scroller that appears only while scrolling and fades out (instead of the
 /// persistent legacy scrollbar a mouse user gets by default; `.scrollIndicators(.hidden)` has no
-/// effect on TextEditor), and (2) a **zeroed text-container inset** so text starts at the editor's
-/// own top padding — letting the placeholder overlay line up exactly with the cursor / typed text.
+/// effect on TextEditor), and (2) an **8pt top text-container inset** (matching iOS's UITextView
+/// default) so the cursor / typed text rests where the placeholder sits, not jammed against the top.
 /// Drop in as a `.background` of the editor; it finds the editor's own scroll view (guarding on an
 /// NSTextView document so it can't grab an outer ScrollView).
 struct TextEditorConfigurator: NSViewRepresentable {
@@ -143,11 +131,11 @@ struct TextEditorConfigurator: NSViewRepresentable {
             scroll.hasVerticalScroller = true
             scroll.verticalScroller?.isHidden = false
             scroll.hasHorizontalScroller = false
-            // Zero the text-container inset so text starts at the editor's own 6pt top padding (the
-            // default macOS inset pushed it down, leaving the placeholder ~8pt too low). 5pt
-            // line-fragment padding keeps the horizontal gap the placeholder's 13pt is matched to.
+            // Give the text an 8pt top inset (what iOS's UITextView has by default) so the cursor /
+            // typed text rests at the placeholder's resting spot (6pt v-padding + 8 = 14) instead of
+            // jammed against the top. 5pt line-fragment padding sets the 13pt the placeholder matches.
             if let textView = scroll.documentView as? NSTextView {
-                textView.textContainerInset = NSSize(width: 0, height: 0)
+                textView.textContainerInset = NSSize(width: 0, height: 8)
                 textView.textContainer?.lineFragmentPadding = 5
             }
         }
