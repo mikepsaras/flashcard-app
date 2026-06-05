@@ -23,19 +23,40 @@ enum DeckSort: String, CaseIterable, Identifiable {
 struct DeckLibraryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
+    // macOS multi-selects (Set) so several decks can be deleted at once; iOS stays single-selection.
+    #if os(macOS)
+    @Binding var selection: Set<SidebarItem>
+    #else
     @Binding var selection: SidebarItem?
+    #endif
 
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
     @State private var showingDeckImporter = false
     @State private var showingCardsImporter = false
     @State private var search = ""
-    @State private var deckPendingDeletion: Deck?
+    @State private var decksPendingDeletion: [Deck] = []
     @AppStorage(DefaultsKey.deckSort) private var deckSortRaw = DeckSort.recent.rawValue
     @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
 
     private var deckSort: DeckSort { DeckSort(rawValue: deckSortRaw) ?? .recent }
     private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }
+
+    /// Navigate to a single sidebar item — bridges the macOS Set vs iOS optional selection binding.
+    private func select(_ item: SidebarItem) {
+        #if os(macOS)
+        selection = [item]
+        #else
+        selection = item
+        #endif
+    }
+
+    #if os(macOS)
+    /// The decks currently multi-selected in the sidebar (⌘/⇧-click).
+    private var selectedDecks: [Deck] {
+        decks.filter { selection.contains(.deck($0.persistentModelID)) }
+    }
+    #endif
 
     private var filteredDecks: [Deck] {
         let sorted: [Deck]
@@ -66,7 +87,7 @@ struct DeckLibraryView: View {
                         deckRow(deck)
                     }
                     .onDelete { offsets in
-                        if let index = offsets.first { deckPendingDeletion = group.decks[index] }
+                        if let index = offsets.first { decksPendingDeletion = [group.decks[index]] }
                     }
 
                     if group.section == nil && decks.isEmpty {
@@ -91,21 +112,28 @@ struct DeckLibraryView: View {
         .onChange(of: AppActions.shared.newDeckTick) { _, _ in editorMode = .new }
         .dropDestination(for: URL.self) { urls, _ in importDroppedDecks(urls) }
         #if os(macOS)
-        // Delete / Backspace on a selected deck starts the delete confirmation.
+        // Delete / Backspace on the selected deck(s) starts the delete confirmation.
         .onDeleteCommand {
-            if case .deck(let id) = selection, let deck = decks.first(where: { $0.persistentModelID == id }) {
-                deckPendingDeletion = deck
-            }
+            if !selectedDecks.isEmpty { decksPendingDeletion = selectedDecks }
         }
         // Icon-only + (new deck) and sort controls at the TOP of the sidebar, like the iPhone
         // toolbar (sort leading, + trailing).
         .safeAreaInset(edge: .top, spacing: 8) {
-            HStack {
+            HStack(spacing: Theme.Spacing.s) {
                 sortMenu
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .labelStyle(.iconOnly)
                 Spacer()
+                // Appears once ⌘/⇧-click selects more than one deck.
+                if selectedDecks.count > 1 {
+                    Button(role: .destructive) { decksPendingDeletion = selectedDecks } label: {
+                        Label("Delete \(selectedDecks.count)", systemImage: "trash")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete the \(selectedDecks.count) selected decks")
+                }
                 addMenu
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
@@ -135,20 +163,22 @@ struct DeckLibraryView: View {
             allowsMultipleSelection: false
         ) { result in importCardsAsDeck(result) }
         .confirmationDialog(
-            "Delete this deck?",
+            decksPendingDeletion.count == 1
+                ? "Delete “\(decksPendingDeletion[0].displayName)”?"
+                : "Delete \(decksPendingDeletion.count) decks?",
             isPresented: Binding(
-                get: { deckPendingDeletion != nil },
-                set: { if !$0 { deckPendingDeletion = nil } }
+                get: { !decksPendingDeletion.isEmpty },
+                set: { if !$0 { decksPendingDeletion = [] } }
             ),
-            titleVisibility: .visible,
-            presenting: deckPendingDeletion
-        ) { deck in
-            Button("Delete “\(deck.displayName)”", role: .destructive) {
-                delete(deck)
+            titleVisibility: .visible
+        ) {
+            Button(decksPendingDeletion.count == 1 ? "Delete" : "Delete \(decksPendingDeletion.count)", role: .destructive) {
+                deleteSelected()
             }
             Button("Cancel", role: .cancel) {}
-        } message: { deck in
-            Text("\(deck.cardCount) card\(deck.cardCount == 1 ? "" : "s") will be permanently deleted. This can’t be undone.")
+        } message: {
+            let total = decksPendingDeletion.reduce(0) { $0 + $1.cardCount }
+            Text("\(total) card\(total == 1 ? "" : "s") will be permanently deleted. This can’t be undone.")
         }
         #if os(iOS)
         .toolbar {
@@ -193,9 +223,16 @@ struct DeckLibraryView: View {
         }
     }
 
-    private func delete(_ deck: Deck) {
-        if selection == .deck(deck.persistentModelID) { selection = .today }
-        context.delete(deck)
+    private func deleteSelected() {
+        for deck in decksPendingDeletion {
+            #if os(macOS)
+            selection.remove(.deck(deck.persistentModelID))
+            #else
+            if selection == .deck(deck.persistentModelID) { selection = nil }
+            #endif
+            context.delete(deck)
+        }
+        decksPendingDeletion = []
         context.saveAndPersist()
     }
 
@@ -236,7 +273,17 @@ struct DeckLibraryView: View {
                 #if os(macOS)
                 Button { revealInFinder(deck) } label: { Label("Reveal in Finder", systemImage: "folder") }
                 #endif
-                Button(role: .destructive) { deckPendingDeletion = deck } label: { Label("Delete", systemImage: "trash") }
+                Button(role: .destructive) {
+                    #if os(macOS)
+                    if selection.contains(.deck(deck.persistentModelID)), selectedDecks.count > 1 {
+                        decksPendingDeletion = selectedDecks
+                    } else {
+                        decksPendingDeletion = [deck]
+                    }
+                    #else
+                    decksPendingDeletion = [deck]
+                    #endif
+                } label: { Label("Delete", systemImage: "trash") }
             }
     }
 
@@ -247,7 +294,7 @@ struct DeckLibraryView: View {
             if let deck = DeckStore.importDeck(from: url, into: context) { imported = deck }
         }
         context.saveAndPersist()
-        if let imported { selection = .deck(imported.persistentModelID) }
+        if let imported { select(.deck(imported.persistentModelID)) }
     }
 
     @discardableResult
@@ -259,7 +306,7 @@ struct DeckLibraryView: View {
             if let deck = DeckStore.importDeck(from: url, into: context) { imported = deck }
         }
         context.saveAndPersist()
-        if let imported { selection = .deck(imported.persistentModelID) }
+        if let imported { select(.deck(imported.persistentModelID)) }
         return imported != nil
     }
 
@@ -281,7 +328,7 @@ struct DeckLibraryView: View {
                                 section: card.section ?? "", sortOrder: index))
         }
         context.saveAndPersist(touching: deck)
-        selection = .deck(deck.persistentModelID)
+        select(.deck(deck.persistentModelID))
     }
 
     private func duplicate(_ deck: Deck) {
@@ -299,7 +346,7 @@ struct DeckLibraryView: View {
             context.insert(Card(term: card.term, definition: card.definition, deck: copy))
         }
         context.saveAndPersist()
-        selection = .deck(copy.persistentModelID)
+        select(.deck(copy.persistentModelID))
     }
 
     #if os(macOS)

@@ -19,15 +19,26 @@ struct RootView: View {
     @State private var studyPlan: StudyPlan?
     @State private var watcher = DeckFolderWatcher()
 
-    // Auto-select Today on macOS; start at the list on iPhone.
+    // Auto-select Today on macOS; start at the list on iPhone. macOS uses a Set so the sidebar can
+    // multi-select decks for deletion; iOS stays single-selection (taps drive navigation).
     #if os(macOS)
-    @State private var selection: SidebarItem? = .today
+    @State private var selection: Set<SidebarItem> = [.today]
     #else
     @State private var selection: SidebarItem?
     #endif
 
+    /// The single selected sidebar item — what the detail pane shows. On macOS it's the lone
+    /// selection (nil when zero or several decks are selected).
+    private var selectedItem: SidebarItem? {
+        #if os(macOS)
+        selection.count == 1 ? selection.first : nil
+        #else
+        selection
+        #endif
+    }
+
     private var selectedDeck: Deck? {
-        if case .deck(let id) = selection {
+        if case .deck(let id) = selectedItem {
             return decks.first { $0.persistentModelID == id }
         }
         return nil
@@ -43,11 +54,18 @@ struct RootView: View {
                 watcher.start { DeckStore.shared.reconcile(into: context) }
             }
             .onChange(of: decks.count) { _, _ in
-                // If the selected deck vanished (Delete All Decks, or an external file removal),
-                // drop the now-dangling selection so the detail pane falls back to the placeholder.
+                // Drop any selected deck that vanished (delete / Delete All / external removal) so the
+                // detail pane falls back to the placeholder.
+                #if os(macOS)
+                selection = selection.filter { item in
+                    if case .deck(let id) = item { return decks.contains { $0.persistentModelID == id } }
+                    return true
+                }
+                #else
                 if case .deck(let id) = selection, !decks.contains(where: { $0.persistentModelID == id }) {
                     selection = nil
                 }
+                #endif
             }
             .onChange(of: studyPlan != nil) { _, studying in
                 watcher.isPaused = studying
@@ -127,7 +145,24 @@ struct RootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch selection {
+        #if os(macOS)
+        if selection.count > 1 {
+            ContentUnavailableView(
+                "\(selection.count) Selected",
+                systemImage: "rectangle.stack",
+                description: Text("Press Delete to remove the selected decks, or click one to view it.")
+            )
+        } else {
+            detailForSelectedItem
+        }
+        #else
+        detailForSelectedItem
+        #endif
+    }
+
+    @ViewBuilder
+    private var detailForSelectedItem: some View {
+        switch selectedItem {
         case .today:
             TodayDetailView { studyPlan = $0 }
         case .insights:
