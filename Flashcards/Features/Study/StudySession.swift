@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// Drives a single study run: a fixed set of review items (cards in a direction), a
-/// current position, flip state, running ✓/✕ tallies, and an exact undo stack. SM-2
-/// grades are applied to each item's direction only when `trackLearning` is on.
+/// Drives a single study run: a queue of review items (cards in a direction), a current
+/// position, flip state, running ✓/✕ tallies, and an exact undo stack. SM-2 grades are
+/// applied to each item's direction only when `trackLearning` is on. A miss in a real
+/// (tracked, non-practice) run re-inserts the card later in the same queue for one more
+/// look — a lightweight learning step — so the queue can grow during the run.
 @Observable
 @MainActor
 final class StudySession {
@@ -30,8 +32,24 @@ final class StudySession {
         let previousIndex: Int
         let previousCorrect: Int
         let previousWrong: Int
+        /// The item's requeue count before this grade, restored on undo.
+        let previousRequeueCount: Int
+        /// Index where a copy was re-inserted for another look this session, or nil if the grade
+        /// didn't requeue. Removed on undo (LIFO keeps this index valid).
+        let requeuedAt: Int?
     }
     private var history: [Move] = []
+
+    /// How many cards ahead a missed card is re-inserted for another look this session — a
+    /// lightweight learning step, so a miss isn't gone until tomorrow but doesn't reappear
+    /// instantly either.
+    private static let requeueSpacing = 3
+    /// A missed card is re-shown at most this many times per session, so chronically failing one
+    /// card can't grow the run without bound.
+    private static let maxRequeuesPerItem = 1
+    /// Re-show count per item id this session, enforcing `maxRequeuesPerItem` and kept honest
+    /// across undo.
+    private var requeueCounts: [String: Int] = [:]
 
     init(items: [ReviewItem], trackLearning: Bool, now: Date = .now) {
         self.items = items
@@ -80,6 +98,13 @@ final class StudySession {
         let card = item.card
         let direction = item.direction
 
+        // A miss in a real (tracked, non-practice) run earns one more look later this session — a
+        // minimal learning step so the card isn't gone until tomorrow. Bounded per item so a
+        // chronic miss can't balloon the run. Computed against the pre-insert queue/index.
+        let willRequeue = trackLearning && !isPractice && !grade.isCorrect
+            && (requeueCounts[item.id] ?? 0) < Self.maxRequeuesPerItem
+        let requeuedAt = willRequeue ? min(index + 1 + Self.requeueSpacing, items.count) : nil
+
         history.append(Move(
             item: item,
             wasShowingDefinition: isShowingDefinition,
@@ -88,7 +113,9 @@ final class StudySession {
             previousModifiedAt: card.modifiedAt,
             previousIndex: index,
             previousCorrect: correctCount,
-            previousWrong: wrongCount
+            previousWrong: wrongCount,
+            previousRequeueCount: requeueCounts[item.id] ?? 0,
+            requeuedAt: requeuedAt
         ))
 
         if trackLearning && !isPractice {
@@ -102,6 +129,11 @@ final class StudySession {
 
         if grade.isCorrect { correctCount += 1 } else { wrongCount += 1 }
         gradeLog.append(grade)
+
+        if let requeuedAt {
+            items.insert(item, at: requeuedAt)
+            requeueCounts[item.id, default: 0] += 1
+        }
         advance()
     }
 
@@ -109,6 +141,14 @@ final class StudySession {
     func undo() -> Grade? {
         guard let move = history.popLast() else { return nil }
         let undoneGrade = gradeLog.popLast()
+
+        // Undo any learning-step requeue this grade added. Undo is strictly LIFO, so every later
+        // move has already been undone and `items` is back to the exact state right after this
+        // grade ran — `requeuedAt` is still the copy's index.
+        if let at = move.requeuedAt, at < items.count {
+            items.remove(at: at)
+            requeueCounts[move.item.id] = move.previousRequeueCount
+        }
 
         // Always restore the snapshot — never gate this on the *current* `trackLearning`
         // value. If the grade applied an SM-2 change, this reverts it; if it didn't (tracking
@@ -137,8 +177,13 @@ final class StudySession {
     func shuffleAll() {
         guard !items.isEmpty else { return }
         history.removeAll()
+        requeueCounts.removeAll()
+        // Drop any in-session learning-step duplicates so a restart is a clean pass over the
+        // unique set rather than carrying this pass's requeued copies forward.
+        var seen = Set<String>()
+        let unique = items.filter { seen.insert($0.id).inserted }
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-            items.shuffle()
+            items = unique.shuffled()
             index = 0
             correctCount = 0
             wrongCount = 0

@@ -33,17 +33,19 @@ final class StudySessionTests {
         #expect(session.correctCount == 1)
         #expect(session.answered == 1)
 
-        session.grade(known: false)        // a miss still advances (single pass)
+        session.grade(known: false)        // a miss now earns another look this session…
         #expect(session.wrongCount == 1)
-        #expect(session.total == 3)        // the queue never grows
+        #expect(session.total == 4)        // …so the queue grows by one (a learning step)
 
-        session.grade(known: true)
-        #expect(session.isFinished)        // three grades ⇒ done
-        #expect(session.correctCount == 2)
+        session.grade(known: true)             // third original card
+        #expect(session.isFinished == false)   // the requeued miss still remains
+        session.grade(known: true)             // …grade the requeued card
+        #expect(session.isFinished)
+        #expect(session.correctCount == 3)
         #expect(session.wrongCount == 1)
     }
 
-    @Test func missAdvancesProgressAndSchedulesSooner() {
+    @Test func missReschedulesSoonerAndEarnsAnotherLookThisSession() {
         let cards = makeCards(1)
         let card = cards[0]
         let dueBefore = card.dueDate
@@ -51,10 +53,14 @@ final class StudySessionTests {
         let session = StudySession(cards: cards, trackLearning: true)
         session.grade(known: false)        // didn't know it
 
-        #expect(session.isFinished)        // single pass: the session completes
-        #expect(session.answered == 1)     // progress advanced
+        #expect(session.isFinished == false)   // the card returns for another look this session
+        #expect(session.total == 2)            // queue grew by one
+        #expect(session.answered == 1)         // progress advanced past the first look
         #expect(card.lastReviewedAt != nil)
-        #expect(card.dueDate > dueBefore)  // rescheduled (sooner) for a future session
+        #expect(card.dueDate > dueBefore)      // and it's rescheduled (sooner) for a future day
+
+        session.grade(known: true)         // see it again, pass it
+        #expect(session.isFinished)
     }
 
     @Test func gradeLogTracksGradesInOrderForProgressColors() {
@@ -219,6 +225,54 @@ final class StudySessionTests {
         let descriptor = FetchDescriptor<Card>(predicate: #Predicate { $0.dueDate <= now })
         let due = try container.mainContext.fetch(descriptor)
         #expect(due.count == 5)
+    }
+
+    // MARK: Learning-step requeue (S0.1)
+
+    @Test func missedCardRequeuedAtMostOncePerSession() {
+        let session = StudySession(cards: makeCards(1), trackLearning: true)
+        session.grade(known: false)        // miss ⇒ requeue (queue grows to 2)
+        #expect(session.total == 2)
+        session.grade(known: false)        // miss the requeued copy ⇒ NOT requeued again (cap 1)
+        #expect(session.total == 2)
+        #expect(session.isFinished)
+    }
+
+    @Test func undoRemovesTheRequeuedCopy() {
+        let session = StudySession(cards: makeCards(2), trackLearning: true)
+        session.grade(known: false)        // miss card 0 ⇒ requeue, total 3
+        #expect(session.total == 3)
+        #expect(session.wrongCount == 1)
+
+        session.undo()
+        #expect(session.total == 2)        // the requeued copy is removed
+        #expect(session.wrongCount == 0)
+        #expect(session.answered == 0)
+        #expect(session.canUndo == false)
+    }
+
+    @Test func practiceRunDoesNotRequeueMisses() {
+        let context = container.mainContext
+        let deck = Deck(name: "Practice"); context.insert(deck)
+        let card = Card(term: "a", definition: "b", deck: deck, dueDate: .now.addingTimeInterval(5 * 86_400))
+        context.insert(card)
+        try? context.save()
+
+        let session = StudySession(cards: [card], trackLearning: true)
+        #expect(session.isPractice)
+        session.grade(known: false)
+        #expect(session.total == 1)        // practice never grows the queue
+        #expect(session.isFinished)
+    }
+
+    @Test func shuffleDropsInSessionRequeueDuplicates() {
+        let session = StudySession(cards: makeCards(4), trackLearning: true)
+        session.grade(known: false)        // miss ⇒ requeue, total 5
+        #expect(session.total == 5)
+
+        session.shuffleAll()
+        #expect(session.total == 4)        // restart is a clean pass over the unique set
+        #expect(Set(session.items.map(\.id)).count == 4)
     }
 
     // MARK: Session-size cap

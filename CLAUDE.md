@@ -106,7 +106,8 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   Advanced** via `CSVCodec`/`CardListCodec`), `Study` (`StudySession`
   `@Observable @MainActor` state machine over `ReviewItem`s — cards in a direction —
   full-screen UI driven by a `StudyPlan`, 2- or 4-button grading, keyboard shortcuts,
-  single-pass review (a miss reschedules sooner, not re-queued), session-size cap;
+  near-single-pass review (a miss reschedules sooner **and** earns one more look later in the
+  same session — a lightweight in-session learning step, capped per card), session-size cap;
   `StudyStats` tracks the daily streak), `AI`
   (`AIGenerationView`), `Settings` (session cap, opt-in `StudyReminders`, an **Advanced** toggle
   for JSON/CSV import/export, hidden developer tools).
