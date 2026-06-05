@@ -277,8 +277,9 @@ final class StudyInsightsTests {
                                    matureByDay: [key(0): 20], matureCorrectByDay: [key(0): 17],
                                    now: now, calendar: cal)
         let t = s.retentionTakeaway ?? ""
-        #expect(t.contains("recall about"))
+        #expect(t.contains("Measured retention"))          // leads with the measured number…
         #expect(t.contains("just under the 90%"))
+        #expect(t.contains("projection from your schedule, not a measurement"))   // …estimate clearly labeled
     }
 
     @Test func retentionTakeawayPointsToWeakCardsBeforeMatureData() {

@@ -97,8 +97,8 @@ struct RetentionRing: View {
     /// The longest "recall …" caption across all horizons — used to reserve a fixed width so cycling
     /// the timeframe on tap doesn't resize this column (which would shift the ring and its neighbors).
     private static let widestCaption = RetentionHorizon.allCases
-        .map { "recall \($0.phrase)" }
-        .max { $0.count < $1.count } ?? "recall now"
+        .map { "est. recall \($0.phrase)" }
+        .max { $0.count < $1.count } ?? "est. recall now"
 
     var body: some View {
         Button(action: onTap) {
@@ -122,7 +122,7 @@ struct RetentionRing: View {
                     .font(Self.captionFont)
                     .hidden()
                     .overlay {
-                        Text("recall \(phrase)")
+                        Text("est. recall \(phrase)")
                             .font(Self.captionFont)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

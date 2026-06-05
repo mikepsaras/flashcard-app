@@ -306,7 +306,7 @@ struct StatsContentView: View {
 
     private var retentionLegend: some View {
         HStack(spacing: Theme.Spacing.l) {
-            retentionLegendItem(percent(insights.predictedRetention), "recall now", insights.predictedRetention)
+            retentionLegendItem(percent(insights.predictedRetention), "est. recall now", insights.predictedRetention)
             retentionLegendItem(percent(insights.trueRetention), "mature retention", insights.trueRetention)
             Spacer(minLength: 0)
         }
