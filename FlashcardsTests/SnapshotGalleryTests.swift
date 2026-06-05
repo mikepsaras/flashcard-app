@@ -279,6 +279,20 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/26_card_markdown.png"))
     }
 
+    @Test func renderMath() throws {
+        try Snapshot.write(
+            VStack(alignment: .leading, spacing: 20) {
+                MathDisplayView(latex: "\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}", fontSize: 40)
+                MathDisplayView(latex: "\\int_{0}^{\\infty} e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}", fontSize: 32)
+                (Text("Inline ") + inlineMathText("e^{i\\pi}+1=0", fontSize: 17) + Text(" flows in text."))
+                    .font(.system(size: 17))
+            }
+            .padding(40).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Theme.windowBackground),
+            size: CGSize(width: 620, height: 340), name: "30_math")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/30_math.png"))
+    }
+
     @Test func renderBulletListCard() throws {
         // Verifies block-level bullet lists render on the card face (left-aligned, hanging indent)
         // rather than showing the raw `*` markers. Rendered large (≈ a real macOS study card, where

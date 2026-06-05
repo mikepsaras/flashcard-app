@@ -1,4 +1,5 @@
 import SwiftUI
+@testable import Flashcards
 
 #if os(macOS)
 import AppKit
@@ -21,6 +22,9 @@ enum Snapshot {
     ) throws {
         let renderer = ImageRenderer(content:
             view.frame(width: size.width, height: size.height)
+                // SwiftMath's vector view renders blank in ImageRenderer; switch math to its raster
+                // path so equations actually appear in snapshots (the app keeps the vector view).
+                .environment(\.mathRendersAsImage, true)
         )
         renderer.scale = scale
         guard
