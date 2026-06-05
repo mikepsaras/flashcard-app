@@ -122,7 +122,10 @@ struct BulkAddView: View {
                 }
             }
             bulkField("Front") {
-                TextField("", text: row.front)
+                // Vertical axis so a long front WRAPS instead of scrolling sideways; on macOS this
+                // still commits on Return (→ addRowIfLast) and accepts a multi-line paste (→ split).
+                TextField("", text: row.front, axis: .vertical)
+                    .lineLimit(1...4)
                     .focused($focused, equals: .front(id))
                     .onSubmit { addRowIfLast(id) }
                     .onChange(of: row.wrappedValue.front) { _, v in if v.contains("\n") { paste(v, into: id) } }
