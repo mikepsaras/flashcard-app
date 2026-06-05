@@ -1,0 +1,497 @@
+# Flashcards — Learning-Efficacy Backlog
+
+The plan for closing the gap between "a clean SM-2 flashcard app" and "a tool that
+genuinely builds durable, applicable subject-matter knowledge." Derived from a
+technical audit of the study engine, scheduler, retention math, data model, and AI
+generation. This file is the **execution source of truth** — keep it current as work
+lands (multiple agents/sessions edit this repo; see `CLAUDE.md`).
+
+## How to read this
+
+- Work is grouped into **epics (E0–E7)**, each a cluster of **stories (S…)**.
+- The 13 audited gaps are **not** 13 independent tasks — they collapse onto **three
+  enablers** plus a handful of no-migration quick wins. Sequence by dependency, not by
+  gap number.
+- Each story lists: **Why**, **Touches** (code seams), **Model/persist** impact,
+  **Acceptance**, **Deps**, **Effort**, **Phase**.
+
+**Status:** ☐ not started · ◐ in progress · ☑ done · ✖ dropped
+**Effort:** S ≤1d · M 2–4d · L ~1wk · XL 2wk+
+**Phase:** 0 (ship now, no migration) · 1 (foundations / format v3) · 2 (features on
+foundations) · 3 (ambitious / optional)
+
+---
+
+## Decision log (resolved forks)
+
+1. **Scheduler: adopt FSRS, retire SM-2 as the default.** FSRS subsumes four gaps at
+   once (learning steps, lapse handling, grading-signal, algorithm efficiency). SM-2
+   stays as a selectable conformer for back-compat and A/B.
+2. **Cloze first via interim `type` enum on `Card`**, expanded into multiple
+   `ReviewItem`s (reusing the forward/reverse expansion pattern). The full `Note`-above-
+   `Card` refactor is deferred to Phase 3 once cloze demand is validated.
+3. **Elo is in scope, scoped deliberately:** it powers the **adaptive practice/exam-cram
+   mode** (its one non-redundant, load-bearing use) **and** is surfaced as a **difficulty
+   / per-topic mastery metric**. It does **not** drive the spaced schedule (FSRS owns
+   that). Leech detection rides primarily on a simple lapse counter, with difficulty as
+   corroboration.
+4. **Review history: an append-only sidecar log** (`reviewlog.jsonl` in the Flashcards
+   folder), not per-review records inside `.cards` files — keeps deck files human-
+   readable. Enables honest metrics, FSRS optimization, Elo history, and calibration.
+5. **Batch all model changes into one format bump (v2 → v3).** Every new scalar stays
+   defaulted (CloudKit-safe); migration seeds, never resets.
+6. **FSRS source & target retention.** Port from a permissively-licensed FSRS reference
+   (e.g. `rs-fsrs` / `ts-fsrs`), latest stable (v5/v6 family) with **published default
+   weights — no training required**. Default **desired retention 0.90**, surfaced as a
+   setting later.
+7. **Default grading under FSRS = 2-button (Know / Don't-know).** FSRS reads binary
+   outcomes well (it doesn't rely on SM-2's ease asymmetry that made 2-button lossy), so
+   the low-friction default is no longer a real handicap; **4-button stays available per
+   deck** for Hard/Easy nuance.
+8. **Cloze scheduling = whole-card for v1.** One schedule per cloze card initially;
+   per-cloze-index independent scheduling is deferred to the `Note` refactor (S3.5),
+   tracked as a TODO in S3.2.
+9. **Topic unit = tags (S1.4).** Coverage, per-topic mastery, and Elo learner-ability are
+   computed per **tag** (cross-deck, many-to-many — the right grain for "expertise in X");
+   deck `section` stays a secondary grouping.
+10. **Elo confidence = Glicko-style (rating + deviation).** Track a deviation so new
+    cards/topics read e.g. `1500 ± 350`, not false precision — it's surfaced as a mastery
+    metric. Marginal extra code over plain decaying-K.
+11. **Leech = ≥8 lapses (default), actionable.** Needs the `lapses` counter (S7.4);
+    actions = suspend / reset / edit / tag. Lapse count is the primary signal; difficulty
+    only corroborates.
+12. **Interim `type` enum first; `Note` refactor deferred.** Reaffirms #2 — ship
+    cloze/type-in on a `Card.type` enum (S3.1–S3.3, format v3) in Phase 2; commit to the
+    full `Note`-above-`Card` model (S3.5, format v4) only once demand is proven.
+13. **Review log = one global `reviewlog.jsonl`.** A single chronological append-only
+    stream in the library folder (each record carries `deckID` / `cardID` / `direction`
+    so per-deck/per-tag slicing still works), not per-deck sidecars — cross-deck
+    calibration/coverage/Elo all read one stream and the `.cards` files stay clean.
+    `DeckFolderWatcher` must ignore it (app-owned, not user-edited).
+
+---
+
+## Cross-cutting foundations (apply to every epic)
+
+- **CloudKit-safe invariants** (unchanged): every scalar defaulted, relationships
+  optional with inverse, `.cascade` delete, no `@Attribute(.unique)`.
+- **Persistence ripple:** any `Card`/`Deck` field change ⇒ update
+  `Flashcards/Persistence/DeckCodec.swift` DTOs **and** bump the `.cards` format version.
+  v1 + v2 files must still load.
+- **Pure-core discipline:** schedulers, Elo, linters, and metric math are pure value-type
+  functions with injected `now`/`calendar` (mirroring `SM2.swift`) so they're unit-tested
+  off the main actor.
+- **Test strategy:** unit tests for every pure core; `DeckCodec` round-trip + migration
+  tests; `ImageRenderer` snapshot tests for new UI (see `FlashcardsTests/Snapshot*`).
+
+---
+
+## E0 — Quick wins (no migration, ship now) · Phase 0
+
+High payoff-to-cost; de-risk the foundations by landing UX/flow improvements first.
+
+### ☐ S0.1 — In-session requeue (learning-steps down payment)  · **Effort:** S · **Phase:** 0
+- **Why:** Today a missed/new card vanishes until tomorrow (single-pass). Re-showing it
+  within the session is the biggest acquisition win for the smallest change.
+- **Touches:** `Flashcards/Features/Study/StudySession.swift` (the `advance()`/grade path,
+  `items`/`index`).
+- **Model/persist:** none.
+- **Acceptance:** an `again`-graded card (and optionally any not-yet-graduated new card)
+  reappears later in the *same* session (e.g. +N positions or end-of-queue); undo still
+  restores exactly; practice mode behavior unchanged; covered by `StudySessionTests`.
+- **Deps:** none. **Note:** superseded by native FSRS learning steps (S2.2) but worth
+  shipping now.
+
+### ☐ S0.2 — New-cards/day throttle  · **Effort:** M · **Phase:** 0
+- **Why:** New cards are due at creation, so importing 500 cards floods the queue; the
+  only governor is the blunt session cap. No graduated onboarding of new material.
+- **Touches:** queue builders `Flashcards/Features/Study/TodayDetailView.swift:111` &
+  `Flashcards/App/RootView.swift:202`; new per-day counter (mirror `StudyStats`
+  UserDefaults day-log); Settings picker in `Flashcards/Features/Settings/SettingsView.swift`.
+- **Model/persist:** none (UserDefaults counter).
+- **Acceptance:** queue = all due reviews + up to **N** new (`lastReviewedAt == nil`);
+  reopening study same day never re-introduces beyond N; per-deck override + global
+  default; N=0 ⇒ unlimited; unit-tested split logic.
+- **Deps:** none.
+
+### ☐ S0.3 — Interleaving order  · **Effort:** S · **Phase:** 0
+- **Why:** Pure due-date sort clusters related cards (correlated due dates); interleaving
+  is a known desirable difficulty that aids discrimination.
+- **Touches:** queue builders (same two files as S0.2); a pure `interleaved()` ordering.
+- **Model/persist:** none (Settings toggle).
+- **Acceptance:** within-day due set ordered round-robin across deck/section while keeping
+  most-overdue-first for genuine backlog; toggle in Settings; pure + unit-tested.
+- **Deps:** none.
+
+### ☐ S0.4 — AI prompt rewrite + few-shot + linter warnings  · **Effort:** M · **Phase:** 0
+- **Why:** Prompt says "high-quality" but encodes zero card-design rules; output accepted
+  with only dedup + empty-term filtering — risks low-quality, illusion-of-competence cards.
+- **Touches:** `Flashcards/AI/CardJSON.swift` (system+user prompts); post-gen linter feeding
+  warnings into `Flashcards/Features/AI/CardReviewList.swift`.
+- **Model/persist:** none (richer fields come in S5.3).
+- **Acceptance:** prompt encodes atomicity / minimum-information, ban yes-no &
+  enumerations, precise-question fronts, short answers; includes good-vs-bad few-shot;
+  linter flags over-long / list-like / near-duplicate / circular cards as *warnings*
+  (non-blocking) in the review list; `AIProviderTests` cover the linter.
+- **Deps:** none. Deepened later by S5.*.
+
+### ☐ S0.5 — Metric-honesty relabel  · **Effort:** S · **Phase:** 0
+- **Why:** "X% recall now" is schedule-derived (`0.9^(elapsed/interval)`) and reads ~100%
+  right after studying — it measures "am I behind?" not "do I know this?" Risks a false
+  sense of mastery.
+- **Touches:** `Flashcards/Features/Study/StatsView.swift`,
+  `Flashcards/Features/DeckDetail/DeckHeaderView.swift`, `StudyInsights.swift` takeaway.
+- **Model/persist:** none.
+- **Acceptance:** measured **true-retention** leads where available; predicted recall
+  explicitly labeled an *estimate*; the just-studied ~100% case is suppressed or reframed
+  ("next due in…"). Full calibration/real curves land in E6.
+- **Deps:** none.
+
+---
+
+## E1 — Foundational enablers (format v3) · Phase 1
+
+One batched migration. Land these together; everything in Phase 2 builds on them.
+
+### ☐ S1.1 — `Scheduler` protocol; plug SM-2 behind it  · **Effort:** M · **Phase:** 1
+- **Why:** Clean seam to swap/select algorithms per deck without touching the study engine.
+- **Touches:** new `Flashcards/Scheduling/Scheduler.swift`; refactor `SM2.swift` to conform;
+  `Card+Scheduling.swift`; `StudySession.grade()` calls the protocol.
+- **Model/persist:** none yet (selection field added with S1.2/S2.4).
+- **Acceptance:** `Scheduler` protocol over `SchedulingState`; `SM2` conforms; existing
+  `SM2Tests`/`StudySessionTests` pass unchanged; injected `now` preserved.
+- **Deps:** none.
+
+### ☐ S1.2 — FSRS state fields on `Card` (per direction)  · **Effort:** S · **Phase:** 1
+- **Why:** FSRS needs stability + difficulty per direction; SM-2 ignores them.
+- **Touches:** `Flashcards/Models/Card.swift` (add `stability`, `difficulty`, +`reverse…`,
+  defaulted); `Card+Scheduling.swift` accessors.
+- **Model/persist:** **v3** — codec + migration (S1.6).
+- **Acceptance:** fields present, defaulted, CloudKit-safe; SM-2 path unaffected.
+- **Deps:** none (migrate in S1.6).
+
+### ☐ S1.3 — Review-log sidecar store  · **Effort:** M · **Phase:** 1
+- **Why:** Only each card's *last* review is stored today (no history). FSRS optimization,
+  calibration, real retention curves, Elo trajectory, and coverage trends all need
+  per-review records.
+- **Touches:** new `Flashcards/Persistence/ReviewLog.swift` (append-only `reviewlog.jsonl`
+  in the library folder); write hook in `StudySessionView.performGrade`/`performUndo`;
+  reader for analytics.
+- **Model/persist:** new sidecar file (not in `.cards`); tolerate missing/partial log.
+- **Acceptance:** each non-practice grade appends `{cardID, direction, ts, grade, elapsed,
+  prevInterval/stability, mature}`; undo appends a compensating/void record (no rewrite);
+  reader aggregates by card/topic/day; corrupt lines skipped; unit-tested.
+- **Deps:** none. Enables S2.7, S6.2, S6.5, S7.2.
+
+### ☐ S1.4 — Tags on `Card`  · **Effort:** S · **Phase:** 1
+- **Why:** Cheapest unit of relational structure; unlocks cross-deck topic study and the
+  coverage/mastery denominator (E6) and per-topic Elo (E7).
+- **Touches:** `Card.swift` (`tags: [String] = []`); `DeckCodec`; editors
+  (`CardEditorView`, `BulkAddView`).
+- **Model/persist:** **v3**.
+- **Acceptance:** tags persist round-trip; editable in card editors; CloudKit-safe default.
+- **Deps:** migrate in S1.6. Used by S4.1, S6.3, S7.3.
+
+### ☐ S1.5 — `extra` / example field on `Card`  · **Effort:** S · **Phase:** 1
+- **Why:** Foundation for application/elaboration cards (worked examples, why/how) shown on
+  the answer side — bridges recall toward transfer.
+- **Touches:** `Card.swift` (`extra: String = ""`); `DeckCodec`; `FlashcardView` answer face
+  (renders via existing Markdown/LaTeX); editors.
+- **Model/persist:** **v3**.
+- **Acceptance:** optional extra renders under the answer when present; round-trips;
+  Markdown+LaTeX honored.
+- **Deps:** migrate in S1.6. Used by S5.6.
+
+### ☐ S1.6 — `DeckCodec` + format v3 + seed-migration + tests  · **Effort:** M · **Phase:** 1
+- **Why:** Single batched migration carrying S1.2/S1.4/S1.5 (+ interim cloze type if S3.2
+  lands here).
+- **Touches:** `Flashcards/Persistence/DeckCodec.swift`, format-version constant,
+  `DeckStore` load path; `DeckStoreTests`/codec tests.
+- **Model/persist:** writes **v3**; **loads v1 + v2 + v3**.
+- **Acceptance:** v1/v2 files load and round-trip to v3 with **zero data loss**; new fields
+  default on old files; FSRS S/D seeded from existing interval/ease (S2.5) on first load;
+  migration covered by tests.
+- **Deps:** S1.2, S1.4, S1.5 (+ S3.2 if folded in).
+
+---
+
+## E2 — FSRS scheduler (closes gaps 1, 2, 3, 6) · Phase 2
+
+### ☐ S2.1 — Port FSRS algorithm (default weights)  · **Effort:** L · **Phase:** 2
+- **Why:** Modern, ~20–30% more efficient scheduling; principled stability/difficulty model.
+- **Touches:** new `Flashcards/Scheduling/FSRS.swift` (pure), conforming to `Scheduler`.
+- **Model/persist:** uses S1.2 fields.
+- **Acceptance:** port published FSRS reference (default weights, **no training**);
+  retrievability `R(t)` from stability + elapsed; schedules to a configurable target
+  retention; pure + injected `now`; comprehensive `FSRSTests` (known vectors).
+- **Deps:** S1.1, S1.2.
+
+### ☐ S2.2 — Native learning / relearning steps  · **Effort:** M · **Phase:** 2
+- **Why:** Proper short-spaced steps for new and lapsed cards (replaces S0.1 stopgap).
+- **Touches:** `FSRS.swift` (learning phase), `StudySession` (sub-day requeue),
+  **bypass the start-of-day snap** (`SM2.swift:62` analog) for sub-day intervals.
+- **Model/persist:** learning phase derivable from S/D + reps; add a phase marker only if
+  needed (fold into v3).
+- **Acceptance:** configurable steps (e.g. 1m/10m); new + lapsed cards re-shown intra-
+  session; graduation to day-scale intervals; start-of-day snap only for ≥1d.
+- **Deps:** S2.1.
+
+### ☐ S2.3 — Graded lapse handling  · **Effort:** S · **Phase:** 2
+- **Why:** A missed mature card should lose stability, not reset to a 1-day interval with a
+  large flat ease hit.
+- **Touches:** `FSRS.swift` post-lapse stability.
+- **Acceptance:** lapse reduces stability per FSRS (interval shrinks proportionally, not to
+  1d); covered by tests at multiple maturities.
+- **Deps:** S2.1.
+
+### ☐ S2.4 — Per-deck scheduler selection  · **Effort:** M · **Phase:** 2
+- **Why:** Roll out FSRS gradually; keep SM-2 selectable.
+- **Touches:** `Deck.swift` (`schedulerRaw` defaulted), `DeckCodec`, Settings/deck editor,
+  `StudySessionView`/queue resolve the deck's scheduler.
+- **Model/persist:** **v3** field (fold into S1.6 batch).
+- **Acceptance:** new decks default FSRS; existing decks keep working (SM-2 until migrated/
+  opted in); switch is non-destructive.
+- **Deps:** S1.1, S2.1.
+
+### ☐ S2.5 — Seed FSRS S/D from existing SM-2 state  · **Effort:** S · **Phase:** 2
+- **Why:** Preserve years of progress when a deck moves to FSRS.
+- **Touches:** migration in `FSRS.swift`/`DeckCodec` (runs in S1.6 load path).
+- **Acceptance:** initial stability/difficulty derived from current interval/ease so the
+  first FSRS interval is continuous with the old schedule (no mass re-due); tested.
+- **Deps:** S2.1, S1.6.
+
+### ☐ S2.6 — Grading UI under FSRS  · **Effort:** S · **Phase:** 2
+- **Why:** FSRS reads binary or 4-grade natively (no manual ease), dissolving the two-
+  button signal-loss problem — decide the default.
+- **Touches:** `GradingMode.swift`, `StudyControlsBar`, deck setting.
+- **Acceptance:** both 2- and 4-button feed FSRS correctly; documented default; no EF-only-
+  decays pathology remains.
+- **Deps:** S2.1.
+
+### ☐ S2.7 — FSRS weight optimization from review log  · **Effort:** XL · **Phase:** 3
+- **Why:** Per-user-tuned weights beat defaults.
+- **Touches:** offline/optional optimizer over `reviewlog.jsonl`; stored weights.
+- **Acceptance:** opt-in; needs sufficient history; falls back to defaults; never blocks UI.
+- **Deps:** S1.3, S2.1.
+
+---
+
+## E3 — Content model: card types · Phase 2 (interim) / Phase 3 (full)
+
+### ☐ S3.1 — `Card.type` enum (basic | cloze | typeIn)  · **Effort:** S · **Phase:** 2
+- **Why:** Interim path to multiple card types without the full Note refactor.
+- **Touches:** `Card.swift` (`typeRaw` defaulted), `DeckCodec`, `ReviewItem`/`Deck.allReviewItems`.
+- **Model/persist:** **v3** (fold into S1.6).
+- **Acceptance:** type persists; defaults to basic; unknown raw ⇒ basic.
+- **Deps:** S1.6.
+
+### ☐ S3.2 — Cloze deletion (interim, ReviewItem expansion)  · **Effort:** M · **Phase:** 2
+- **Why:** The single most valuable missing type — atomic recall *in context*, the bridge
+  toward relational knowledge; also raises AI-card quality.
+- **Touches:** cloze parser (`{{c1::…}}`), `Deck.allReviewItems`/`ReviewItem` expand one
+  cloze card into one item per index (mirrors forward/reverse), `FlashcardView` masks the
+  active cloze; per-cloze scheduling state stored as a small per-index array (or whole-card
+  for v1).
+- **Model/persist:** cloze text in `term`; per-index state decision documented.
+- **Acceptance:** a cloze card yields N study items; correct span masked on the front,
+  revealed on flip; scheduled independently (or as one unit for v1, with a tracked TODO);
+  Markdown+LaTeX intact; unit + snapshot tested.
+- **Deps:** S3.1.
+
+### ☐ S3.3 — Type-in-answer  · **Effort:** M · **Phase:** 2
+- **Why:** Forces *production*, not just recognition; cheap active-recall upgrade.
+- **Touches:** `FlashcardView`/`StudyControlsBar` input; answer comparison (normalized);
+  grade derives from match (still user-confirmable).
+- **Acceptance:** typed answer compared (case/space/diacritic-tolerant, configurable);
+  near-miss shown; feeds the normal grade path.
+- **Deps:** S3.1.
+
+### ☐ S3.4 — Sibling burying  · **Effort:** S · **Phase:** 2/3
+- **Why:** Don't show cards from the same source (cloze siblings / forward+reverse) back-to-
+  back — leaks answers, reduces value.
+- **Touches:** queue builders / interleave ordering (S0.3).
+- **Acceptance:** same-card/same-note items separated within a session where possible.
+- **Deps:** S0.3, S3.2.
+
+### ☐ S3.5 — Full `Note`-above-`Card` refactor  · **Effort:** XL · **Phase:** 3
+- **Why:** Proper backbone: a Note holds fields and generates typed cards; foundation for
+  richer relations, robust cloze, and shared content.
+- **Touches:** new `Note` `@Model`; `Card` references `Note`; `DeckCodec` **v4**; broad UI.
+- **Acceptance:** notes generate cards; existing cards migrate to single-field notes with
+  zero loss; cloze/typeIn re-homed onto notes.
+- **Deps:** validated demand from S3.2/S3.3.
+
+### ☐ S3.6 — Image-occlusion / MCQ  · **Effort:** XL · **Phase:** 3
+- **Why:** Visual/diagram learning; distractor-based recognition.
+- **Deps:** image support on cards (not yet present) + S3.5. **Note:** big; gated on demand.
+
+---
+
+## E4 — Relational structure · Phase 2 / Phase 3
+
+### ☐ S4.1 — Tag UI + tag-filtered study  · **Effort:** M · **Phase:** 2
+- **Why:** Cross-deck topic study ("all `krebs-cycle` cards") and the unit for coverage/Elo.
+- **Touches:** tag chips in editors/library; a tag-scoped `StudyPlan` (queue builder filters
+  by tag across decks).
+- **Acceptance:** study/practice any tag across decks; tag browser; counts per tag.
+- **Deps:** S1.4.
+
+### ☐ S4.2 — Prerequisite DAG / concept graph  · **Effort:** XL · **Phase:** 3
+- **Why:** The real "expertise scaffolding" — gate new-card introduction on prerequisites.
+- **Touches:** edge model between cards/notes/tags; cycle detection; introduction order in
+  the new-card throttle (S0.2).
+- **Acceptance:** authorable prereq edges; new cards held until prereqs mature; no cycles.
+- **Deps:** S0.2, S1.4 (and ideally S3.5). **Note:** authoring burden — validate first.
+
+---
+
+## E5 — AI generation quality (gap 11) · Phase 2
+
+### ☐ S5.1 — Card-design rules in system prompt  · **Effort:** S · **Phase:** 2 *(lands early via S0.4)*
+- Encodes atomicity/minimum-information, ban yes-no & enumerations, precise fronts, short
+  answers. **Touches:** `CardJSON.swift`. **Deps:** none.
+
+### ☐ S5.2 — Few-shot good/bad exemplars  · **Effort:** S · **Phase:** 2 *(with S0.4)*
+- Highest-leverage prompt change. **Touches:** `CardJSON.swift`.
+
+### ☐ S5.3 — Emit `cloze` + `extra` in `GeneratedCard`  · **Effort:** M · **Phase:** 2
+- **Why:** Let the model produce cloze and worked examples, not just term/definition.
+- **Touches:** `Flashcards/AI/GeneratedCard.swift`, `CardJSON.swift` parsing, review/add path
+  in `AIGenerationView`.
+- **Acceptance:** generated cloze/extra flow through review→add into S3.2/S1.5 fields.
+- **Deps:** S3.2, S1.5.
+
+### ☐ S5.4 — Post-gen quality linter (warnings)  · **Effort:** S · **Phase:** 2 *(with S0.4)*
+- Flags over-long/list-like/near-duplicate/circular cards in `CardReviewList`. **Deps:** none.
+
+### ☐ S5.5 — Optional critic pass  · **Effort:** M · **Phase:** 3
+- Second model call grades its own cards against the rules. **Trade-off:** ~2× cost; opt-in.
+
+### ☐ S5.6 — Application / elaboration generation  · **Effort:** M · **Phase:** 2
+- **Why:** Generate why/how/worked-example cards (transfer), using the `extra` field.
+- **Touches:** prompt variants in `CardJSON.swift`; optional per-deck "intent" (recall vs
+  apply). **Deps:** S1.5, S5.1.
+
+---
+
+## E6 — Honest metrics, coverage & depth (gaps 7, 12) · Phase 2
+
+### ☐ S6.1 — Lead with measured true-retention  · **Effort:** S · **Phase:** 2
+- Deepens S0.5 using the review log. **Touches:** `StudyInsights`, `StatsView`,
+  `DeckHeaderView`. **Deps:** S1.3.
+
+### ☐ S6.2 — Calibration curve (predicted vs actual)  · **Effort:** M · **Phase:** 2
+- **Why:** The honest "is my sense of mastery real?" meter — compares predicted recall to
+  actual pass rate. **Touches:** `StudyInsights` (new aggregation over `reviewlog.jsonl`),
+  `StatsView` chart. **Deps:** S1.3.
+
+### ☐ S6.3 — Per-topic coverage & mastery  · **Effort:** M · **Phase:** 2
+- **Why:** Coverage needs a denominator → tags. "Krebs cycle: 12 cards · 80% mature · 91%
+  retention." **Touches:** `StudyInsights` per-tag aggregation; `StatsView` breakdown.
+- **Deps:** S1.4, S1.3.
+
+### ☐ S6.4 — Goals + projected completion  · **Effort:** M · **Phase:** 2/3
+- **Why:** "All mature by date X," projected from the existing due-forecast. **Touches:**
+  `StudyInsights.dueForecast` (already computed), goal store, `StatsView`. **Deps:** S6.3.
+
+### ☐ S6.5 — Real retention curves from log  · **Effort:** M · **Phase:** 3
+- Replace schedule-derived `0.9^(t/interval)` displays with measured forgetting curves.
+  **Deps:** S1.3.
+
+---
+
+## E7 — Adaptive practice / exam-cram mode + difficulty metric (Elo) · Phase 2
+
+Elo is a **measurement + selection** layer, explicitly **not** the spaced scheduler.
+
+### ☐ S7.1 — Elo / Glicko engine (pure)  · **Effort:** M · **Phase:** 2
+- **Why:** Learner ability θ per topic + card difficulty `d` per direction, on one scale.
+- **Touches:** new `Flashcards/Scheduling/Elo.swift` (or `Insights/`): pure update
+  `E=1/(1+10^((d−θ)/400))`, `θ←θ+K(S−E)`, `d←d−K(S−E)`; decaying/confidence-aware **K**
+  (consider Glicko rating-deviation so new items read `1500±350`, not false precision).
+- **Model/persist:** card difficulty per direction on `Card` (**v3**, fold into S1.6);
+  per-topic ability in a small store (sidecar/UserDefaults).
+- **Acceptance:** deterministic, injected inputs; `EloTests` with known sequences; ratings
+  reproducible/back-fillable from the review log.
+- **Deps:** S1.4 (topics), S1.6 (difficulty field).
+
+### ☐ S7.2 — Drive Elo from the review log  · **Effort:** S · **Phase:** 2
+- Back-fill + live update ratings from `reviewlog.jsonl` so they're reproducible.
+  **Deps:** S1.3, S7.1.
+
+### ☐ S7.3 — Difficulty / mastery as surfaced metrics  · **Effort:** M · **Phase:** 2
+- **Why:** Per-topic ability score + trajectory ("Biology 1480 ↑60/mo") is the most
+  expertise-*feeling* signal; per-card difficulty aids review. Under FSRS, prefer FSRS-`D`
+  for *card* difficulty and reserve Elo for the *learner-ability* score to avoid double-
+  counting.
+- **Touches:** `StatsView`, deck/card detail.
+- **Acceptance:** ability per topic with confidence + trend; card difficulty shown; clearly
+  framed as engagement/insight, not the schedule.
+- **Deps:** S7.1, S6.3.
+
+### ☐ S7.4 — Leech detection  · **Effort:** S · **Phase:** 2
+- **Why:** Flag broken cards to suspend/reformulate. **Primary signal:** lapse counter
+  (add `lapses` Int, **v3**); difficulty corroborates. **Touches:** `Card.swift`,
+  `StudySession` (increment on `again`), surfacing in deck detail.
+- **Acceptance:** card flagged at a lapse threshold (default ~8); user can suspend/reset/edit.
+- **Deps:** S1.6.
+
+### ☐ S7.5 — Adaptive practice selection (Elo-matched)  · **Effort:** M · **Phase:** 2
+- **Why:** The one load-bearing use of Elo: pick/order *non-due* cards so success ≈ target
+  (~85%, desirable-difficulty sweet spot).
+- **Touches:** a new practice `StudyPlan` selector using θ vs `d`; reuses Practice mode
+  (schedules untouched — `StudySession.isPractice`).
+- **Acceptance:** practice run prioritizes weakest-relative-to-ability cards, ordered near
+  target success; never advances the spaced schedule; tag/deck scoped.
+- **Deps:** S7.1, S4.1.
+
+### ☐ S7.6 — Exam-cram mode UX  · **Effort:** M · **Phase:** 2
+- **Why:** Product surface for S7.5 — "drill `tag/deck` before <exam date>."
+- **Touches:** entry point in library/deck menu; optional exam-date input; surfaces weakest
+  topics; wraps S7.5 selection.
+- **Acceptance:** pick scope (+ optional date), drill adaptively over not-necessarily-due
+  cards; summary highlights remaining weak areas.
+- **Deps:** S7.5.
+
+---
+
+## Phase plan (sequencing)
+
+- **Phase 0 — now, zero migration:** S0.1–S0.5. *(Also lands S5.1/S5.2/S5.4 content via S0.4.)*
+- **Phase 1 — one format bump (v2→v3):** S1.1–S1.6 (+ fold in S2.4/S3.1/S7.1/S7.4 fields).
+- **Phase 2 — features on foundations:** E2 (FSRS) · S3.1–S3.4 (cloze/type-in) · E4.1 ·
+  E5 · E6 (metrics/coverage) · E7 (Elo practice + difficulty).
+- **Phase 3 — ambitious/optional:** S2.7 · S3.5/S3.6 (Note refactor, occlusion/MCQ) ·
+  S4.2 (prereq DAG) · S5.5 · S6.5.
+
+**Critical path to the headline outcomes:** S1.1→S1.2→S1.6→S2.1 (FSRS) ·
+S1.3 (log) → E6 (honesty) · S1.4 (tags) + S1.6 → S7.1 → S7.5 → S7.6 (exam-cram).
+
+---
+
+## Resolved decisions
+
+All eight former open decisions are resolved — see **Decision log items 6–13** above
+(FSRS source/target retention · 2-button default · whole-card cloze v1 · tags as the
+topic unit · Glicko confidence · ≥8-lapse leech · interim `type` enum · one global
+review log). Revisit any of them if real-world results disagree; none are load-bearing
+enough to block Phase 0.
+
+---
+
+## Risk register
+
+- **Migration data loss (high impact):** mitigate with exhaustive v1/v2→v3 round-trip tests
+  before writing v3; never delete a file that fails to decode (existing `DeckStore` prune
+  invariant).
+- **FSRS scheduling regressions:** keep SM-2 selectable (S2.4); A/B per deck; seed-migrate
+  (S2.5) to avoid mass re-due.
+- **Elo/FSRS difficulty double-counting:** assign FSRS-`D` = card difficulty, Elo = learner
+  ability (S7.3); don't let Elo touch the spaced schedule.
+- **Metric churn confusing users:** relabel (S0.5) before adding new charts (E6).
+- **Scope creep on Note refactor / DAG (XL):** gated to Phase 3, demand-validated.
+
+---
+
+*Last updated by the learning-efficacy audit. Edit in place as stories land; keep statuses
+current (multiple sessions rely on this file — see `CLAUDE.md` on syncing `main`).*
