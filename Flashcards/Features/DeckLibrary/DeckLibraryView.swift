@@ -99,7 +99,7 @@ struct DeckLibraryView: View {
         }
         // Icon-only + (new deck) and sort controls at the TOP of the sidebar, like the iPhone
         // toolbar (sort leading, + trailing).
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .safeAreaInset(edge: .top, spacing: 8) {
             HStack {
                 sortMenu
                     .menuStyle(.borderlessButton)
@@ -113,9 +113,9 @@ struct DeckLibraryView: View {
             }
             .font(.system(size: 15, weight: .medium))
             .padding(.horizontal, Theme.Spacing.m)
-            .padding(.vertical, 7)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
             .background(.bar)
-            .overlay(alignment: .bottom) { Divider() }
         }
         #else
         .toolbar {
