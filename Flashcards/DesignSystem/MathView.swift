@@ -48,8 +48,29 @@ struct MathDisplayView: View {
         if asImage {
             MathRaster(latex: latex, fontSize: fontSize, color: color, mode: .display)
         } else {
+            // Frame the vector label to its measured size. The NSView/UIView reports no intrinsic
+            // size to SwiftUI, so without this it collapses to ~zero and draws over its neighbors.
+            // Measuring with MathImage (the raster path) means on-screen layout matches the snapshots.
+            let size = MathSizeCache.size(latex: latex, fontSize: fontSize, color: color, mode: .display)
             MathLabel(latex: latex, fontSize: fontSize, color: color, mode: .display)
+                .frame(width: size.width, height: size.height)
         }
+    }
+}
+
+/// Caches the typeset size of an equation so we can frame the (intrinsic-size-less) vector view.
+/// Keyed by mode + rounded size + latex; ViewThatFits reuses a small set of sizes, so it hits often.
+@MainActor
+private enum MathSizeCache {
+    private static var cache: [String: CGSize] = [:]
+    static func size(latex: String, fontSize: CGFloat, color: MTColor, mode: MTMathUILabelMode) -> CGSize {
+        let key = "\(mode)|\(Int(fontSize.rounded()))|\(latex)"
+        if let cached = cache[key] { return cached }
+        var maker = MathImage(latex: latex, fontSize: fontSize, textColor: color, labelMode: mode)
+        let (_, image, _) = maker.asImage()
+        let size = image?.size ?? CGSize(width: fontSize, height: fontSize * 1.3)
+        cache[key] = size
+        return size
     }
 }
 
@@ -101,19 +122,11 @@ private struct MathLabel {
 extension MathLabel: NSViewRepresentable {
     func makeNSView(context: Context) -> MTMathUILabel { makeLabel() }
     func updateNSView(_ nsView: MTMathUILabel, context: Context) { apply(to: nsView) }
-    @available(macOS 13.0, *)
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: MTMathUILabel, context: Context) -> CGSize? {
-        nsView.intrinsicContentSize
-    }
 }
 #else
 extension MathLabel: UIViewRepresentable {
     func makeUIView(context: Context) -> MTMathUILabel { makeLabel() }
     func updateUIView(_ uiView: MTMathUILabel, context: Context) { apply(to: uiView) }
-    @available(iOS 16.0, *)
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: MTMathUILabel, context: Context) -> CGSize? {
-        uiView.intrinsicContentSize
-    }
 }
 #endif
 
