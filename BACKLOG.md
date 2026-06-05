@@ -90,7 +90,7 @@ foundations) · 3 (ambitious / optional)
 
 High payoff-to-cost; de-risk the foundations by landing UX/flow improvements first.
 
-### ☐ S0.1 — In-session requeue (learning-steps down payment)  · **Effort:** S · **Phase:** 0
+### ☑ S0.1 — In-session requeue (learning-steps down payment)  · **Effort:** S · **Phase:** 0 · _shipped 2216498-440fea8_
 - **Why:** Today a missed/new card vanishes until tomorrow (single-pass). Re-showing it
   within the session is the biggest acquisition win for the smallest change.
 - **Touches:** `Flashcards/Features/Study/StudySession.swift` (the `advance()`/grade path,
@@ -102,7 +102,7 @@ High payoff-to-cost; de-risk the foundations by landing UX/flow improvements fir
 - **Deps:** none. **Note:** superseded by native FSRS learning steps (S2.2) but worth
   shipping now.
 
-### ☐ S0.2 — New-cards/day throttle  · **Effort:** M · **Phase:** 0
+### ☑ S0.2 — New-cards/day throttle  · **Effort:** M · **Phase:** 0 · _shipped; **global-only** — per-deck override deferred to Phase 1 (needs the v3 field). Default 20 (behavior change from unlimited)._
 - **Why:** New cards are due at creation, so importing 500 cards floods the queue; the
   only governor is the blunt session cap. No graduated onboarding of new material.
 - **Touches:** queue builders `Flashcards/Features/Study/TodayDetailView.swift:111` &
@@ -114,7 +114,7 @@ High payoff-to-cost; de-risk the foundations by landing UX/flow improvements fir
   default; N=0 ⇒ unlimited; unit-tested split logic.
 - **Deps:** none.
 
-### ☐ S0.3 — Interleaving order  · **Effort:** S · **Phase:** 0
+### ☑ S0.3 — Interleaving order  · **Effort:** S · **Phase:** 0 · _shipped; default on_
 - **Why:** Pure due-date sort clusters related cards (correlated due dates); interleaving
   is a known desirable difficulty that aids discrimination.
 - **Touches:** queue builders (same two files as S0.2); a pure `interleaved()` ordering.
@@ -123,7 +123,7 @@ High payoff-to-cost; de-risk the foundations by landing UX/flow improvements fir
   most-overdue-first for genuine backlog; toggle in Settings; pure + unit-tested.
 - **Deps:** none.
 
-### ☐ S0.4 — AI prompt rewrite + few-shot + linter warnings  · **Effort:** M · **Phase:** 0
+### ☑ S0.4 — AI prompt rewrite + few-shot + linter warnings  · **Effort:** M · **Phase:** 0 · _shipped (`CardQualityLinter`)_
 - **Why:** Prompt says "high-quality" but encodes zero card-design rules; output accepted
   with only dedup + empty-term filtering — risks low-quality, illusion-of-competence cards.
 - **Touches:** `Flashcards/AI/CardJSON.swift` (system+user prompts); post-gen linter feeding
@@ -135,7 +135,7 @@ High payoff-to-cost; de-risk the foundations by landing UX/flow improvements fir
   (non-blocking) in the review list; `AIProviderTests` cover the linter.
 - **Deps:** none. Deepened later by S5.*.
 
-### ☐ S0.5 — Metric-honesty relabel  · **Effort:** S · **Phase:** 0
+### ☑ S0.5 — Metric-honesty relabel  · **Effort:** S · **Phase:** 0 · _shipped (deeper calibration/curves remain in E6)_
 - **Why:** "X% recall now" is schedule-derived (`0.9^(elapsed/interval)`) and reads ~100%
   right after studying — it measures "am I behind?" not "do I know this?" Risks a false
   sense of mastery.
@@ -457,7 +457,7 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
 
 ## Phase plan (sequencing)
 
-- **Phase 0 — now, zero migration:** S0.1–S0.5. *(Also lands S5.1/S5.2/S5.4 content via S0.4.)*
+- **Phase 0 — ✅ DONE (zero migration):** S0.1–S0.5 shipped to `main`. *(Also landed S5.1/S5.2/S5.4 content via S0.4.)*
 - **Phase 1 — one format bump (v2→v3):** S1.1–S1.6 (+ fold in S2.4/S3.1/S7.1/S7.4 fields).
 - **Phase 2 — features on foundations:** E2 (FSRS) · S3.1–S3.4 (cloze/type-in) · E4.1 ·
   E5 · E6 (metrics/coverage) · E7 (Elo practice + difficulty).
