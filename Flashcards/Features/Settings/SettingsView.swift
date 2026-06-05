@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(AIProvider.selectedProviderKey) private var aiProviderRaw = AIProvider.openAI.rawValue
     @AppStorage(DefaultsKey.studySessionLimit) private var sessionLimit = 0
     @AppStorage(DefaultsKey.newCardsPerDay) private var newCardsPerDay = DefaultsKey.newCardsPerDayDefault
+    @AppStorage(DefaultsKey.interleaveStudy) private var interleaveStudy = true
     @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
     @AppStorage(DefaultsKey.remindersEnabled) private var remindersEnabled = false
     @AppStorage(DefaultsKey.reminderHour) private var reminderHour = 19
@@ -168,10 +169,13 @@ struct SettingsView: View {
             } label: {
                 Label("New cards per day", systemImage: "sparkles")
             }
+            Toggle(isOn: $interleaveStudy) {
+                Label("Interleave topics", systemImage: "shuffle")
+            }
         } header: {
             Text("Studying")
         } footer: {
-            Text("A session cap studies the most-due cards in batches. New cards are introduced gradually, up to the daily limit, so a big import doesn’t flood your reviews. Grading buttons (2 or 4) are set per deck, in the deck’s editor.")
+            Text("A session cap studies the most-due cards in batches. New cards are introduced gradually, up to the daily limit, so a big import doesn’t flood your reviews. Interleaving mixes decks and sections so related cards are spread out. Grading buttons (2 or 4) are set per deck, in the deck’s editor.")
         }
     }
 

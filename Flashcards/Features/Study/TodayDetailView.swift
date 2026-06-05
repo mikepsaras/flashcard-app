@@ -109,11 +109,13 @@ struct TodayDetailView: View {
             // reverse due dates (a #Predicate can't reach through the relationship) count.
             let decks = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
             let due = decks.flatMap { $0.dueReviewItems }.sorted { $0.dueDate < $1.dueDate }
-            // Reviews first, then new cards throttled to the day's remaining quota (S0.2).
+            // Reviews first, then new throttled to the day's remaining quota (S0.2); optionally
+            // interleaved across decks so one deck's cards don't cluster (S0.3).
             return StudySession.prioritizingReviews(
                 due,
                 newPerDay: DefaultsKey.newCardsPerDayValue(),
-                introducedToday: StudyStats.newCardsIntroducedToday()
+                introducedToday: StudyStats.newCardsIntroducedToday(),
+                interleaveBy: DefaultsKey.interleaveStudyValue() ? { $0.card.deck?.id.uuidString ?? "" } : nil
             )
         }
     }

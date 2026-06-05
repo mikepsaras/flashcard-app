@@ -18,6 +18,14 @@ enum DefaultsKey {
     static func newCardsPerDayValue(_ defaults: UserDefaults = .standard) -> Int {
         defaults.object(forKey: newCardsPerDay) as? Int ?? newCardsPerDayDefault
     }
+
+    /// Study: interleave the due queue across decks (Today) / sections (within a deck) instead of
+    /// strict due-date order, spreading related cards apart (a desirable difficulty). Default on;
+    /// read via `interleaveStudyValue` so an unset key resolves to the default, not `bool`'s false.
+    static let interleaveStudy = "interleaveStudy"
+    static func interleaveStudyValue(_ defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: interleaveStudy) as? Bool ?? true
+    }
     /// Library: deck sort order (a `DeckSort` raw value).
     static let deckSort = "deckSort"
     /// Reminders: daily-reminder toggle + time.

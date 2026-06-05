@@ -77,7 +77,12 @@ final class StudySession {
     /// pass the set most-due first; reviews and new each keep that order. Putting reviews first
     /// means new cards never crowd out due reviews under the session cap (new cards sort early,
     /// since an unreviewed card's due date is its creation date). Pure + static ⇒ unit-testable.
-    static func prioritizingReviews(_ items: [ReviewItem], newPerDay: Int, introducedToday: Int) -> [ReviewItem] {
+    static func prioritizingReviews(
+        _ items: [ReviewItem],
+        newPerDay: Int,
+        introducedToday: Int,
+        interleaveBy keyFn: ((ReviewItem) -> String)? = nil
+    ) -> [ReviewItem] {
         var reviews: [ReviewItem] = []
         var newUnits: [ReviewItem] = []
         for item in items {
@@ -85,7 +90,36 @@ final class StudySession {
             else { reviews.append(item) }
         }
         let allowedNew = newPerDay > 0 ? max(0, newPerDay - introducedToday) : newUnits.count
-        return reviews + newUnits.prefix(allowedNew)
+        let cappedNew = Array(newUnits.prefix(allowedNew))
+        // Interleave each segment independently so reviews still precede new (S0.2) while related
+        // cards within each are spread apart (S0.3). No key ⇒ keep the incoming due order.
+        guard let keyFn else { return reviews + cappedNew }
+        return interleaved(reviews, by: keyFn) + interleaved(cappedNew, by: keyFn)
+    }
+
+    /// Round-robins items across groups keyed by `keyFn`, preserving each group's internal order, so
+    /// related cards (same deck, or same section) are spread out rather than clustered — an
+    /// interleaving "desirable difficulty". Groups are visited in first-appearance order, so the
+    /// most-overdue group still leads. Pure + static ⇒ unit-testable.
+    static func interleaved(_ items: [ReviewItem], by keyFn: (ReviewItem) -> String) -> [ReviewItem] {
+        var groups: [[ReviewItem]] = []
+        var indexByKey: [String: Int] = [:]
+        for item in items {
+            let k = keyFn(item)
+            if let i = indexByKey[k] { groups[i].append(item) }
+            else { indexByKey[k] = groups.count; groups.append([item]) }
+        }
+        var out: [ReviewItem] = []
+        out.reserveCapacity(items.count)
+        var offset = 0, added = true
+        while added {
+            added = false
+            for group in groups where offset < group.count {
+                out.append(group[offset]); added = true
+            }
+            offset += 1
+        }
+        return out
     }
 
     // MARK: Derived state

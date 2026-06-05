@@ -320,4 +320,32 @@ final class StudySessionTests {
         // 0 ⇒ unlimited new (introducedToday ignored).
         #expect(StudySession.prioritizingReviews(items, newPerDay: 0, introducedToday: 99).count == 6)
     }
+
+    // MARK: Interleaving (S0.3)
+
+    @Test func interleavedRoundRobinsAcrossGroupsPreservingOrder() {
+        let cards = makeCards(6)
+        // Groups by first appearance: A=[0,3,5], B=[1,4], C=[2].
+        cards[0].section = "A"; cards[1].section = "B"; cards[2].section = "C"
+        cards[3].section = "A"; cards[4].section = "B"; cards[5].section = "A"
+        let items = cards.map { ReviewItem(card: $0, direction: .forward) }
+
+        let out = StudySession.interleaved(items, by: { $0.card.section })
+        // Round 0: A,B,C · round 1: A,B · round 2: A — and the most-overdue group (A) still leads.
+        #expect(out.map { $0.card.section } == ["A", "B", "C", "A", "B", "A"])
+    }
+
+    @Test func prioritizingReviewsInterleavesWithinEachSegment() {
+        let cards = makeCards(4)
+        cards[0].lastReviewedAt = .now; cards[0].section = "X"   // reviews…
+        cards[1].lastReviewedAt = .now; cards[1].section = "Y"
+        cards[2].section = "X"                                   // …then new
+        cards[3].section = "Y"
+        let items = cards.map { ReviewItem(card: $0, direction: .forward) }
+
+        let out = StudySession.prioritizingReviews(items, newPerDay: 0, introducedToday: 0,
+                                                   interleaveBy: { $0.card.section })
+        #expect(out.prefix(2).allSatisfy { $0.card.lastReviewedAt != nil })     // reviews still lead
+        #expect(out.dropFirst(2).allSatisfy { $0.card.lastReviewedAt == nil })  // new after
+    }
 }

@@ -208,7 +208,8 @@ struct RootView: View {
             return StudySession.prioritizingReviews(
                 dueSorted,
                 newPerDay: DefaultsKey.newCardsPerDayValue(),
-                introducedToday: StudyStats.newCardsIntroducedToday()
+                introducedToday: StudyStats.newCardsIntroducedToday(),
+                interleaveBy: DefaultsKey.interleaveStudyValue() ? { $0.card.section } : nil
             )
         }
     }
