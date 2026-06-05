@@ -923,6 +923,13 @@ struct RetentionRing: View {
         }
     }
 
+    private static let captionFont = Font.system(size: 10, weight: .medium, design: .rounded)
+    /// The longest "recall …" caption across all horizons — used to reserve a fixed width so cycling
+    /// the timeframe on tap doesn't resize this column (which would shift the ring and its neighbors).
+    private static let widestCaption = RetentionHorizon.allCases
+        .map { "recall \($0.phrase)" }
+        .max { $0.count < $1.count } ?? "recall now"
+
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 5) {
@@ -939,9 +946,17 @@ struct RetentionRing: View {
                         .foregroundStyle(tint)
                 }
                 .frame(width: 56, height: 56)
-                Text("recall \(phrase)")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(.secondary)
+                // Reserve the widest caption's width (hidden sizer) so the visible caption can change
+                // on tap without resizing the column — keeps the ring and Cards/Due from shifting.
+                Text(Self.widestCaption)
+                    .font(Self.captionFont)
+                    .hidden()
+                    .overlay {
+                        Text("recall \(phrase)")
+                            .font(Self.captionFont)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
             }
         }
         .buttonStyle(.plain)
