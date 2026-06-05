@@ -12,6 +12,8 @@ struct StudySessionView: View {
 
     @Environment(\.modelContext) private var context
     @State private var session: StudySession
+    @AppStorage(DefaultsKey.showGradeIntervals) private var showGradeIntervals = false
+    @State private var showingResetConfirm = false
 
     init(plan: StudyPlan, onClose: @escaping () -> Void) {
         self.plan = plan
@@ -48,74 +50,108 @@ struct StudySessionView: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .background(Theme.windowBackground)
             .background(keyboardControls)
+            .confirmationDialog("Reset progress for this deck?", isPresented: $showingResetConfirm, titleVisibility: .visible) {
+                Button("Reset Progress", role: .destructive) { performReset() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Every card becomes due again and its spaced-repetition history is cleared. This can’t be undone.")
+            }
         }
     }
 
     // MARK: Top bar
 
     private func topBar(compact: Bool) -> some View {
-        HStack(spacing: 14) {
-            Text(plan.title)
-                .font(Typography.headline)
-                .lineLimit(1)
-            Spacer()
-            // Session controls live here now (off the card / bottom bar), only while studying.
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(plan.title)
+                    .font(Typography.headline)
+                    .lineLimit(1)
+                if !session.isFinished {
+                    Text(sessionSubtitle)
+                        .font(Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            Spacer(minLength: 8)
             if !session.isFinished {
-                Button { session.shuffleAll() } label: { Image(systemName: "shuffle") }
-                    .buttonStyle(.plain)
-                    .help("Shuffle the deck")
-                    .accessibilityLabel("Shuffle the deck")
-                practiceBadge(compact: compact)
+                if currentStreak > 0 { streakChip }
+                if !compact { dueChip }   // iPhone keeps only the streak
+                overflowMenu
             }
-            if let exportText = plan.exportText {
-                ShareLink(item: exportText) { Image(systemName: "square.and.arrow.up") }
-                    .buttonStyle(.plain)
-            }
-            Button { finish() } label: { Image(systemName: "xmark") }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.cancelAction)
+            closeButton
         }
-        .font(.system(size: 16, weight: .semibold))
-        .foregroundStyle(.secondary)
         .padding(.leading, topBarLeadingInset)
         .padding(.trailing, Theme.Spacing.m)
         .padding(.vertical, Theme.Spacing.s)
     }
 
-    /// A quiet "Practice" badge shown when nothing's due — grades won't change the schedule. (There's
-    /// no track-learning toggle: due cards always reschedule, which is what spaced repetition is for.)
-    @ViewBuilder private func practiceBadge(compact: Bool) -> some View {
-        if session.isPractice {
-            HStack(spacing: 6) {
-                Image(systemName: "graduationcap.fill").font(.system(size: 12))
-                if !compact { Text("Practice").font(.system(size: 12, weight: .medium, design: .rounded)) }
+    /// "{position} of {total} · {correct} correct" — session progress, in the title's subtitle.
+    private var sessionSubtitle: String {
+        "\(session.position) of \(session.total) · \(session.correctCount) correct"
+    }
+
+    private var currentStreak: Int { StudyStats.currentStreak() }
+
+    /// Daily streak 🔥 (both platforms). Hidden at 0 so a "🔥 0" never shows.
+    private var streakChip: some View {
+        Label("\(currentStreak)", systemImage: "flame.fill")
+            .font(.system(.caption, design: .rounded, weight: .semibold)).monospacedDigit()
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(Color.orange.opacity(Theme.Opacity.fillSubtle), in: Capsule())
+            .accessibilityLabel("\(currentStreak) day streak")
+    }
+
+    /// Cards left in this run (Mac only; dropped on iPhone to keep the compact bar light).
+    private var dueChip: some View {
+        let left = max(session.total - session.answered, 0)
+        return Label("\(left) due", systemImage: "clock.fill")
+            .font(.system(.caption, design: .rounded, weight: .semibold)).monospacedDigit()
+            .foregroundStyle(accent)
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(accent.opacity(Theme.Opacity.fillSubtle), in: Capsule())
+            .accessibilityLabel("\(left) cards left in this session")
+    }
+
+    /// Session actions that don't need to be on-screen all the time. Reset Progress only appears for
+    /// single-deck runs (the Today queue has no one deck to reset).
+    private var overflowMenu: some View {
+        Menu {
+            Button { session.shuffleAll() } label: { Label("Shuffle", systemImage: "shuffle") }
+            if let exportText = plan.exportText {
+                ShareLink(item: exportText) { Label("Share Deck", systemImage: "square.and.arrow.up") }
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Color.primary.opacity(0.05), in: Capsule())
-            .help("Practice mode — nothing is due, so your review schedule won't change")
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Practice mode")
-            .accessibilityHint("Nothing is due, so your review schedule won't change")
+            Button { restart() } label: { Label("Restart Session", systemImage: "arrow.counterclockwise") }
+            if plan.onReset != nil {
+                Divider()
+                Button(role: .destructive) { showingResetConfirm = true } label: {
+                    Label("Reset Progress", systemImage: "arrow.uturn.backward.circle")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle").font(.system(size: 17, weight: .semibold)).foregroundStyle(.secondary)
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("More options")
+    }
+
+    private var closeButton: some View {
+        Button { finish() } label: {
+            Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
+        .accessibilityLabel("Close")
     }
 
     // MARK: Studying
 
     private func studyContent(compact: Bool) -> some View {
         VStack(spacing: Theme.Spacing.m) {
-            HStack(spacing: 14) {
-                ProgressDashBar(colors: session.gradeLog.map(\.studyColor), total: session.total)
-                Text("\(session.position) / \(session.total)")
-                    .font(.system(.subheadline, design: .rounded, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .layoutPriority(1)
-                CountBadge(kind: .wrong, count: session.wrongCount)
-                CountBadge(kind: .correct, count: session.correctCount)
-            }
-            .padding(.horizontal, Theme.Spacing.m)
-            .padding(.top, Theme.Spacing.s)
+            if session.isPractice { practiceBanner }
 
             if let item = session.current {
                 FlashcardView(
@@ -128,24 +164,61 @@ struct StudySessionView: View {
                     onTap: { session.flip() }
                 )
                 // A fixed-ratio card that scales with the window — bigger in full screen, same shape.
-                // Compact widths (iPhone) get a tall portrait card; roomy ones (Mac/iPad) a landscape
-                // one. Centered in the available space with a margin so it never touches the edges.
+                // Compact widths (iPhone) get a tall portrait card; roomy ones (Mac/iPad) a landscape one.
                 .aspectRatio(compact ? 0.72 : 1.25, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, compact ? Theme.Spacing.m : Theme.Spacing.xl)
                 .padding(.vertical, Theme.Spacing.s)
             }
 
+            // The per-card accuracy dash bar — the progress indicator that stays in study mode (the
+            // session count moved up to the title subtitle; predicted recall lives on the deck page).
+            ProgressDashBar(colors: session.gradeLog.map(\.studyColor), total: session.total)
+                .padding(.horizontal, Theme.Spacing.m)
+
             StudyControlsBar(
                 canUndo: session.canUndo,
                 compact: compact,
                 fourButton: fourButton,
+                intervalFor: intervalProvider,
                 onUndo: { performUndo() },
                 onGrade: { performGrade($0) }
             )
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.bottom, Theme.Spacing.m)
         }
+    }
+
+    /// Shown when nothing's due — a calm reminder that grades won't reschedule. (No track-learning
+    /// toggle: due cards always reschedule, which is what spaced repetition is for.)
+    @ViewBuilder private var practiceBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "graduationcap.fill")
+            Text("Practice session — these cards aren't due yet, so your review schedule won't change.")
+            Spacer(minLength: 0)
+        }
+        .font(.system(.caption, design: .rounded, weight: .medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.top, Theme.Spacing.s)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Practice mode. Nothing is due, so your review schedule won't change.")
+    }
+
+    /// Projected next interval per grade for the CURRENT card — a developer diagnostic, returned only
+    /// when the hidden toggle is on. Runs SM-2 against the card's per-direction state for each grade.
+    private var intervalProvider: ((Grade) -> String)? {
+        guard showGradeIntervals, let item = session.current else { return nil }
+        let state = item.card.schedulingState(item.direction)
+        return { grade in Self.intervalText(SM2.schedule(current: state, grade: grade).interval) }
+    }
+
+    private static func intervalText(_ days: Int) -> String {
+        if days >= 365 { return "\(days / 365)y" }
+        if days >= 30 { return "\(days / 30)mo" }
+        return "\(max(days, 1))d"
     }
 
     // MARK: Summary
@@ -254,6 +327,13 @@ struct StudySessionView: View {
 
     private func restart() {
         session = StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: true)
+    }
+
+    /// Reset Progress (••• menu): wipe the deck's schedules via the plan's hook, then start a fresh
+    /// session over the now-all-due cards. Single-deck runs only (the Today queue has no `onReset`).
+    private func performReset() {
+        plan.onReset?()
+        restart()
     }
 
     /// Applies the "cards per session" setting (0 ⇒ unlimited). The cap logic lives on

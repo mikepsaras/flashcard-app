@@ -1,72 +1,69 @@
 import SwiftUI
 
-/// Bottom study controls — grading + undo. (Shuffle lives in the top toolbar.)
-/// - Two-button: ✕ / ✓ icon pills centered, Undo bottom-left.
-/// - Four-button: an Undo row above an Again/Hard/Good/Easy pill row.
+/// Bottom study controls — an Undo row above the grade pills. (Shuffle / Share / Reset live in the
+/// study screen's ••• menu now.)
+/// - Two-button: full-width "Don't know" / "Know" pills.
+/// - Four-button: full-width Again / Hard / Good / Easy pills.
+/// When `intervalFor` is supplied (a developer toggle), each pill shows the projected next interval
+/// beneath its label.
 struct StudyControlsBar: View {
     let canUndo: Bool
     var compact: Bool = false
     var fourButton: Bool = false
+    /// Developer diagnostic: the projected next interval for a grade, shown under its label. Hidden
+    /// by default so the numbers don't bias honest grading.
+    var intervalFor: ((Grade) -> String)? = nil
     var onUndo: () -> Void
     var onGrade: (Grade) -> Void
 
     var body: some View {
-        if fourButton {
-            VStack(spacing: 14) {
-                HStack { undoButton; Spacer() }
-                fourButtonRow
-            }
-        } else {
-            ZStack {
-                HStack(spacing: 16) {
-                    gradePill("xmark", .again, "Don't know")
-                    gradePill("checkmark", .good, "Know")
+        VStack(spacing: 12) {
+            HStack { undoButton; Spacer() }
+            if fourButton {
+                HStack(spacing: 10) {
+                    gradeButton("Again", .again)
+                    gradeButton("Hard", .hard)
+                    gradeButton("Good", .good)
+                    gradeButton("Easy", .easy)
                 }
-                HStack { undoButton; Spacer() }
+            } else {
+                HStack(spacing: 14) {
+                    gradeButton("Don't know", .again, symbol: "xmark")
+                    gradeButton("Know", .good, symbol: "checkmark")
+                }
             }
         }
     }
 
-    // MARK: Two-button — icon-only pills
-
-    private func gradePill(_ symbol: String, _ grade: Grade, _ label: String) -> some View {
+    /// One full-width grade pill. `symbol` (the 2-button row) prefixes an icon; the 4-button row is
+    /// label-only. A projected-interval subtitle appears beneath when `intervalFor` is set.
+    private func gradeButton(_ title: String, _ grade: Grade, symbol: String? = nil) -> some View {
         let color = grade.studyColor
         return Button { onGrade(grade) } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(color)
-                .frame(width: 104, height: 54)
-                .background(color.opacity(0.14), in: Capsule())
-                .overlay(Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1))
+            VStack(spacing: 3) {
+                if let symbol {
+                    HStack(spacing: 8) {
+                        Image(systemName: symbol).font(.system(size: 16, weight: .bold))
+                        Text(title).font(.system(.body, design: .rounded, weight: .semibold))
+                    }
+                } else {
+                    Text(title).font(.system(.subheadline, design: .rounded, weight: .semibold))
+                }
+                if let intervalFor {
+                    Text(intervalFor(grade))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(color)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, intervalFor == nil ? (symbol == nil ? 13 : 15) : 11)
+            .background(color.opacity(Theme.Opacity.fillTint), in: Capsule())
+            .overlay(Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .shadow(color: color.opacity(0.18), radius: 8, x: 0, y: 3)
-        .accessibilityLabel(label)
-    }
-
-    // MARK: Four-button — labeled pills
-
-    private var fourButtonRow: some View {
-        HStack(spacing: 10) {
-            gradeButton("Again", .again)
-            gradeButton("Hard", .hard)
-            gradeButton("Good", .good)
-            gradeButton("Easy", .easy)
-        }
-    }
-
-    private func gradeButton(_ title: String, _ grade: Grade) -> some View {
-        let color = grade.studyColor
-        return Button { onGrade(grade) } label: {
-            Text(title)
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(color.opacity(0.16), in: Capsule())
-                .overlay(Capsule().strokeBorder(color.opacity(0.20), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 
     // MARK: Undo

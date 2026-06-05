@@ -158,7 +158,11 @@ struct RootView: View {
             title: deck.name.isEmpty ? "Study" : deck.name,
             accent: Color(hex: deck.colorHex),
             exportText: deck.cardArray.map { "\($0.term) — \($0.definition)" }.joined(separator: "\n"),
-            fourButton: deck.gradingMode == .fourButton
+            fourButton: deck.gradingMode == .fourButton,
+            onReset: {
+                for card in deck.cardArray { card.resetSchedule() }
+                context.saveAndPersist(touching: deck)
+            }
         ) {
             let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
             return due.isEmpty ? deck.allReviewItems : due

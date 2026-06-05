@@ -20,6 +20,7 @@ struct SettingsView: View {
 
     // Hidden developer mode (unlocked by tapping the version 7×) + its test-data tools.
     @AppStorage(DefaultsKey.developerMode) private var developerMode = false
+    @AppStorage(DefaultsKey.showGradeIntervals) private var showGradeIntervals = false
     @State private var versionTaps = 0
     @State private var devStatus: String?
     @State private var showingStressSheet = false
@@ -295,11 +296,14 @@ struct SettingsView: View {
             Button { showingStressSheet = true } label: { Label("Stress test…", systemImage: "gauge.high") }
             Button { showingSeedHistory = true } label: { Label("Seed review history", systemImage: "calendar.badge.clock") }
             Button(role: .destructive) { showingRemoveTestData = true } label: { Label("Remove all test data", systemImage: "trash") }
-            Button("Disable Developer Mode") { developerMode = false; devStatus = nil }
+            Toggle(isOn: $showGradeIntervals) {
+                Label("Show projected intervals while studying", systemImage: "calendar.badge.clock")
+            }
+            Button("Disable Developer Mode") { developerMode = false; showGradeIntervals = false; devStatus = nil }
         } header: {
             Text("Developer")
         } footer: {
-            Text(devStatus ?? "Generates test decks under a “Test Data” section for stress + feature testing. “Remove all test data” deletes only those and clears seeded stats.")
+            Text(devStatus ?? "Generates test decks under a “Test Data” section for stress + feature testing. “Show projected intervals” adds each grade’s next-review interval under the study buttons.")
         }
     }
 

@@ -47,6 +47,24 @@ final class StudyInsightsTests {
         #expect(s.matureCount == 1)
     }
 
+    @Test func predictedRecallDecaysWithHorizon() {
+        let deck = makeDeck()
+        addCard(to: deck, reviewed: true, interval: 10)   // reviewed at `now`, 10-day interval
+        let nowR = StudyInsights.predictedRecall(forCards: deck.cardArray, studyReversed: false, daysAhead: 0, now: now)
+        let aheadR = StudyInsights.predictedRecall(forCards: deck.cardArray, studyReversed: false, daysAhead: 10, now: now)
+        #expect(nowR.units == 1)
+        #expect(abs((nowR.recall ?? 0) - 1.0) < 0.0001)     // just reviewed ⇒ ~100%
+        #expect(abs((aheadR.recall ?? 0) - 0.9) < 0.0001)   // one interval out ⇒ ~90% (the SM-2 target)
+    }
+
+    @Test func predictedRecallIsNilWithoutReviews() {
+        let deck = makeDeck()
+        addCard(to: deck, reviewed: false)
+        let r = StudyInsights.predictedRecall(forCards: deck.cardArray, studyReversed: false, now: now)
+        #expect(r.recall == nil)
+        #expect(r.units == 0)
+    }
+
     @Test func reverseIntervalCountsTowardMaturityWhenStudyReversed() {
         let deck = makeDeck(studyReversed: true)
         // Forward interval short, reverse interval mature ⇒ counts as Mature.

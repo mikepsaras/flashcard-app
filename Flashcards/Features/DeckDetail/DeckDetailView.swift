@@ -23,6 +23,7 @@ struct DeckDetailView: View {
     @Bindable var deck: Deck
     @Query private var allDecks: [Deck]
     @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
+    @AppStorage(DefaultsKey.retentionHorizon) private var retentionHorizonRaw = RetentionHorizon.week.rawValue
     var onStudy: () -> Void
 
     private var otherDecks: [Deck] { allDecks.filter { $0.id != deck.id } }
@@ -341,9 +342,11 @@ struct DeckDetailView: View {
                     .background(Theme.accent.opacity(0.14), in: Capsule())
             }
 
-            HStack(spacing: Theme.Spacing.l) {
+            HStack(alignment: .center, spacing: Theme.Spacing.l) {
                 stat(value: "\(deck.cardCount)", label: "Cards")
                 stat(value: "\(deck.dueCount)", label: "Due", tint: deck.dueCount > 0 ? Theme.accent : .secondary)
+                Spacer(minLength: Theme.Spacing.m)
+                if deck.cardCount > 0 { retentionRing }
             }
 
             if deck.cardCount > 0 { maturityStrip }
@@ -376,6 +379,21 @@ struct DeckDetailView: View {
             Text(label)
                 .font(Typography.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var retentionHorizon: RetentionHorizon { RetentionHorizon(rawValue: retentionHorizonRaw) ?? .week }
+
+    /// Predicted-recall ring — "how much of this deck will I remember {now / in 1 week / in 1 month}".
+    /// Tap to cycle the look-ahead. Needs a few reviewed cards before the number means anything, so a
+    /// barely-studied deck shows "—".
+    private var retentionRing: some View {
+        let result = StudyInsights.predictedRecall(
+            forCards: deck.cardArray, studyReversed: deck.studyReversed, daysAhead: retentionHorizon.days
+        )
+        let recall = result.units >= 3 ? result.recall : nil
+        return RetentionRing(recall: recall, phrase: retentionHorizon.phrase) {
+            retentionHorizonRaw = retentionHorizon.next.rawValue
         }
     }
 
@@ -770,5 +788,56 @@ private struct CardRowView: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(color.opacity(0.15), in: Capsule())
+    }
+}
+
+/// A compact circular gauge of predicted recall for a deck, shown in the deck header. Tap to cycle
+/// the look-ahead. `recall` is 0…1, or nil when there isn't enough reviewed data yet (renders "—").
+struct RetentionRing: View {
+    let recall: Double?
+    /// Trailing phrase for the caption, e.g. "now" / "in 1 week".
+    let phrase: String
+    var onTap: () -> Void
+
+    private var pct: Int { Int(((recall ?? 0) * 100).rounded()) }
+    /// Green when strong, accent when solid, amber when slipping; grey when unmeasured.
+    private var tint: Color {
+        guard let recall else { return .secondary }
+        switch recall {
+        case 0.9...:    return Theme.success
+        case 0.8..<0.9: return Theme.accent
+        default:        return .orange
+        }
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 5) {
+                ZStack {
+                    Circle().stroke(Color.primary.opacity(0.1), lineWidth: 6)
+                    if let recall {
+                        Circle()
+                            .trim(from: 0, to: max(recall, 0.001))
+                            .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
+                    Text(recall == nil ? "—" : "\(pct)%")
+                        .font(.system(size: 15, weight: .bold, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(tint)
+                }
+                .frame(width: 56, height: 56)
+                Text("recall \(phrase)")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        #if os(macOS)
+        .help("Predicted recall \(phrase) — the share of this deck you'd remember. Tap to change the timeframe.")
+        #endif
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(recall == nil
+            ? "Predicted recall: not enough reviews yet"
+            : "Predicted recall \(phrase): \(pct) percent. Tap to change the timeframe.")
     }
 }

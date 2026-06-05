@@ -117,6 +117,30 @@ struct StudyInsights: Equatable {
     /// How many weeks of mature-retention history the "Trend" graph covers.
     static let retentionTrendWeeks = 12
 
+    /// Average predicted recall across a deck's reviewed review-units, `daysAhead` days from `now`,
+    /// using the same forgetting curve as `predictedRetention` (R = targetRetentionAtDue^(elapsed /
+    /// interval)). Returns the mean recall (nil when nothing's been reviewed) and the unit count it
+    /// averaged — callers gate on a minimum sample so a one-card deck doesn't read as the whole deck.
+    /// Pure given its inputs; `@MainActor` only because it reads `@Model` card scalars.
+    @MainActor
+    static func predictedRecall(
+        forCards cards: [Card], studyReversed: Bool, daysAhead: Int = 0, now: Date = .now
+    ) -> (recall: Double?, units: Int) {
+        let directions: [ReviewDirection] = studyReversed ? [.forward, .reverse] : [.forward]
+        var sum = 0.0, units = 0
+        let ahead = Double(daysAhead)
+        for card in cards {
+            for direction in directions {
+                guard let last = card.lastReviewedAt(direction) else { continue }
+                let interval = Double(max(card.schedulingState(direction).interval, 1))
+                let elapsed = max(now.timeIntervalSince(last) / 86_400, 0) + ahead
+                sum += pow(targetRetentionAtDue, elapsed / interval)
+                units += 1
+            }
+        }
+        return (units > 0 ? sum / Double(units) : nil, units)
+    }
+
     @MainActor
     static func make(
         decks: [Deck],
@@ -283,5 +307,28 @@ struct StudyInsights: Equatable {
         }
         insights.retentionTrend = trend
         return insights
+    }
+}
+
+/// The deck-page memory-retention ring's look-ahead — tap the ring to cycle. Persisted via
+/// `@AppStorage` (raw value = days ahead; 0 = "now").
+enum RetentionHorizon: Int, CaseIterable, Identifiable {
+    case now = 0, week = 7, month = 30
+    var id: Int { rawValue }
+    var days: Int { rawValue }
+    /// Trailing phrase for the label "recall …".
+    var phrase: String {
+        switch self {
+        case .now:   "now"
+        case .week:  "in 1 week"
+        case .month: "in 1 month"
+        }
+    }
+    var next: RetentionHorizon {
+        switch self {
+        case .now:   .week
+        case .week:  .month
+        case .month: .now
+        }
     }
 }

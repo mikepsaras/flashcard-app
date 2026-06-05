@@ -12,5 +12,8 @@ struct StudyPlan: Identifiable {
     /// Whether this run uses 4-button grading. Set from the deck's own setting; the
     /// cross-deck Today queue uses 2-button.
     let fourButton: Bool
+    /// Resets the underlying deck's spaced-repetition progress (the study screen's ••• → Reset
+    /// Progress). `nil` for the cross-deck Today queue, which has no single deck to reset.
+    var onReset: (() -> Void)? = nil
     let makeItems: () -> [ReviewItem]
 }

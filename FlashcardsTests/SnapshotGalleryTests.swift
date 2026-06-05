@@ -182,6 +182,20 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/25_heatmap_years.png"))
     }
 
+    @Test func renderRetentionRing() throws {
+        // The deck-page memory ring at a few recall levels, plus the "not enough data" state.
+        let row = HStack(spacing: 28) {
+            RetentionRing(recall: 0.94, phrase: "now") {}
+            RetentionRing(recall: 0.78, phrase: "in 1 week") {}
+            RetentionRing(recall: 0.52, phrase: "in 1 month") {}
+            RetentionRing(recall: nil, phrase: "now") {}
+        }
+        .padding(28)
+        .background(Theme.windowBackground)
+        try Snapshot.write(row, size: CGSize(width: 560, height: 150), name: "29_retention_ring")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/29_retention_ring.png"))
+    }
+
     @Test func renderFourButtonStudyScreen() throws {
         let (container, _, plan) = try makeContext(fourButton: true)
         try Snapshot.write(
