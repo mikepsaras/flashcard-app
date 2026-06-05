@@ -1,12 +1,12 @@
 import SwiftUI
 import SwiftData
 
-/// The unified card composer — adds one card or many. Opens with `startCount` cards (1 from "New
-/// Card", a few from "Add Multiple Cards…") and grows via "Add Card"; a single card shows no "Card N"
-/// header so it reads like a plain editor. Front is single-line (so pasting a list splits it into
-/// cards, and Return adds the next); Back is the rich multi-line field. The Add-Card split button's
-/// menu reuses the previous card's front/back for shared-side batches. (Editing one existing card
-/// stays in `CardEditorView`.)
+/// The unified card composer — adds one card or many. Opens with `startCount` cards (1 by default)
+/// and grows via "Add Card"; a single card shows no "Card N" header so it reads like a plain editor.
+/// Front is single-line (so pasting a list splits it into cards, and Return adds the next); Back is
+/// the rich multi-line field. The Add-Card split button's menu reuses the previous card's front/back
+/// for shared-side batches, and the counter adds several at once. (Editing one existing card stays in
+/// `CardEditorView`.)
 struct BulkAddView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -34,7 +34,7 @@ struct BulkAddView: View {
     @State private var sharedValue = ""
     @FocusState private var focused: Field?
 
-    init(deck: Deck, section: String = "", startCount: Int = 3) {
+    init(deck: Deck, section: String = "", startCount: Int = 1) {
         self.deck = deck
         _rows = State(initialValue: (0..<max(startCount, 1)).map { _ in Row() })
         _section = State(initialValue: section)
