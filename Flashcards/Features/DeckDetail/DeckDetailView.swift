@@ -407,8 +407,6 @@ struct DeckDetailView: View {
                 Spacer(minLength: 0)
             }
 
-            if deck.cardCount > 0 { maturityStrip }
-
             PrimaryButton(
                 title: studyButtonTitle,
                 systemImage: "play.fill",
@@ -429,7 +427,7 @@ struct DeckDetailView: View {
     }
 
     private func stat(value: String, label: String, tint: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .center, spacing: 2) {
             Text(value)
                 .font(.system(.title, design: .rounded, weight: .bold))
                 .foregroundStyle(tint)
@@ -452,29 +450,6 @@ struct DeckDetailView: View {
         let recall = result.units >= 3 ? result.recall : nil
         return RetentionRing(recall: recall, phrase: retentionHorizon.phrase) {
             retentionHorizonRaw = retentionHorizon.next.rawValue
-        }
-    }
-
-    /// This deck's card maturity — the actionable, per-deck slice of "Insights".
-    private var maturityStrip: some View {
-        let insights = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:])
-        return VStack(alignment: .leading, spacing: 8) {
-            // No hover popover here — the New / Learning / Mature counts are printed in the legend
-            // just below, and "Cards"/"Due" sit right above, so a popover would be redundant.
-            MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount, showsPopover: false)
-            HStack(spacing: Theme.Spacing.m) {
-                maturityLegend("New", Theme.accent, insights.newCount)
-                maturityLegend("Learning", Theme.learning, insights.learningCount)
-                maturityLegend("Mature", Theme.success, insights.matureCount)
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private func maturityLegend(_ label: String, _ color: Color, _ count: Int) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text("\(label) \(count)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
         }
     }
 
