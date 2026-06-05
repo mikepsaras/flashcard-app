@@ -400,10 +400,11 @@ struct DeckDetailView: View {
             }
 
             HStack(alignment: .center, spacing: Theme.Spacing.l) {
+                // Recall ring leads on the left; Cards/Due sit beside it, left-aligned (no lonely gap).
+                if deck.cardCount > 0 { retentionRing }
                 stat(value: "\(deck.cardCount)", label: "Cards")
                 stat(value: "\(deck.dueCount)", label: "Due", tint: deck.dueCount > 0 ? Theme.accent : .secondary)
-                Spacer(minLength: Theme.Spacing.m)
-                if deck.cardCount > 0 { retentionRing }
+                Spacer(minLength: 0)
             }
 
             if deck.cardCount > 0 { maturityStrip }
