@@ -80,20 +80,21 @@ struct MultilineField: View {
                 .font(Typography.body)
                 .scrollContentBackground(.hidden)
                 #if os(macOS)
-                .background(OverlayScroller())   // native overlay scroller (fades); iOS uses the default
+                .background(TextEditorConfigurator())   // overlay scroller (fades) + zeroed text inset
                 #endif
                 .frame(minHeight: minHeight)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
                 .fieldBox()
                 .overlay(alignment: .topLeading) {
-                    // Native-style placeholder: gone as soon as you focus the field or type.
+                    // Native-style placeholder: gone as soon as you focus the field or type. Its inset
+                    // matches where the editor actually draws text so it sits exactly on the cursor.
                     if text.isEmpty && !isFocused && !placeholder.isEmpty {
                         Text(placeholder)
                             .font(Typography.body)
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 13)
-                            .padding(.top, 14)
+                            .padding(.horizontal, placeholderInset.x)
+                            .padding(.top, placeholderInset.y)
                             .allowsHitTesting(false)
                     }
                 }
@@ -101,32 +102,54 @@ struct MultilineField: View {
         .onAppear { if autofocus { isFocused = true } }
         .onChange(of: refocus) { _, _ in isFocused = true }
     }
+
+    /// Inset of the placeholder, matched to where the TextEditor actually draws text so the two
+    /// coincide. x = the editor's 8pt padding + the text container's 5pt line-fragment padding.
+    /// y differs by platform: macOS zeroes the NSTextView text-container inset (see
+    /// `TextEditorConfigurator`), so text sits at the 6pt padding; iOS's UITextView adds its own
+    /// 8pt top inset on top of that 6pt.
+    private var placeholderInset: (x: CGFloat, y: CGFloat) {
+        #if os(macOS)
+        (13, 6)
+        #else
+        (13, 14)
+        #endif
+    }
 }
 
 #if os(macOS)
-/// Makes the macOS `TextEditor`'s scroller behave like a native **overlay** scroller — it appears
-/// only while scrolling and fades out, instead of the persistent legacy scrollbar a mouse user gets
-/// by default (`.scrollIndicators(.hidden)` has no effect on TextEditor there). Drop in as a
-/// `.background` of the editor; it finds the editor's own scroll view (guarding on an NSTextView
-/// document so it can't grab an outer ScrollView) and switches it to overlay + autohide.
-struct OverlayScroller: NSViewRepresentable {
+/// Tunes the macOS `TextEditor`'s backing NSTextView / scroll view, which SwiftUI doesn't expose:
+/// (1) a native **overlay** scroller that appears only while scrolling and fades out (instead of the
+/// persistent legacy scrollbar a mouse user gets by default; `.scrollIndicators(.hidden)` has no
+/// effect on TextEditor), and (2) a **zeroed text-container inset** so text starts at the editor's
+/// own top padding — letting the placeholder overlay line up exactly with the cursor / typed text.
+/// Drop in as a `.background` of the editor; it finds the editor's own scroll view (guarding on an
+/// NSTextView document so it can't grab an outer ScrollView).
+struct TextEditorConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> Probe { Probe() }
-    func updateNSView(_ nsView: Probe, context: Context) { nsView.applyOverlayStyle() }
+    func updateNSView(_ nsView: Probe, context: Context) { nsView.configure() }
 
-    /// Applies the style during the layout pass (before drawing) and on window-entry, rather than
-    /// a runloop-later `DispatchQueue.main.async` — which let the legacy scroller paint for one
-    /// frame first (a brief flicker on open).
+    /// Configures during the layout pass (before drawing) and on window-entry, rather than a
+    /// runloop-later `DispatchQueue.main.async` — which let the unstyled scroller / inset paint for
+    /// one frame first (a brief flicker on open).
     final class Probe: NSView {
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); applyOverlayStyle() }
-        override func layout() { super.layout(); applyOverlayStyle() }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); configure() }
+        override func layout() { super.layout(); configure() }
 
-        func applyOverlayStyle() {
-            guard let scroll = OverlayScroller.textScrollView(behind: self) else { return }
+        func configure() {
+            guard let scroll = TextEditorConfigurator.textScrollView(behind: self) else { return }
             scroll.scrollerStyle = .overlay      // thin overlay that fades, regardless of mouse/trackpad
             scroll.autohidesScrollers = true     // …and only shows while actively scrolling
             scroll.hasVerticalScroller = true
             scroll.verticalScroller?.isHidden = false
             scroll.hasHorizontalScroller = false
+            // Zero the text-container inset so text starts at the editor's own 6pt top padding (the
+            // default macOS inset pushed it down, leaving the placeholder ~8pt too low). 5pt
+            // line-fragment padding keeps the horizontal gap the placeholder's 13pt is matched to.
+            if let textView = scroll.documentView as? NSTextView {
+                textView.textContainerInset = NSSize(width: 0, height: 0)
+                textView.textContainer?.lineFragmentPadding = 5
+            }
         }
     }
 
