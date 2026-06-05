@@ -84,9 +84,12 @@ struct StatsContentView: View {
     @AppStorage(DefaultsKey.retentionGraph) private var retentionGraphRaw = RetentionGraph.spread.rawValue
     private var retentionGraph: RetentionGraph { RetentionGraph(rawValue: retentionGraphRaw) ?? .spread }
 
-    // Optional "Your library" breakdowns — collapsed by default, expansion persisted.
-    @AppStorage(DefaultsKey.insightsShowCategories) private var showCategories = false
-    @AppStorage(DefaultsKey.insightsShowSections) private var showSections = false
+    /// The hero recall ring's look-ahead (now / 1wk / 1mo) — tap the ring to cycle.
+    @AppStorage(DefaultsKey.insightsRecallHorizon) private var recallHorizonRaw = RetentionHorizon.now.rawValue
+    private var recallHorizon: RetentionHorizon { RetentionHorizon(rawValue: recallHorizonRaw) ?? .now }
+
+    /// Which "Your library" breakdown is shown — tap the chip to cycle the available groupings.
+    @AppStorage(DefaultsKey.insightsLibraryGrouping) private var libraryGroupingRaw = LibraryGrouping.deck.rawValue
 
     private struct Stat: Identifiable {
         var id: String { label }
@@ -117,8 +120,10 @@ struct StatsContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             hero
+            // Four equal, flexible columns so the tiles always fill the width — no trailing dead
+            // space (adaptive columns left empty slots at wide sizes).
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Spacing.m)],
+                columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.m), count: 4),
                 spacing: Theme.Spacing.m
             ) {
                 ForEach(overviewStats) { tile($0) }
@@ -145,7 +150,9 @@ struct StatsContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
-            heroRing
+            RetentionRing(recall: insights.predictedRecallByHorizon[recallHorizon.days], phrase: recallHorizon.phrase) {
+                recallHorizonRaw = recallHorizon.next.rawValue
+            }
         }
         .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -167,30 +174,6 @@ struct StatsContentView: View {
         var parts = ["\(insights.dueNow) due today"]
         if insights.reviewsAllTime > 0 { parts.append("\(insights.reviewsAllTime) reviewed all-time") }
         return parts.joined(separator: " · ")
-    }
-
-    /// Non-interactive predicted-recall ring for the hero (the tappable, horizon-cycling one lives on
-    /// the deck page; here it's just a summary of recall right now).
-    private var heroRing: some View {
-        let recall = insights.predictedRetention
-        let pct = Int(((recall ?? 0) * 100).rounded())
-        let tint = retentionTint(recall)
-        return VStack(spacing: 5) {
-            ZStack {
-                Circle().stroke(Color.primary.opacity(0.1), lineWidth: 6)
-                if let recall {
-                    Circle().trim(from: 0, to: max(recall, 0.001))
-                        .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                }
-                Text(recall == nil ? "—" : "\(pct)%")
-                    .font(.system(size: 15, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(tint)
-            }
-            .frame(width: 60, height: 60)
-            Text("recall now").font(.system(size: 10, weight: .medium, design: .rounded)).foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(recall == nil ? "Predicted recall: no data yet" : "Predicted recall now: \(pct) percent")
     }
 
     // MARK: Tiles
@@ -412,49 +395,73 @@ struct StatsContentView: View {
         .cardSurface(cornerRadius: Theme.Radius.tile)
     }
 
-    /// "Your library" — overall maturity, the per-deck table (always), and optional By-category /
-    /// By-section disclosures (collapsed by default; each only offered when it has substance). Folds
-    /// what used to be three separate cards (By deck · By section · Card maturity) into one.
+    /// "Your library" — overall maturity, then one breakdown table that the user cycles through the
+    /// available groupings (By deck / By category / By section) by tapping a chip, like the Memory
+    /// graph. Folds what used to be three separate cards (By deck · By section · Card maturity) into one.
     private var libraryCard: some View {
-        card("Your library") {
-            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                VStack(alignment: .leading, spacing: 8) {
-                    MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
-                    HStack(spacing: Theme.Spacing.l) {
-                        legend("New", Theme.Maturity.new, insights.newCount)
-                        legend("Learning", Theme.Maturity.learning, insights.learningCount)
-                        legend("Mature", Theme.Maturity.mature, insights.matureCount)
-                        Spacer(minLength: 0)
-                    }
-                }
-                if !insights.perDeck.isEmpty {
-                    Divider()
-                    VStack(spacing: Theme.Spacing.s) {
-                        ForEach(sortedDecks) { deckRow($0) }
-                    }
-                }
-                if insights.categories.count >= 2 {
-                    breakdownDisclosure("By category", isExpanded: $showCategories) {
-                        ForEach(sortedCategories) { categoryRow($0) }
-                    }
-                }
-                if !insights.sections.isEmpty {
-                    breakdownDisclosure("By section", isExpanded: $showSections) {
-                        ForEach(sortedSections) { sectionRow($0) }
-                    }
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            HStack(spacing: Theme.Spacing.s) {
+                Text("Your library").font(Typography.headline).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                if availableGroupings.count > 1 { groupingChip }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                MaturityBar(new: insights.newCount, learning: insights.learningCount, mature: insights.matureCount)
+                HStack(spacing: Theme.Spacing.l) {
+                    legend("New", Theme.Maturity.new, insights.newCount)
+                    legend("Learning", Theme.Maturity.learning, insights.learningCount)
+                    legend("Mature", Theme.Maturity.mature, insights.matureCount)
+                    Spacer(minLength: 0)
                 }
             }
+            Divider()
+            VStack(spacing: Theme.Spacing.s) { groupingRows }
+        }
+        .padding(Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: Theme.Radius.tile)
+    }
+
+    @ViewBuilder private var groupingRows: some View {
+        switch resolvedGrouping {
+        case .deck:     ForEach(sortedDecks) { deckRow($0) }
+        case .category: ForEach(sortedCategories) { categoryRow($0) }
+        case .section:  ForEach(sortedSections) { sectionRow($0) }
         }
     }
 
-    /// A collapsed-by-default sub-breakdown inside "Your library" (the optional By-category / By-section).
-    @ViewBuilder private func breakdownDisclosure<C: View>(_ title: String, isExpanded: Binding<Bool>, @ViewBuilder _ rows: @escaping () -> C) -> some View {
-        Divider()
-        DisclosureGroup(isExpanded: isExpanded) {
-            VStack(spacing: Theme.Spacing.s) { rows() }.padding(.top, Theme.Spacing.s)
-        } label: {
-            Text(title).font(.system(.subheadline, design: .rounded, weight: .medium)).foregroundStyle(.secondary)
+    /// The groupings worth offering: By deck always; By category only with ≥2 categories; By section
+    /// only when some deck uses sections.
+    private var availableGroupings: [LibraryGrouping] {
+        var groupings: [LibraryGrouping] = [.deck]
+        if insights.categories.count >= 2 { groupings.append(.category) }
+        if !insights.sections.isEmpty { groupings.append(.section) }
+        return groupings
+    }
+    private var resolvedGrouping: LibraryGrouping {
+        let g = LibraryGrouping(rawValue: libraryGroupingRaw) ?? .deck
+        return availableGroupings.contains(g) ? g : .deck
+    }
+
+    /// Tappable chip naming the current grouping; tap cycles through `availableGroupings`.
+    private var groupingChip: some View {
+        Button { cycleGrouping() } label: {
+            HStack(spacing: 3) {
+                Text(resolvedGrouping.label)
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .semibold))
+            }
+            .font(.system(.caption, design: .rounded, weight: .medium))
+            .foregroundStyle(Theme.accent)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(Theme.accent.opacity(Theme.Opacity.fillSubtle), in: Capsule())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Grouped \(resolvedGrouping.label). Tap to change.")
+    }
+    private func cycleGrouping() {
+        let avail = availableGroupings
+        let idx = avail.firstIndex(of: resolvedGrouping) ?? 0
+        libraryGroupingRaw = avail[(idx + 1) % avail.count].rawValue
     }
 
     private var sortedCategories: [StudyInsights.CategoryStat] {
@@ -561,21 +568,6 @@ struct StatsContentView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label): \(section.totalCards) cards, \(section.due) due, \(maturePct) percent mature")
-    }
-
-    private func card<Content: View>(_ title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Typography.headline).foregroundStyle(.secondary)
-                if let subtitle {
-                    Text(subtitle).font(Typography.caption).foregroundStyle(.secondary)
-                }
-            }
-            content()
-        }
-        .padding(Theme.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardSurface(cornerRadius: Theme.Radius.tile)
     }
 
     private func legend(_ label: String, _ color: Color, _ count: Int) -> some View {
@@ -772,6 +764,20 @@ struct ActivityHeatmap: View {
         case 3:  Theme.accent.opacity(0.72)
         case 4:  Theme.accent
         default: Color.primary.opacity(0.08)
+        }
+    }
+}
+
+/// Which "Your library" breakdown the Insights card shows; tap the chip to cycle. Persisted via
+/// `@AppStorage`.
+enum LibraryGrouping: Int, CaseIterable, Identifiable {
+    case deck = 0, category = 1, section = 2
+    var id: Int { rawValue }
+    var label: String {
+        switch self {
+        case .deck:     "By deck"
+        case .category: "By category"
+        case .section:  "By section"
         }
     }
 }
