@@ -30,6 +30,7 @@ struct DeckEditorView: View {
     @State private var section: String
     @State private var showSectionsInStudy: Bool
     @State private var showingAI = false
+    @State private var showingIconPicker = false
     @State private var showAdvanced: Bool
 
     init(mode: DeckEditorMode) {
@@ -80,32 +81,31 @@ struct DeckEditorView: View {
                     LabeledField(label: "Name", placeholder: "Deck name", text: $name)
                     LabeledField(label: "Description", placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Icon")
-                            .font(.system(.subheadline, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        iconGrid
+                    VStack(alignment: .leading, spacing: 8) {
+                        LabeledField(label: "Category", placeholder: "e.g. Languages", text: $section)
+                        caption("Groups decks in the library. Each deck belongs to one category; leave blank for Uncategorized.")
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Color")
-                            .font(.system(.subheadline, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        colorGrid
-                            .disabled(isThemedIcon)
-                            .opacity(isThemedIcon ? 0.35 : 1)
-                        if isThemedIcon { caption("Color is set by the EU theme.") }
+                    // Compact appearance row: an icon-picker popover beside the color swatches, so the
+                    // create flow stays short instead of scrolling past the whole icon set.
+                    HStack(alignment: .top, spacing: 24) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            fieldLabel("Icon")
+                            iconButton
+                        }
+                        VStack(alignment: .leading, spacing: 10) {
+                            fieldLabel("Color")
+                            colorGrid
+                                .disabled(isThemedIcon)
+                                .opacity(isThemedIcon ? 0.35 : 1)
+                        }
                     }
+                    if isThemedIcon { caption("Color is set by the EU theme.") }
 
                     // Advanced settings are collapsed by default for a new deck (a clean,
                     // name-and-color create flow) and expanded when editing an existing one.
                     DisclosureGroup(isExpanded: $showAdvanced) {
                         VStack(alignment: .leading, spacing: 22) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                LabeledField(label: "Section", placeholder: "e.g. Languages", text: $section)
-                                caption("Groups decks in the library. Each deck belongs to one section; leave blank for Uncategorized.")
-                            }
-
                             VStack(alignment: .leading, spacing: 8) {
                                 toggleRow("Show answer label", $showLabel.animation())
                                 if showLabel {
@@ -198,6 +198,28 @@ struct DeckEditorView: View {
 
     private func caption(_ text: String) -> some View {
         Text(text).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 2)
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text).font(.system(.subheadline, weight: .medium)).foregroundStyle(.secondary)
+    }
+
+    /// Compact icon control: shows the current icon; tapping opens the full grid in a popover, so the
+    /// editor isn't dominated by the whole icon set.
+    private var iconButton: some View {
+        Button { showingIconPicker = true } label: {
+            HStack(spacing: 8) {
+                DeckIconChip(icon: icon, colorHex: colorHex, size: 30)
+                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .fieldBox()
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showingIconPicker, arrowEdge: .bottom) {
+            ScrollView { iconGrid.padding(16) }
+                .frame(width: 320, height: 360)
+        }
     }
 
     private var isThemedIcon: Bool { DeckIconPreset.isThemed(icon) }
