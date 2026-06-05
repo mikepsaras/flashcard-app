@@ -1,46 +1,23 @@
 import SwiftUI
 import SwiftData
 
-enum CardEditorMode: Identifiable {
-    case new
-    case edit(Card)
-
-    var id: String {
-        switch self {
-        case .new: "new"
-        case .edit(let card): card.id.uuidString
-        }
-    }
-}
-
+/// Edits a single existing card (term + definition) with a live Markdown/LaTeX preview. Adding
+/// cards goes through the bulk composer (`BulkAddView`), so this view is edit-only.
 struct CardEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
     let deck: Deck
-    let mode: CardEditorMode
+    let card: Card
 
     @State private var term: String
     @State private var definition: String
-    /// Bumped to (re)focus the Front field — on open (new card) and after "Add & Add Another".
-    @State private var frontRefocus = 0
 
-    init(deck: Deck, mode: CardEditorMode) {
+    init(deck: Deck, card: Card) {
         self.deck = deck
-        self.mode = mode
-        switch mode {
-        case .new:
-            _term = State(initialValue: "")
-            _definition = State(initialValue: "")
-        case .edit(let card):
-            _term = State(initialValue: card.term)
-            _definition = State(initialValue: card.definition)
-        }
-    }
-
-    private var isEditing: Bool {
-        if case .edit = mode { return true }
-        return false
+        self.card = card
+        _term = State(initialValue: card.term)
+        _definition = State(initialValue: card.definition)
     }
 
     private var canSave: Bool {
@@ -51,36 +28,24 @@ struct CardEditorView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    MultilineField(label: "Front", placeholder: "Front of the card", text: $term, minHeight: 56, autofocus: !isEditing, refocus: frontRefocus)
+                    MultilineField(label: "Front", placeholder: "Front of the card", text: $term, minHeight: 56)
                     MultilineField(label: "Back", placeholder: "Back of the card", text: $definition, minHeight: 120)
 
                     if !term.isEmpty || !definition.isEmpty {
                         markdownPreview
-                    }
-
-                    // New cards only: save and immediately start a fresh blank card for fast
-                    // sequential entry (focus jumps back to Front).
-                    if !isEditing {
-                        Button { save(addAnother: true) } label: {
-                            Label("Add & Add Another", systemImage: "plus.circle")
-                                .font(Typography.callout)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(canSave ? Theme.accent : .secondary)
-                        .disabled(!canSave)
                     }
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Theme.groupedBackground)
-            .navigationTitle(isEditing ? "Edit Card" : "New Card")
+            .navigationTitle("Edit Card")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isEditing ? "Save" : "Add") { save() }.disabled(!canSave)
+                    Button("Save") { save() }.disabled(!canSave)
                 }
             }
         }
@@ -125,24 +90,11 @@ struct CardEditorView: View {
             + Text(". See Help ▸ Formatting.")
     }
 
-    private func save(addAnother: Bool = false) {
-        let trimmedTerm = term.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch mode {
-        case .new:
-            context.insert(Card(term: trimmedTerm, definition: definition, deck: deck, sortOrder: deck.nextSortOrder(inSection: "")))
-        case .edit(let card):
-            card.term = trimmedTerm
-            card.definition = definition
-            card.modifiedAt = .now
-        }
+    private func save() {
+        card.term = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        card.definition = definition
+        card.modifiedAt = .now
         context.saveAndPersist(touching: deck)
-        if addAnother {
-            // Keep the sheet open for the next card; reset and refocus the Front field.
-            term = ""
-            definition = ""
-            frontRefocus += 1
-        } else {
-            dismiss()
-        }
+        dismiss()
     }
 }

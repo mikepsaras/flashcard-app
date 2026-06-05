@@ -254,18 +254,9 @@ struct StatsContentView: View {
 
     /// A tappable chip naming the current graph; tapping it (or the graph itself) cycles to the next.
     private var graphChip: some View {
-        Button { cycleRetentionGraph() } label: {
-            HStack(spacing: 3) {
-                Text(retentionGraph.label)
-                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .semibold))
-            }
-            .font(.system(.caption, design: .rounded, weight: .medium))
-            .foregroundStyle(Theme.accent)
-            .padding(.horizontal, 9).padding(.vertical, 4)
-            .background(Theme.accent.opacity(Theme.Opacity.fillSubtle), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Graph: \(retentionGraph.label). Tap to change.")
+        CycleChip(label: retentionGraph.label,
+                  accessibility: "Graph: \(retentionGraph.label). Tap to change.",
+                  onCycle: cycleRetentionGraph)
     }
 
     private func cycleRetentionGraph() {
@@ -323,23 +314,12 @@ struct StatsContentView: View {
 
     private func retentionLegendItem(_ value: String, _ label: String, _ source: Double?) -> some View {
         HStack(spacing: 6) {
-            Circle().fill(retentionTint(source)).frame(width: 9, height: 9)
-            Text(value).font(.system(.callout, design: .rounded, weight: .bold)).monospacedDigit().foregroundStyle(retentionTint(source))
+            Circle().fill(Theme.retentionTint(source)).frame(width: 9, height: 9)
+            Text(value).font(.system(.callout, design: .rounded, weight: .bold)).monospacedDigit().foregroundStyle(Theme.retentionTint(source))
             Text(label).font(Typography.caption).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(value) \(label)")
-    }
-
-    /// Green when retention is strong, amber when it's slipping — a quick read on memory health.
-    /// Unmeasured (`nil`) is neutral grey so an empty mature stat doesn't look alarming.
-    private func retentionTint(_ value: Double?) -> Color {
-        guard let value else { return .secondary }
-        switch value {
-        case 0.9...:    return Theme.success
-        case 0.8..<0.9: return Theme.accent
-        default:        return .orange
-        }
     }
 
     /// Past calendar years (before this year) that have at least one reviewed day — the year-picker
@@ -445,18 +425,9 @@ struct StatsContentView: View {
 
     /// Tappable chip naming the current grouping; tap cycles through `availableGroupings`.
     private var groupingChip: some View {
-        Button { cycleGrouping() } label: {
-            HStack(spacing: 3) {
-                Text(resolvedGrouping.label)
-                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .semibold))
-            }
-            .font(.system(.caption, design: .rounded, weight: .medium))
-            .foregroundStyle(Theme.accent)
-            .padding(.horizontal, 9).padding(.vertical, 4)
-            .background(Theme.accent.opacity(Theme.Opacity.fillSubtle), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Grouped \(resolvedGrouping.label). Tap to change.")
+        CycleChip(label: resolvedGrouping.label,
+                  accessibility: "Grouped \(resolvedGrouping.label). Tap to change.",
+                  onCycle: cycleGrouping)
     }
     private func cycleGrouping() {
         let avail = availableGroupings
@@ -469,32 +440,10 @@ struct StatsContentView: View {
     }
 
     private func categoryRow(_ cat: StudyInsights.CategoryStat) -> some View {
-        let maturePct = cat.totalCards > 0 ? cat.matureCount * 100 / cat.totalCards : 0
-        return HStack(spacing: 10) {
+        groupingRow(name: cat.name, due: cat.due, total: cat.totalCards,
+                    new: cat.newCount, learning: cat.learningCount, mature: cat.matureCount) {
             Image(systemName: "folder.fill").font(.system(size: 15)).foregroundStyle(Theme.accent).frame(width: 22)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Text(cat.name).font(Typography.body).lineLimit(1)
-                    Spacer(minLength: 4)
-                    if cat.due > 0 {
-                        Text("\(cat.due) due")
-                            .font(.system(.caption2, design: .rounded, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(.orange.opacity(Theme.Opacity.fillSubtle), in: Capsule())
-                    }
-                    Text("\(cat.totalCards)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
-                }
-                HStack(spacing: 8) {
-                    MaturityBar(new: cat.newCount, learning: cat.learningCount, mature: cat.matureCount).frame(height: 6)
-                    Text("\(maturePct)%")
-                        .font(.system(.caption2, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.secondary).monospacedDigit().frame(width: 34, alignment: .trailing)
-                }
-            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(cat.name): \(cat.totalCards) cards, \(cat.due) due, \(maturePct) percent mature")
     }
 
     /// Most actionable first: most due, then largest.
@@ -503,34 +452,10 @@ struct StatsContentView: View {
     }
 
     private func deckRow(_ deck: StudyInsights.DeckStat) -> some View {
-        let maturePct = deck.totalCards > 0 ? deck.matureCount * 100 / deck.totalCards : 0
-        return HStack(spacing: 10) {
+        groupingRow(name: deck.name, due: deck.due, total: deck.totalCards,
+                    new: deck.newCount, learning: deck.learningCount, mature: deck.matureCount) {
             DeckIconChip(icon: deck.icon, colorHex: deck.colorHex, size: 22)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Text(deck.name).font(Typography.body).lineLimit(1)
-                    Spacer(minLength: 4)
-                    if deck.due > 0 {
-                        Text("\(deck.due) due")
-                            .font(.system(.caption2, design: .rounded, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(.orange.opacity(Theme.Opacity.fillSubtle), in: Capsule())
-                    }
-                    Text("\(deck.totalCards)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
-                }
-                HStack(spacing: 8) {
-                    MaturityBar(new: deck.newCount, learning: deck.learningCount, mature: deck.matureCount)
-                        .frame(height: 6)
-                    Text("\(maturePct)%")
-                        .font(.system(.caption2, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.secondary).monospacedDigit()
-                        .frame(width: 34, alignment: .trailing)
-                }
-            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(deck.name): \(deck.totalCards) cards, \(deck.due) due, \(maturePct) percent mature")
     }
 
     /// Most actionable first: most due, then largest.
@@ -539,35 +464,40 @@ struct StatsContentView: View {
     }
 
     private func sectionRow(_ section: StudyInsights.SectionStat) -> some View {
-        let maturePct = section.totalCards > 0 ? section.matureCount * 100 / section.totalCards : 0
         let label = section.section.isEmpty ? "\(section.deckName) · No section" : "\(section.deckName) · \(section.section)"
-        return HStack(spacing: 10) {
+        return groupingRow(name: label, due: section.due, total: section.totalCards,
+                           new: section.newCount, learning: section.learningCount, mature: section.matureCount) {
             DeckIconChip(icon: section.icon, colorHex: section.colorHex, size: 22)
+        }
+    }
+
+    /// One row of the "Your library" breakdown — icon · name · due pill · card count, then a maturity
+    /// bar with its percent. Shared by By-deck / By-category / By-section, which differ only in the
+    /// leading icon and the name.
+    private func groupingRow<Icon: View>(
+        name: String, due: Int, total: Int, new: Int, learning: Int, mature: Int,
+        @ViewBuilder icon: () -> Icon
+    ) -> some View {
+        let maturePct = total > 0 ? mature * 100 / total : 0
+        return HStack(spacing: 10) {
+            icon()
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
-                    Text(label).font(Typography.body).lineLimit(1)
+                    Text(name).font(Typography.body).lineLimit(1)
                     Spacer(minLength: 4)
-                    if section.due > 0 {
-                        Text("\(section.due) due")
-                            .font(.system(.caption2, design: .rounded, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(.orange.opacity(Theme.Opacity.fillSubtle), in: Capsule())
-                    }
-                    Text("\(section.totalCards)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
+                    if due > 0 { DuePill(count: due) }
+                    Text("\(total)").font(Typography.caption).foregroundStyle(.secondary).monospacedDigit()
                 }
                 HStack(spacing: 8) {
-                    MaturityBar(new: section.newCount, learning: section.learningCount, mature: section.matureCount)
-                        .frame(height: 6)
+                    MaturityBar(new: new, learning: learning, mature: mature).frame(height: 6)
                     Text("\(maturePct)%")
                         .font(.system(.caption2, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.secondary).monospacedDigit()
-                        .frame(width: 34, alignment: .trailing)
+                        .foregroundStyle(.secondary).monospacedDigit().frame(width: 34, alignment: .trailing)
                 }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(section.totalCards) cards, \(section.due) due, \(maturePct) percent mature")
+        .accessibilityLabel("\(name): \(total) cards, \(due) due, \(maturePct) percent mature")
     }
 
     private func legend(_ label: String, _ color: Color, _ count: Int) -> some View {
@@ -583,61 +513,38 @@ struct StatsContentView: View {
     }
 }
 
-/// A hand-drawn bar chart of reviews coming due over the next two weeks (overdue folds into the
-/// first bar, "Now"). Plain SwiftUI — no Charts dependency — so it renders under `ImageRenderer`.
-struct DueForecastChart: View {
-    let forecast: [Int]
-    var now: Date = .now
-    var calendar: Calendar = .current
+/// The small "N due" capsule shown in the library breakdown rows.
+private struct DuePill: View {
+    let count: Int
+    var body: some View {
+        Text("\(count) due")
+            .font(.system(.caption2, design: .rounded, weight: .bold))
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(.orange.opacity(Theme.Opacity.fillSubtle), in: Capsule())
+    }
+}
 
-    private var maxCount: Int { max(forecast.max() ?? 0, 1) }
+/// A small tappable capsule naming the current choice with a cycle glyph; tapping cycles to the
+/// next. Shared by the Insights Memory-graph and library-grouping chips.
+private struct CycleChip: View {
+    let label: String
+    let accessibility: String
+    let onCycle: () -> Void
 
     var body: some View {
-        GeometryReader { geo in
-            let n = max(forecast.count, 1)
-            let spacing: CGFloat = 5
-            let barWidth = max((geo.size.width - spacing * CGFloat(n - 1)) / CGFloat(n), 1)
-            let areaHeight = geo.size.height - 28   // room for the value + day labels
-            HStack(alignment: .bottom, spacing: spacing) {
-                ForEach(forecast.indices, id: \.self) { i in
-                    column(i, width: barWidth, areaHeight: areaHeight)
-                }
+        Button(action: onCycle) {
+            HStack(spacing: 3) {
+                Text(label)
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .semibold))
             }
+            .font(.system(.caption, design: .rounded, weight: .medium))
+            .foregroundStyle(Theme.accent)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(Theme.accent.opacity(Theme.Opacity.fillSubtle), in: Capsule())
         }
-        .frame(height: 126)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(summary)
-    }
-
-    private func column(_ i: Int, width: CGFloat, areaHeight: CGFloat) -> some View {
-        let count = forecast[i]
-        let height = count > 0 ? max(areaHeight * CGFloat(count) / CGFloat(maxCount), 4) : 0
-        let isToday = i == 0
-        return VStack(spacing: 3) {
-            Spacer(minLength: 0)
-            Text(count > 0 ? "\(count)" : " ")
-                .font(.system(size: 8, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary).lineLimit(1)
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(isToday ? Color.orange : Theme.accent.opacity(0.55))
-                .frame(width: width, height: height)
-            Text(label(i))
-                .font(.system(size: 8, weight: isToday ? .bold : .regular))
-                .foregroundStyle(isToday ? .primary : .secondary)
-                .lineLimit(1)
-        }
-    }
-
-    private func label(_ i: Int) -> String {
-        guard i > 0 else { return "Now" }
-        let date = calendar.date(byAdding: .day, value: i, to: now) ?? now
-        let weekday = calendar.component(.weekday, from: date)
-        return String(calendar.veryShortWeekdaySymbols[weekday - 1])
-    }
-
-    private var summary: String {
-        let total = forecast.reduce(0, +)
-        return "Due forecast: \(total) review\(total == 1 ? "" : "s") over the next \(forecast.count) days."
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibility)
     }
 }
 

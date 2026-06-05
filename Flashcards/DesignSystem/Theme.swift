@@ -17,6 +17,18 @@ enum Theme {
     /// single place instead of a scattered `Color(hex: "#FF9500")`.
     static let learning = Color(hex: "#FF9500")
 
+    /// Recall/retention-quality color: green at ≥90%, accent at 80–90%, amber below — and neutral
+    /// grey when there's nothing measured yet. Shared by the Insights legend and the deck-page
+    /// recall ring so the thresholds live in one place.
+    static func retentionTint(_ value: Double?) -> Color {
+        guard let value else { return .secondary }
+        switch value {
+        case 0.9...:    return success
+        case 0.8..<0.9: return accent
+        default:        return .orange
+        }
+    }
+
     /// Card-maturity ramp: New → Learning → Mature as one accent hue at rising strength, so the
     /// Insights bars read as a calm progression (echoing the activity heatmap's opacity steps)
     /// rather than three competing colors next to each deck's own swatch.

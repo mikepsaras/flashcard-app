@@ -28,7 +28,7 @@ struct DeckDetailView: View {
 
     private var otherDecks: [Deck] { allDecks.filter { $0.id != deck.id } }
 
-    @State private var cardEditor: CardEditorMode?
+    @State private var editingCard: Card?
     @State private var showingDeckEditor = false
     @State private var showingImporter = false
     @State private var showingExporter = false
@@ -233,8 +233,8 @@ struct DeckDetailView: View {
 
     private var withSheets: some View {
         coreContent
-        .sheet(item: $cardEditor) { mode in
-            CardEditorView(deck: deck, mode: mode)
+        .sheet(item: $editingCard) { card in
+            CardEditorView(deck: deck, card: card)
         }
         .sheet(isPresented: $showingDeckEditor) {
             DeckEditorView(mode: .edit(deck))
@@ -509,7 +509,7 @@ struct DeckDetailView: View {
         // gesture — so it doesn't disable the native onMove drag (FB7367473).
         .onKeyPress(.return) {
             guard let card = singleSelectedCard else { return .ignored }
-            cardEditor = .edit(card)
+            editingCard = card
             return .handled
         }
         .onKeyPress(keys: ["a"]) { press in
@@ -523,7 +523,7 @@ struct DeckDetailView: View {
         .background(TableDoubleClickHandler(onDoubleClick: { row in
             let rows = flatRows
             guard rows.indices.contains(row), case .card(let card) = rows[row] else { return }
-            cardEditor = .edit(card)
+            editingCard = card
         }, onRowDrag: {
             // A drag started in the table: drop any selected-but-not-dragged card so it doesn't
             // flicker mid-drag. moveFlat re-selects the dropped card when the drag finishes.
@@ -537,7 +537,7 @@ struct DeckDetailView: View {
             .contentShape(Rectangle())
             .tag(card.id)
             .contextMenu {
-                Button { cardEditor = .edit(card) } label: { Label("Edit", systemImage: "pencil") }
+                Button { editingCard = card } label: { Label("Edit", systemImage: "pencil") }
                 Button { duplicate(card) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
                 Divider()
                 Menu("Move to Section") {
@@ -565,7 +565,7 @@ struct DeckDetailView: View {
         if editMode?.wrappedValue.isEditing == true {
             row
         } else {
-            row.onTapGesture { cardEditor = .edit(card) }
+            row.onTapGesture { editingCard = card }
         }
         #else
         // macOS: NO tap gesture of ANY kind — even a *simultaneous* double-tap makes SwiftUI route
@@ -889,14 +889,7 @@ struct RetentionRing: View {
 
     private var pct: Int { Int(((recall ?? 0) * 100).rounded()) }
     /// Green when strong, accent when solid, amber when slipping; grey when unmeasured.
-    private var tint: Color {
-        guard let recall else { return .secondary }
-        switch recall {
-        case 0.9...:    return Theme.success
-        case 0.8..<0.9: return Theme.accent
-        default:        return .orange
-        }
-    }
+    private var tint: Color { Theme.retentionTint(recall) }
 
     private static let captionFont = Font.system(size: 10, weight: .medium, design: .rounded)
     /// The longest "recall …" caption across all horizons — used to reserve a fixed width so cycling

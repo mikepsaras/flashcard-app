@@ -2,6 +2,15 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// RFC-4180 field escaping shared by the deck CSV and the Insights CSV: quote when the field holds a
+/// delimiter, quote, newline, or leading/trailing whitespace (so an export→import round-trip is
+/// lossless), doubling embedded quotes.
+private func csvEscape(_ s: String) -> String {
+    let needsQuoting = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")
+        || s.first?.isWhitespace == true || s.last?.isWhitespace == true
+    return needsQuoting ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+}
+
 /// Term/definition CSV (RFC 4180-style): quotes fields containing commas, quotes,
 /// or newlines, and doubles embedded quotes.
 enum CSVCodec {
@@ -19,23 +28,11 @@ enum CSVCodec {
         let withSections = cards.contains { !$0.section.isEmpty }
         var out = withSections ? "Term,Definition,Section\n" : "Term,Definition\n"
         for card in cards {
-            var line = escape(card.term) + "," + escape(card.definition)
-            if withSections { line += "," + escape(card.section) }
+            var line = csvEscape(card.term) + "," + csvEscape(card.definition)
+            if withSections { line += "," + csvEscape(card.section) }
             out += line + "\n"
         }
         return out
-    }
-
-    private static func escape(_ s: String) -> String {
-        // Quote when the field contains a delimiter/quote/newline, OR has leading or
-        // trailing whitespace — otherwise import would trim that whitespace away and
-        // the export→import round-trip wouldn't be lossless.
-        let needsQuoting = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")
-            || s.first?.isWhitespace == true || s.last?.isWhitespace == true
-        if needsQuoting {
-            return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-        }
-        return s
     }
 
     // MARK: Import
@@ -155,7 +152,7 @@ struct CSVDocument: FileDocument {
 enum StatsCSV {
     static func export(insights: StudyInsights, reviewsByDay: [String: Int], correctByDay: [String: Int]) -> String {
         var out = ""
-        func row(_ fields: [String]) { out += fields.map(escape).joined(separator: ",") + "\n" }
+        func row(_ fields: [String]) { out += fields.map(csvEscape).joined(separator: ",") + "\n" }
         func blank() { out += "\n" }
 
         row(["Metric", "Value"])
@@ -204,10 +201,5 @@ enum StatsCSV {
     private static func pct(_ value: Double?) -> String {
         guard let value else { return "" }
         return "\(Int((value * 100).rounded()))%"
-    }
-
-    private static func escape(_ s: String) -> String {
-        let needsQuoting = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")
-        return needsQuoting ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
     }
 }
