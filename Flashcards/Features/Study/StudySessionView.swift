@@ -153,7 +153,7 @@ struct StudySessionView: View {
         VStack(spacing: Theme.Spacing.m) {
             // Dashed progress at the top, right under the title bar — one capsule per card, tinted by
             // the grade it got. (The session count is in the title subtitle; recall lives on the deck page.)
-            ProgressDashBar(colors: session.gradeLog.map(\.studyColor), total: session.total)
+            ProgressDashBar(grades: session.gradeLog, total: session.total)
                 .padding(.horizontal, Theme.Spacing.m)
                 .padding(.top, Theme.Spacing.xs)
 

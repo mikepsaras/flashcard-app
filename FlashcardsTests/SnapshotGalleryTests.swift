@@ -196,6 +196,23 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/29_retention_ring.png"))
     }
 
+    @Test func renderProgressBar() throws {
+        let dashes: [Grade] = [.again, .again, .good, .hard, .good, .good, .again]   // 7 answered of 81
+        let greenBig = Array(repeating: Grade.good, count: 70) + Array(repeating: .again, count: 20)
+        let redBig = Array(repeating: Grade.again, count: 60) + Array(repeating: .good, count: 30)
+        let view = VStack(alignment: .leading, spacing: 20) {
+            Text("81 cards → one dash each").font(.caption).foregroundStyle(.secondary)
+            ProgressDashBar(grades: dashes, total: 81)
+            Text("180 cards, mostly correct → green % bar").font(.caption).foregroundStyle(.secondary)
+            ProgressDashBar(grades: greenBig, total: 180)
+            Text("180 cards, mostly wrong → red % bar").font(.caption).foregroundStyle(.secondary)
+            ProgressDashBar(grades: redBig, total: 180)
+        }
+        .frame(width: 900).padding(24).background(Theme.windowBackground)
+        try Snapshot.write(view, size: CGSize(width: 940, height: 250), name: "33_progress_bar")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/33_progress_bar.png"))
+    }
+
     @Test func renderFourButtonStudyScreen() throws {
         let (container, _, plan) = try makeContext(fourButton: true)
         try Snapshot.write(
