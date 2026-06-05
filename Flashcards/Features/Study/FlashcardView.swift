@@ -90,13 +90,14 @@ struct FlashcardView: View {
     @ViewBuilder private func cardTextBody(_ text: String, _ size: CGFloat) -> some View {
         Group {
             if text.isEmpty {
-                Text("—").multilineTextAlignment(.center)
+                Text("—")
+                    .font(.system(size: size, weight: .semibold, design: .rounded))
+                    .multilineTextAlignment(.center)
             } else {
-                // Renders inline styling + bullet lists; centers a plain term, left-aligns lists.
-                MarkdownText(text: text, centered: true)
+                // Full markdown + LaTeX; centers a plain term, left-aligns structural content.
+                MarkdownText(text: text, baseSize: size, weight: .semibold, centered: true)
             }
         }
-        .font(.system(size: size, weight: .semibold, design: .rounded))
         .foregroundStyle(.primary)
     }
 

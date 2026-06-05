@@ -293,6 +293,46 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/30_math.png"))
     }
 
+    @Test func renderMarkdownKitchenSink() throws {
+        let md = """
+        # Heading one
+        ## Heading two
+        Some **bold**, *italic*, `code`, and a [link](https://example.com).
+
+        Inline math $E = mc^2$ sits in the sentence.
+
+        $$\\int_0^1 x^2\\,dx = \\frac{1}{3}$$
+
+        - bullet one
+        - bullet two
+          - nested bullet
+        1. first
+        2. second
+
+        > A blockquote with $a^2 + b^2$.
+
+        ```
+        let x = 42
+        ```
+        """
+        try Snapshot.write(
+            MarkdownText(text: md, baseSize: 17)
+                .padding(30).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(Theme.windowBackground),
+            size: CGSize(width: 600, height: 820), name: "31_markdown")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/31_markdown.png"))
+    }
+
+    @Test func renderMathCard() throws {
+        try Snapshot.write(
+            FlashcardView(term: "Quadratic Formula",
+                          definition: "$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$",
+                          isShowingDefinition: true, onTap: {})
+                .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 1040, height: 820), name: "32_math_card")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/32_math_card.png"))
+    }
+
     @Test func renderBulletListCard() throws {
         // Verifies block-level bullet lists render on the card face (left-aligned, hanging indent)
         // rather than showing the raw `*` markers. Rendered large (≈ a real macOS study card, where

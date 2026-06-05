@@ -21,42 +21,75 @@ import Foundation
         #expect(String(Markdown.attributed("line one\nline two").characters).contains("\n"))
     }
 
-    // MARK: Block parsing (bullet lists)
+    // MARK: Inline runs (text vs. inline math)
 
-    @Test func parsesAsteriskBullets() {
-        let blocks = Markdown.blocks("* one\n* two")
-        #expect(blocks.count == 2)
-        #expect(blocks.allSatisfy { $0.isListItem })
-        #expect(blocks[0].content == "one")
-        #expect(blocks[0].marker == "•")
+    @Test func splitsInlineMath() {
+        #expect(Markdown.inlineRuns("a $x^2$ b") == [.text("a "), .math("x^2"), .text(" b")])
     }
 
-    @Test func parsesDashAndPlusBullets() {
-        #expect(Markdown.blocks("- a").first?.isListItem == true)
-        #expect(Markdown.blocks("+ b").first?.isListItem == true)
+    @Test func plainTextHasNoMath() {
+        #expect(Markdown.inlineRuns("just text") == [.text("just text")])
     }
 
-    /// `*italic*` is inline emphasis, not a list marker (no whitespace after the `*`).
-    @Test func inlineEmphasisIsNotABullet() {
-        #expect(Markdown.blocks("*italic*").first?.isListItem == false)
-        #expect(Markdown.blocks("**bold**").first?.isListItem == false)
-        #expect(Markdown.blocks("-5 degrees").first?.isListItem == false)
+    @Test func escapedDollarIsLiteral() {
+        #expect(Markdown.inlineRuns("it costs \\$5 today") == [.text("it costs $5 today")])
     }
 
-    @Test func plainLinesAreParagraphs() {
-        #expect(Markdown.blocks("hello\nworld").allSatisfy { !$0.isListItem })
+    @Test func dollarInCodeSpanIsNotMath() {
+        // The backtick span keeps `$5` as literal text, not a math delimiter.
+        #expect(Markdown.inlineRuns("use `$5` here") == [.text("use `$5` here")])
     }
 
-    @Test func mixesParagraphsAndBullets() {
-        let blocks = Markdown.blocks("Steps:\n* first\n* second")
-        #expect(blocks.count == 3)
-        #expect(blocks[0].isListItem == false)
-        #expect(blocks[1].isListItem && blocks[2].isListItem)
+    // MARK: Block parsing
+
+    @Test func parsesBulletList() {
+        let blocks = Markdown.blocks("- one\n- two")
+        #expect(blocks == [.bulletList([.init(blocks: [.paragraph("one")]), .init(blocks: [.paragraph("two")])])])
     }
 
-    /// The one-line preview normalizes a leading bullet marker to "•".
+    @Test func parsesOrderedList() {
+        guard case let .orderedList(start, items) = Markdown.blocks("3. a\n4. b").first else {
+            Issue.record("expected ordered list"); return
+        }
+        #expect(start == 3)
+        #expect(items.count == 2)
+    }
+
+    @Test func parsesHeading() {
+        #expect(Markdown.blocks("## Title").first == .heading(level: 2, source: "Title"))
+        // No space after #'s → not a heading.
+        #expect(Markdown.blocks("##notitle").first == .paragraph("##notitle"))
+    }
+
+    @Test func parsesDisplayMath() {
+        #expect(Markdown.blocks("$$x^2 + y^2 = z^2$$").first == .displayMath("x^2 + y^2 = z^2"))
+    }
+
+    @Test func parsesFencedCode() {
+        #expect(Markdown.blocks("```swift\nlet x = 1\n```").first == .code(language: "swift", code: "let x = 1"))
+    }
+
+    @Test func parsesBlockquote() {
+        #expect(Markdown.blocks("> quoted").first == .quote([.paragraph("quoted")]))
+    }
+
+    @Test func nestsLists() {
+        // A more-indented bullet under an item becomes a nested list inside that item.
+        guard case let .bulletList(items) = Markdown.blocks("- outer\n  - inner").first, let first = items.first else {
+            Issue.record("expected bullet list"); return
+        }
+        #expect(first.blocks.contains { if case .bulletList = $0 { true } else { false } })
+    }
+
+    @Test func inlineEmphasisIsNotAList() {
+        #expect(Markdown.blocks("*italic*") == [.paragraph("*italic*")])
+        #expect(Markdown.blocks("-5 degrees") == [.paragraph("-5 degrees")])
+    }
+
+    /// The one-line preview normalizes a leading bullet marker to "•" and strips math delimiters.
     @Test func previewLineNormalizesBullet() {
         #expect(String(Markdown.previewLine("* Identify the problem").characters) == "• Identify the problem")
         #expect(String(Markdown.previewLine("plain text").characters) == "plain text")
+        #expect(String(Markdown.previewLine("area is $x^2$").characters) == "area is x^2")
     }
 }

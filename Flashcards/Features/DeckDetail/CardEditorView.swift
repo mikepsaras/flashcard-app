@@ -97,10 +97,11 @@ struct CardEditorView: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 8) {
                 if !term.isEmpty {
-                    MarkdownText(text: term).font(Typography.headline)
+                    MarkdownText(text: term, baseSize: 17, weight: .semibold)
                 }
                 if !definition.isEmpty {
-                    MarkdownText(text: definition).font(Typography.body).foregroundStyle(.secondary)
+                    MarkdownText(text: definition, baseSize: 16, mathColor: MathColor.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
