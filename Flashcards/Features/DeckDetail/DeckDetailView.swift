@@ -114,12 +114,18 @@ struct DeckDetailView: View {
         .background(Theme.groupedBackground)
         #if os(macOS)
         .background {
-            // ⌘⇧N opens the multi-row add grid (plain ⌘N stays the app-global New Deck).
-            Button("") { bulkAddSection = ""; showingBulkAdd = true }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-                .opacity(0)
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
+            // Window-scoped shortcuts (plain ⌘N stays the app-global New Deck):
+            //   ⌘⇧N  → New Card (single editor)
+            //   ⌥⌘⇧N → Add Multiple Cards (the multi-row grid)
+            ZStack {
+                Button("") { cardEditor = .new }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                Button("") { bulkAddSection = ""; showingBulkAdd = true }
+                    .keyboardShortcut("n", modifiers: [.command, .shift, .option])
+            }
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
         }
         #endif
         .navigationTitle(deck.displayName)
