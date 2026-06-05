@@ -97,21 +97,23 @@ struct DeckLibraryView: View {
                 deckPendingDeletion = deck
             }
         }
-        // New-deck (+) and sort controls pinned to the TOP of the sidebar.
+        // Icon-only + (new deck) and sort controls at the TOP of the sidebar, like the iPhone
+        // toolbar (sort leading, + trailing).
         .safeAreaInset(edge: .top, spacing: 0) {
-            HStack(spacing: 0) {
-                addMenu
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                Spacer()
+            HStack {
                 sortMenu
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
-                    .fixedSize()
+                    .labelStyle(.iconOnly)
+                Spacer()
+                addMenu
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .labelStyle(.iconOnly)
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.vertical, 8)
+            .font(.system(size: 15, weight: .medium))
+            .padding(.horizontal, Theme.Spacing.m)
+            .padding(.vertical, 7)
             .background(.bar)
             .overlay(alignment: .bottom) { Divider() }
         }
