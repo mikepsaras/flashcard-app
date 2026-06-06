@@ -193,7 +193,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 - **Acceptance:** tags persist round-trip; editable in card editors; CloudKit-safe default.
 - **Deps:** migrate in S1.6. Used by S4.1, S6.3, S7.3.
 
-### ☑ S1.5 — `extra` / example field on `Card`  · **Effort:** S · **Phase:** 1 · _shipped (model+codec); rendering deferred to the features that populate it_
+### ☑ S1.5 — `extra` / example field on `Card`  · **Effort:** S · **Phase:** 1 · _shipped end-to-end: model+codec, plus the answer-side `ElaborationPanel` + a card-editor field (B1)_
 - **Why:** Foundation for application/elaboration cards (worked examples, why/how) shown on
   the answer side — bridges recall toward transfer.
 - **Touches:** `Card.swift` (`extra: String = ""`); `DeckCodec`; `FlashcardView` answer face
@@ -299,12 +299,13 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   Markdown+LaTeX intact; unit + snapshot tested.
 - **Deps:** S3.1.
 
-### ☐ S3.3 — Type-in-answer  · **Effort:** M · **Phase:** 2
+### ☑ S3.3 — Type-in-answer  · **Effort:** M · **Phase:** 2 · _shipped: per-deck "Type the answer" mode; `AnswerCheck` normalized comparison; ✓/✗ hint feeds the normal self-grade_
 - **Why:** Forces *production*, not just recognition; cheap active-recall upgrade.
-- **Touches:** `FlashcardView`/`StudyControlsBar` input; answer comparison (normalized);
-  grade derives from match (still user-confirmable).
-- **Acceptance:** typed answer compared (case/space/diacritic-tolerant, configurable);
-  near-miss shown; feeds the normal grade path.
+- **Touches:** `StudySessionView` answer field + result row; `AnswerCheck` (case/space-tolerant,
+  trailing-period-forgiving, accents significant); `Deck.typeToAnswer` (v3) + deck-editor toggle;
+  the learner still self-grades (the match is a hint, not the grade).
+- **Acceptance:** typed answer compared case/space-insensitively; near-miss shown; feeds the
+  normal grade path; cloze cards keep their fill-in style. Unit + snapshot tested.
 - **Deps:** S3.1.
 
 ### ☐ S3.4 — Sibling burying  · **Effort:** S · **Phase:** 2/3
@@ -368,10 +369,11 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 ### ☐ S5.5 — Optional critic pass  · **Effort:** M · **Phase:** 3
 - Second model call grades its own cards against the rules. **Trade-off:** ~2× cost; opt-in.
 
-### ☐ S5.6 — Application / elaboration generation  · **Effort:** M · **Phase:** 2
+### ☑ S5.6 — Application / elaboration generation  · **Effort:** M · **Phase:** 2 · _shipped: a "Test understanding" intent (why/how/apply/predict) that fills the `extra` field; "Key facts" stays the default_
 - **Why:** Generate why/how/worked-example cards (transfer), using the `extra` field.
-- **Touches:** prompt variants in `CardJSON.swift`; optional per-deck "intent" (recall vs
-  apply). **Deps:** S1.5, S5.1.
+- **Touches:** `GenerationIntent` + a card-style picker in `AIGenerationView`; recall vs
+  understanding prompts in `CardJSON.swift`; `extra` parsed (tolerant keys) and saved;
+  editable in `CardReviewList`. **Deps:** S1.5, S5.1.
 
 ---
 
