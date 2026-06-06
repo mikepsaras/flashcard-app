@@ -308,7 +308,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   normal grade path; cloze cards keep their fill-in style. Unit + snapshot tested.
 - **Deps:** S3.1.
 
-### ☐ S3.4 — Sibling burying  · **Effort:** S · **Phase:** 2/3
+### ☑ S3.4 — Sibling burying  · **Effort:** S · **Phase:** 2/3 · _shipped: `StudySession.buryingSiblings` (stable greedy, default gap 3) applied per-segment in `prioritizingReviews` + the practice path; requeue insertion nudged past a same-card neighbor. No-op for forward-only decks._
 - **Why:** Don't show cards from the same source (cloze siblings / forward+reverse) back-to-
   back — leaks answers, reduces value.
 - **Touches:** queue builders / interleave ordering (S0.3).

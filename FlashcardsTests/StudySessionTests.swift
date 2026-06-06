@@ -442,4 +442,64 @@ final class StudySessionTests {
         #expect(deck.dueReviewItems.allSatisfy { $0.card.id == active.id })
         #expect(deck.dueCount == 1)
     }
+
+    // MARK: Sibling burying (S3.4)
+
+    /// True when no two neighbors in the queue come from the same card (forward+reverse, or a
+    /// requeued copy) — the user-visible guarantee of sibling burying.
+    private func noAdjacentSiblings(_ items: [ReviewItem]) -> Bool {
+        zip(items, items.dropFirst()).allSatisfy { $0.card.id != $1.card.id }
+    }
+
+    @Test func buryingSiblingsSeparatesForwardAndReverseOfSameCard() {
+        // Born adjacent, the way `Deck.allReviewItems` emits them: [c0_f, c0_r, c1_f, c1_r, …].
+        let cards = makeCards(6)
+        let items = cards.flatMap {
+            [ReviewItem(card: $0, direction: .forward), ReviewItem(card: $0, direction: .reverse)]
+        }
+        #expect(noAdjacentSiblings(items) == false)   // clustered before burying
+
+        let out = StudySession.buryingSiblings(items, minGap: 3)
+        #expect(out.count == items.count)                       // nothing lost or duplicated
+        #expect(Set(out.map(\.id)) == Set(items.map(\.id)))
+        #expect(noAdjacentSiblings(out))                        // siblings pulled apart
+    }
+
+    @Test func buryingSiblingsIsNoOpWhenEveryCardAppearsOnce() {
+        // The common forward-only case: distinct cards, nothing to bury — order is preserved exactly,
+        // so the interleave/priority ordering upstream is never disturbed.
+        let items = forwardItems(5)
+        let out = StudySession.buryingSiblings(items, minGap: 3)
+        #expect(out.map(\.id) == items.map(\.id))
+    }
+
+    @Test func buryingSiblingsKeepsAllItemsWhenTooShortToSeparate() {
+        // Two units of one card and nothing to wedge between them — can't separate, but never drops one.
+        let card = makeCards(1)[0]
+        let items = [ReviewItem(card: card, direction: .forward), ReviewItem(card: card, direction: .reverse)]
+        let out = StudySession.buryingSiblings(items, minGap: 3)
+        #expect(out.count == 2)
+        #expect(Set(out.map(\.id)) == Set(items.map(\.id)))
+    }
+
+    @Test func missedCardRequeueAvoidsLandingNextToItsSibling() {
+        // A's forward unit is missed; its natural requeue slot is exactly where A's reverse sits, so
+        // the copy is nudged past it rather than landing back-to-back with its sibling.
+        let cards = makeCards(5)
+        let a = cards[0]
+        let items: [ReviewItem] = [
+            ReviewItem(card: a, direction: .forward),          // 0 — graded, missed
+            ReviewItem(card: cards[1], direction: .forward),   // 1
+            ReviewItem(card: cards[2], direction: .forward),   // 2
+            ReviewItem(card: cards[3], direction: .forward),   // 3
+            ReviewItem(card: a, direction: .reverse),          // 4 — sibling at the natural requeue spot
+            ReviewItem(card: cards[4], direction: .forward),   // 5
+        ]
+        let session = StudySession(items: items, trackLearning: true)
+        #expect(session.isPractice == false)        // due cards ⇒ a real run, so a miss requeues
+        session.grade(known: false)                 // miss A-forward
+
+        #expect(session.total == 7)                 // the copy was inserted…
+        #expect(noAdjacentSiblings(session.items))  // …but not adjacent to A-reverse
+    }
 }

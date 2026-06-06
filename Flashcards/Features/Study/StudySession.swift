@@ -97,9 +97,12 @@ final class StudySession {
         let allowedNew = newPerDay > 0 ? max(0, newPerDay - introducedToday) : newUnits.count
         let cappedNew = Array(newUnits.prefix(allowedNew))
         // Interleave each segment independently so reviews still precede new (S0.2) while related
-        // cards within each are spread apart (S0.3). No key ⇒ keep the incoming due order.
-        guard let keyFn else { return reviews + cappedNew }
-        return interleaved(reviews, by: keyFn) + interleaved(cappedNew, by: keyFn)
+        // cards within each are spread apart (S0.3); then bury siblings within each segment so a
+        // card's forward and reverse units don't sit back-to-back (S3.4). Burying per segment —
+        // not across the concatenation — preserves reviews-before-new. No key ⇒ keep due order.
+        let orderedReviews = keyFn.map { interleaved(reviews, by: $0) } ?? reviews
+        let orderedNew = keyFn.map { interleaved(cappedNew, by: $0) } ?? cappedNew
+        return buryingSiblings(orderedReviews) + buryingSiblings(orderedNew)
     }
 
     /// Round-robins items across groups keyed by `keyFn`, preserving each group's internal order, so
@@ -123,6 +126,36 @@ final class StudySession {
                 out.append(group[offset]); added = true
             }
             offset += 1
+        }
+        return out
+    }
+
+    /// Spreads "siblings" — review items from the same card, i.e. a forward and a reverse unit —
+    /// at least `minGap` positions apart, so a card's two directions never sit back-to-back and
+    /// leak each other's answer (S3.4). A stable greedy: at each slot, emit the earliest remaining
+    /// item whose card hasn't appeared within the last `minGap` slots, deferring a too-close sibling
+    /// until there's room; when the tail is nothing but too-close siblings (the queue is too short
+    /// to separate them) it falls back to original order — burying "where the queue length allows."
+    /// A no-op when every card appears once (the common, forward-only case). Pure + static ⇒
+    /// unit-testable. Default gap 3 ≈ a couple of cards between siblings.
+    static func buryingSiblings(_ items: [ReviewItem], minGap: Int = 3) -> [ReviewItem] {
+        guard minGap > 1, items.count > 2 else { return items }
+        var remaining = items
+        var out: [ReviewItem] = []
+        out.reserveCapacity(items.count)
+        var lastPlaced: [UUID: Int] = [:]   // card id ⇒ the out index where it last landed
+        while !remaining.isEmpty {
+            // The earliest item far enough from its previous placement; fall back to the head when
+            // every remaining item is still too close (unavoidable clustering at the tail).
+            var pick = 0
+            for (i, item) in remaining.enumerated() {
+                if let last = lastPlaced[item.card.id], out.count - last < minGap { continue }
+                pick = i
+                break
+            }
+            let chosen = remaining.remove(at: pick)
+            lastPlaced[chosen.card.id] = out.count
+            out.append(chosen)
         }
         return out
     }
@@ -159,7 +192,9 @@ final class StudySession {
         // chronic miss can't balloon the run. Computed against the pre-insert queue/index.
         let willRequeue = trackLearning && !isPractice && !grade.isCorrect
             && (requeueCounts[item.id] ?? 0) < Self.maxRequeuesPerItem
-        let requeuedAt = willRequeue ? min(index + 1 + Self.requeueSpacing, items.count) : nil
+        let requeuedAt: Int? = willRequeue
+            ? buriedRequeueIndex(forCard: card.id, target: min(index + 1 + Self.requeueSpacing, items.count))
+            : nil
 
         history.append(Move(
             item: item,
@@ -257,6 +292,22 @@ final class StudySession {
             gradeLog.removeAll()
             isShowingDefinition = false
         }
+    }
+
+    /// Where to re-insert a missed card's copy: its natural spot (`requeueSpacing` ahead), nudged
+    /// forward past any same-card neighbor so the copy doesn't land adjacent to its sibling — the
+    /// other direction of the same card, or an earlier requeued copy (S3.4). Bounded by the queue
+    /// end, where a preceding sibling is accepted (nothing left to separate it with). Forward-only
+    /// decks never trip the check, so their requeue spacing is unchanged.
+    private func buriedRequeueIndex(forCard cardID: UUID, target: Int) -> Int {
+        var at = max(0, min(target, items.count))
+        while at < items.count {
+            let prevIsSibling = at > 0 && items[at - 1].card.id == cardID
+            let nextIsSibling = items[at].card.id == cardID
+            if !prevIsSibling && !nextIsSibling { return at }
+            at += 1
+        }
+        return at
     }
 
     private func advance() {

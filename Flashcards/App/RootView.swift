@@ -230,7 +230,8 @@ struct RootView: View {
             // new quota yields an empty (finished) run — never a practice pass that bypasses it.
             if dueSorted.isEmpty {
                 let all = deck.allReviewItems
-                return interleaveBy.map { StudySession.interleaved(all, by: $0) } ?? all
+                let ordered = interleaveBy.map { StudySession.interleaved(all, by: $0) } ?? all
+                return StudySession.buryingSiblings(ordered)   // keep forward+reverse apart in practice too (S3.4)
             }
             return StudySession.prioritizingReviews(
                 dueSorted,
