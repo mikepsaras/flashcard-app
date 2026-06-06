@@ -85,4 +85,37 @@ final class DeveloperToolsTests {
         #expect(!StudyStats.matureReviewsByDay(defaults: defaults).isEmpty)
         #expect(!StudyStats.matureCorrectByDay(defaults: defaults).isEmpty)
     }
+
+    // MARK: Phase 0 testing foundation
+
+    @Test func phase0ScenarioBuildsObservableDecks() {
+        let r = DeveloperTools.loadPhase0Scenario(into: context)
+        try? context.save()
+        #expect(r.decks == 3)
+        let decks = ((try? context.fetch(FetchDescriptor<Deck>())) ?? []).filter { $0.section == DeveloperTools.testSection }
+
+        // New Flood (S0.2): 60 cards, all new (never reviewed) so the throttle applies.
+        let flood = decks.first { $0.name.contains("New Flood") }!
+        #expect(flood.cardArray.count == 60)
+        #expect(flood.cardArray.allSatisfy { $0.lastReviewedAt == nil })
+
+        // Interleave Demo (S0.3): three sections, every card due.
+        let interleave = decks.first { $0.name.contains("Interleave") }!
+        #expect(Set(interleave.cardArray.map(\.section)) == ["Alpha", "Beta", "Gamma"])
+        #expect(interleave.cardArray.allSatisfy { $0.isDue(.forward) && $0.lastReviewedAt != nil })
+
+        // Miss & Requeue (S0.1): a handful of due, already-reviewed cards (a real, non-practice run).
+        let requeue = decks.first { $0.name.contains("Requeue") }!
+        #expect(requeue.cardArray.count == 8)
+        #expect(requeue.cardArray.allSatisfy { $0.isDue(.forward) })
+    }
+
+    @Test func sampleLinterCardsTriggerEveryWarning() {
+        let kinds = Set(CardQualityLinter.warnings(for: DeveloperTools.sampleCardsWithIssues()).values.flatMap { $0 })
+        #expect(kinds.contains(.circular))
+        #expect(kinds.contains(.enumeration))
+        #expect(kinds.contains(.longAnswer))
+        #expect(kinds.contains(.shortAnswer))
+        #expect(kinds.contains(.duplicate))
+    }
 }

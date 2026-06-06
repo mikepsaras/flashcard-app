@@ -31,6 +31,9 @@ struct SettingsView: View {
     @State private var showingRemoveTestData = false
     @State private var stressDecks = 25
     @State private var stressCards = 200
+    @State private var showingLinterPreview = false
+    @State private var previewCards: [GeneratedCard] = []
+    @State private var previewIncluded: Set<UUID> = []
 
     private var reminderTime: Binding<Date> {
         Binding(
@@ -60,6 +63,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showingStressSheet) { stressSheet }
+        .sheet(isPresented: $showingLinterPreview) { linterPreviewSheet }
         .confirmationDialog("Seed review history?", isPresented: $showingSeedHistory, titleVisibility: .visible) {
             Button("Replace Statistics", role: .destructive) { runSeedHistory() }
             Button("Cancel", role: .cancel) {}
@@ -315,6 +319,8 @@ struct SettingsView: View {
     private var developerSection: some View {
         Section {
             Button { runLoadSample() } label: { Label("Load sample library", systemImage: "square.stack.3d.up.fill") }
+            Button { runLoadPhase0() } label: { Label("Load Phase 0 test set", systemImage: "flask.fill") }
+            Button { showingLinterPreview = true } label: { Label("Preview card linter (S0.4)", systemImage: "checklist") }
             Button { showingStressSheet = true } label: { Label("Stress test…", systemImage: "gauge.high") }
             Button { showingSeedHistory = true } label: { Label("Seed review history", systemImage: "calendar.badge.clock") }
             Button(role: .destructive) { showingRemoveTestData = true } label: { Label("Remove all test data", systemImage: "trash") }
@@ -325,7 +331,13 @@ struct SettingsView: View {
         } header: {
             Text("Developer")
         } footer: {
-            Text(devStatus ?? "Generates test decks under a “Test Data” section for stress + feature testing. “Show projected intervals” adds each grade’s next-review interval under the study buttons.")
+            VStack(alignment: .leading, spacing: 6) {
+                // Live queue readout — confirms the S0.2 throttle (watch this climb to the limit and
+                // stop) and the S0.3 toggle. Refreshes whenever this screen re-renders.
+                Text("New introduced today: **\(StudyStats.newCardsIntroducedToday())** of \(newCardsPerDay == 0 ? "∞" : String(newCardsPerDay))  ·  interleave \(interleaveStudy ? "on" : "off")")
+                    .monospacedDigit()
+                Text(devStatus ?? "“Load Phase 0 test set” builds three decks (under “Test Data”) for the new study-queue behaviors; “Preview card linter” shows the AI quality warnings without an API call. See PHASE0-TESTING.md.")
+            }
         }
     }
 
@@ -370,6 +382,31 @@ struct SettingsView: View {
         let r = DeveloperTools.loadSampleLibrary(into: context)
         context.saveAndPersist()
         devStatus = "Loaded \(r.decks) decks · \(r.cards) cards. Tip: also “Seed review history” for full Insights."
+    }
+
+    private func runLoadPhase0() {
+        let r = DeveloperTools.loadPhase0Scenario(into: context)
+        context.saveAndPersist()
+        devStatus = "Loaded \(r.decks) Phase 0 decks · \(r.cards) cards. Study them, then re-open this screen to watch the “new introduced today” counter. Tip: also “Seed review history” for the retention metrics."
+    }
+
+    /// Hosts the shared `CardReviewList` with deliberately-flawed sample cards, so the S0.4 quality
+    /// linter's warnings are visible without a live API call. Reseeded fresh on each open.
+    private var linterPreviewSheet: some View {
+        NavigationStack {
+            CardReviewList(cards: $previewCards, included: $previewIncluded)
+                .navigationTitle("Linter preview")
+                .onAppear {
+                    previewCards = DeveloperTools.sampleCardsWithIssues()
+                    previewIncluded = Set(previewCards.map(\.id))
+                }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done") { showingLinterPreview = false } }
+                }
+        }
+        #if os(macOS)
+        .frame(minWidth: 480, minHeight: 460)
+        #endif
     }
 
     private func runStress() {

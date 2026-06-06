@@ -37,6 +37,85 @@ enum DeveloperTools {
         return Result(decks: sampleSpecs.count, cards: cards)
     }
 
+    // MARK: Phase 0 feature scenario (study-queue testing)
+
+    /// Three purpose-built decks that make the Phase 0 study-queue changes directly observable. All
+    /// filed under the "Test Data" section, so `removeAllTestData` clears them. See PHASE0-TESTING.md.
+    /// (Seed review history separately for the S0.5 retention metrics, as with the sample library.)
+    @discardableResult
+    static func loadPhase0Scenario(into context: ModelContext, now: Date = .now) -> Result {
+        var cards = 0
+
+        // ① New Flood (S0.2): 60 brand-new cards, so the new-cards/day throttle is visible — studying
+        // introduces only up to the daily limit, then the deck reads "caught up" until tomorrow.
+        let flood = Deck(name: "① New Flood (S0.2)",
+                         deckDescription: "60 brand-new cards — exercises the new-cards/day throttle.",
+                         colorHex: "#FF9500", section: testSection)
+        context.insert(flood)
+        for i in 0..<60 {
+            context.insert(Card(term: "New term \(i + 1)", definition: "Definition for brand-new card \(i + 1).",
+                                deck: flood, section: "", sortOrder: i))   // untouched SM-2 defaults ⇒ new + due
+            cards += 1
+        }
+
+        // ② Interleave Demo (S0.3): three sections of DUE cards, so the on-card section chip should
+        // round-robin Alpha → Beta → Gamma instead of clustering by section.
+        let sectionNames = ["Alpha", "Beta", "Gamma"]
+        let interleave = Deck(name: "② Interleave Demo (S0.3)",
+                              deckDescription: "3 sections of due cards — watch the section chip alternate.",
+                              colorHex: "#34C759", section: testSection, sectionOrder: sectionNames)
+        context.insert(interleave)
+        var order = 0
+        for name in sectionNames {
+            for j in 0..<6 {
+                let card = Card(term: "\(name) card \(j + 1)", definition: "A due card in \(name).",
+                                deck: interleave, section: name, sortOrder: order)
+                makeDue(card, now: now)
+                context.insert(card); cards += 1; order += 1
+            }
+        }
+
+        // ③ Miss & Requeue (S0.1): a handful of due cards — mark one ✕ and it returns a few cards
+        // later this session (the run's "X of Y" total grows by one).
+        let requeue = Deck(name: "③ Miss & Requeue (S0.1)",
+                           deckDescription: "Due cards — mark one wrong and watch it come back this session.",
+                           colorHex: "#AF52DE", section: testSection)
+        context.insert(requeue)
+        for i in 0..<8 {
+            let card = Card(term: "Recall item \(i + 1)", definition: "Answer \(i + 1).", deck: requeue, section: "", sortOrder: i)
+            makeDue(card, now: now)
+            context.insert(card); cards += 1
+        }
+
+        return Result(decks: 3, cards: cards)
+    }
+
+    /// Marks a card due now with a short, already-reviewed schedule — so a study run counts as a real
+    /// review (not practice), which is what the requeue/interleave behaviors need.
+    private static func makeDue(_ card: Card, now: Date) {
+        let interval = Int.random(in: 4...15)
+        card.interval = interval
+        card.easeFactor = Double.random(in: 1.9...2.6)
+        card.repetitions = max(1, interval / 4)
+        card.dueDate = now
+        card.lastReviewedAt = now.addingTimeInterval(Double(-interval) * 86_400)
+    }
+
+    /// A spread of deliberately flawed cards (plus one clean one) for previewing the S0.4 quality
+    /// linter without a live API call — each triggers a different warning.
+    static func sampleCardsWithIssues() -> [GeneratedCard] {
+        [
+            GeneratedCard(term: "What is the capital of France?", definition: "Paris"),                     // clean
+            GeneratedCard(term: "Photosynthesis", definition: "Photosynthesis is the process plants use to make food."),  // circular
+            GeneratedCard(term: "List the noble gases", definition: "- Helium\n- Neon\n- Argon\n- Krypton\n- Xenon"),     // enumeration
+            GeneratedCard(term: "Explain the causes of World War I",
+                          definition: "Many interlocking causes including militarism, alliances, imperialism, and nationalism, plus the assassination of Archduke Franz Ferdinand, the July Crisis, rigid mobilization timetables, and a web of secret treaties that pulled the great powers into a continental war within a matter of weeks."),  // long
+            GeneratedCard(term: "Define osmosis", definition: ""),                                          // short
+            GeneratedCard(term: "What is HTTP?", definition: "A protocol"),                                 // duplicate ↓
+            GeneratedCard(term: "what is http", definition: "Hypertext Transfer Protocol"),                 // duplicate ↑
+        ]
+    }
+
     // MARK: Stress test (bulk)
 
     /// `decks` decks of `cardsPerDeck` cards each, with randomized SM-2 state and a sprinkling of
