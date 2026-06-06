@@ -1,15 +1,13 @@
 import SwiftUI
 
-/// The deck-detail header band: optional description + category chip, a predicted-recall ring with
-/// the Cards/Due stats, and the Study button. Reads the deck and reports the Study tap upward; owns
-/// only its recall look-ahead preference.
+/// The deck-detail header band: optional description + category chip, a **mastery** ring with the
+/// Cards/Due stats, and the Study button. Reads the deck and reports the Study tap upward.
 struct DeckHeaderView: View {
     let deck: Deck
     var onStudy: () -> Void
 
-    @AppStorage(DefaultsKey.retentionHorizon) private var retentionHorizonRaw = RetentionHorizon.week.rawValue
-    /// Per-deck Elo mastery (E7) — expected success on this deck's cards; nil until enough reviews.
-    /// Loaded off the render path in `.task`, so a large review log isn't parsed on every redraw.
+    /// Per-deck Elo mastery (E7) — your expected success on this deck's cards; nil until enough
+    /// reviews. Loaded off the render path in `.task`, so a large review log isn't parsed every redraw.
     @State private var mastery: (rate: Double, games: Int)?
 
     var body: some View {
@@ -30,13 +28,10 @@ struct DeckHeaderView: View {
             }
 
             HStack(alignment: .center, spacing: Theme.Spacing.l) {
-                // Recall ring leads on the left; Cards/Due sit beside it, left-aligned (no lonely gap).
-                if deck.cardCount > 0 { retentionRing }
+                // Mastery ring leads on the left; Cards/Due sit beside it, left-aligned (no lonely gap).
+                if deck.cardCount > 0 { MasteryRing(mastery: mastery?.rate) }
                 stat(value: "\(deck.cardCount)", label: "Cards")
                 stat(value: "\(deck.dueCount)", label: "Due", tint: deck.dueCount > 0 ? Theme.accent : .secondary)
-                if let mastery {
-                    stat(value: "\(Int((mastery.rate * 100).rounded()))%", label: "Mastery", tint: Theme.accent)
-                }
                 Spacer(minLength: 0)
             }
 
@@ -74,19 +69,41 @@ struct DeckHeaderView: View {
         }
     }
 
-    private var retentionHorizon: RetentionHorizon { RetentionHorizon(rawValue: retentionHorizonRaw) ?? .week }
+}
 
-    /// Predicted-recall ring — "how much of this deck will I remember {now / in 1 week / in 1 month}".
-    /// Tap to cycle the look-ahead. Needs a few reviewed cards before the number means anything, so a
-    /// barely-studied deck shows "—".
-    private var retentionRing: some View {
-        let result = StudyInsights.predictedRecall(
-            forCards: deck.cardArray, studyReversed: deck.studyReversed, daysAhead: retentionHorizon.days
-        )
-        let recall = result.units >= 3 ? result.recall : nil
-        return RetentionRing(recall: recall, phrase: retentionHorizon.phrase) {
-            retentionHorizonRaw = retentionHorizon.next.rawValue
+/// A compact circular gauge of a deck's **mastery** (Elo expected success, 0…1) for the deck header —
+/// the demonstrated-skill counterpart to recall. `nil` until there's enough reviewed data (renders
+/// "—"). Not tappable: mastery isn't time-relative the way predicted recall is.
+struct MasteryRing: View {
+    let mastery: Double?
+
+    private var pct: Int { Int(((mastery ?? 0) * 100).rounded()) }
+    private var tint: Color { Theme.retentionTint(mastery) }
+
+    var body: some View {
+        VStack(spacing: 5) {
+            ZStack {
+                Circle().stroke(Color.primary.opacity(0.1), lineWidth: 6)
+                if let mastery {
+                    Circle()
+                        .trim(from: 0, to: max(mastery, 0.001))
+                        .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                Text(mastery == nil ? "—" : "\(pct)%")
+                    .font(.system(size: 15, weight: .bold, design: .rounded)).monospacedDigit()
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 56, height: 56)
+            Text("mastery")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
         }
+        #if os(macOS)
+        .help("Mastery — your expected success on this deck's cards, from your review history. Needs a few reviews to appear.")
+        #endif
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(mastery == nil ? "Mastery: not enough reviews yet" : "Mastery: \(pct) percent")
     }
 }
 

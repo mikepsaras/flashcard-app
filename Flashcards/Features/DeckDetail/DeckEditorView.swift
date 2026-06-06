@@ -128,18 +128,18 @@ struct DeckEditorView: View {
                             }
 
                             VStack(alignment: .leading, spacing: 8) {
-                                toggleRow("Type the answer", $typeToAnswer)
-                                caption("Quiz yourself by typing the answer before it's revealed — stronger active recall, checked case-insensitively. Cloze cards keep their fill-in style.")
-                            }
-
-                            VStack(alignment: .leading, spacing: 8) {
                                 toggleRow("Show card sections in study", $showSectionsInStudy)
                                 caption("When a card is in a section, show that section's name as a chip on the card while studying.")
                             }
 
                             VStack(alignment: .leading, spacing: 8) {
-                                gradingRow
-                                caption("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler a finer signal.")
+                                answerModeRow
+                                // The button-count choice only applies to flip mode — typing infers the
+                                // grade — so it's nested here rather than sitting beside type-in.
+                                if !typeToAnswer { gradingRow }
+                                caption(typeToAnswer
+                                    ? "You type the answer; it's checked case-insensitively and the grade is set for you — right ⇒ Good, wrong ⇒ Again (you can override). Stronger active recall. Cloze cards keep their fill-in style."
+                                    : "Flip the card and grade yourself. Two buttons mark it known or not; four (Again / Hard / Good / Easy) give the scheduler a finer signal.")
                             }
 
                             VStack(alignment: .leading, spacing: 8) {
@@ -183,6 +183,26 @@ struct DeckEditorView: View {
         #if os(macOS)
         .frame(width: 460, height: 560)
         #endif
+    }
+
+    /// One coherent choice for how you answer this deck — flip & self-grade, or type the answer
+    /// (which infers the grade). Replaces the old separate type-in toggle + grading picker, which
+    /// overlapped confusingly (the button count did nothing under type-in).
+    private var answerModeRow: some View {
+        HStack {
+            Text("Answer mode").font(Typography.body)
+            Spacer(minLength: 8)
+            Picker("", selection: $typeToAnswer.animation()) {
+                Text("Flip & self-grade").tag(false)
+                Text("Type the answer").tag(true)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .fieldBox()
     }
 
     private var gradingRow: some View {

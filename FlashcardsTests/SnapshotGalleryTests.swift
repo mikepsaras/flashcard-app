@@ -78,6 +78,20 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/07_controls_four_button.png"))
     }
 
+    /// The deck-header mastery ring (replaces the predicted-recall ring) at a few values + empty.
+    @Test func renderMasteryRing() throws {
+        try Snapshot.write(
+            HStack(spacing: 32) {
+                MasteryRing(mastery: 0.42)
+                MasteryRing(mastery: 0.66)
+                MasteryRing(mastery: 0.91)
+                MasteryRing(mastery: nil)
+            }
+            .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 420, height: 150), name: "22_mastery_ring")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/22_mastery_ring.png"))
+    }
+
     /// Type-in study (B3): the answer field + Check button beneath the prompt card, before reveal.
     @Test func renderTypeInStudy() throws {
         let (container, deck, _) = try makeContext()
