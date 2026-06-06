@@ -22,6 +22,9 @@ final class Deck {
     /// "not explicitly chosen" — a deck saved before this setting existed — and inherits the
     /// legacy default (see `gradingMode`). Decks created in-app always store a concrete value.
     var gradingModeRaw: String = ""
+    /// Which scheduling algorithm this deck studies with (a `SchedulerKind` raw value). Empty ⇒ the
+    /// default, SM-2; `"fsrs"` opts the deck into FSRS. Defaulted ⇒ CloudKit-safe.
+    var schedulerRaw: String = ""
     /// The single section this deck belongs to; the library groups decks into sections by it.
     /// Empty ⇒ "Uncategorized". CloudKit-safe: defaulted.
     var section: String = ""
@@ -163,6 +166,15 @@ extension Deck {
             ?? GradingMode(rawValue: GradingMode.legacyDefaultRaw(defaults))
             ?? .twoButton
     }
+
+    /// The deck's scheduling algorithm, backed by `schedulerRaw` (empty ⇒ SM-2). Setting SM-2 stores
+    /// empty so the default re-encodes unchanged (no phantom edits).
+    var schedulerKind: SchedulerKind {
+        get { SchedulerKind(rawValue: schedulerRaw) ?? .sm2 }
+        set { schedulerRaw = newValue == .sm2 ? "" : newValue.rawValue }
+    }
+    /// The `Scheduler` instance for this deck's chosen algorithm.
+    var resolvedScheduler: Scheduler { schedulerKind.scheduler }
 
     /// Every review unit this deck offers: forward for each card, plus a reverse unit
     /// per card when reverse study is enabled.

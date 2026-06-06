@@ -80,4 +80,16 @@ import Foundation
         let b = FSRSScheduler().schedule(current: .initial(now: now), grade: .good, now: now, calendar: cal)
         #expect(a == b)
     }
+
+    @Test func seedsFromSM2HistoryNotColdStart() {
+        // A card with SM-2 history (interval 30, reviewed 30 days ago, no FSRS state) seeds stability
+        // from the interval (S2.5), not the rating's tiny cold-start stability.
+        let reviewedAt = cal.date(byAdding: .day, value: -30, to: now)!
+        let sm2State = SchedulingState(easeFactor: 2.5, interval: 30, repetitions: 5, dueDate: now,
+                                       stability: 0, difficulty: 0, lastReviewedAt: reviewedAt)
+        let seeded = FSRS.schedule(current: sm2State, grade: .good, now: now, calendar: cal)
+        let coldStart = firstReview(.good)
+        #expect(seeded.stability > coldStart.stability * 3)   // clearly seeded from the 30-day interval
+        #expect(seeded.interval > coldStart.interval)
+    }
 }

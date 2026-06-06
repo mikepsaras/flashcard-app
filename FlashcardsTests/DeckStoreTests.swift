@@ -240,6 +240,28 @@ import SwiftData
         #expect(c.extra == "")
     }
 
+    @Test func schedulerSelectionRoundTripsAndStampsVersion3() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "FSRS deck")
+        deck.schedulerKind = .fsrs
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 3)            // a v3 feature is in use
+        #expect(dto.scheduler == "fsrs")
+        let other = DeckStore.makeContainer()
+        #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).schedulerKind == .fsrs)
+    }
+
+    @Test func defaultSchedulerOmittedAndStaysVersion2() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "SM-2 deck")          // default scheduler
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.scheduler == nil)               // omitted → no phantom edit
+        #expect(dto.formatVersion == 2)
+        #expect(deck.schedulerKind == .sm2)
+    }
+
     // MARK: Section
 
     @Test func sectionRoundTrip() throws {

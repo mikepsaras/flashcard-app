@@ -22,3 +22,22 @@ struct SM2Scheduler: Scheduler {
         SM2.schedule(current: current, grade: grade, now: now, calendar: calendar)
     }
 }
+
+/// Which scheduling algorithm a deck uses, backed by `Deck.schedulerRaw`. SM-2 is the default; FSRS is
+/// opt-in per deck (beta) until it's validated against the upstream reference (see `FSRS`).
+enum SchedulerKind: String, CaseIterable, Identifiable, Sendable {
+    case sm2, fsrs
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .sm2:  "SM-2 (classic)"
+        case .fsrs: "FSRS (beta)"
+        }
+    }
+    var scheduler: Scheduler {
+        switch self {
+        case .sm2:  SM2Scheduler()
+        case .fsrs: FSRSScheduler()
+        }
+    }
+}

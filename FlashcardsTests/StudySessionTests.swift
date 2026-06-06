@@ -132,6 +132,21 @@ final class StudySessionTests {
         #expect(cards[0].repetitions == 1)
     }
 
+    @Test func sessionUsesTheDecksScheduler() {
+        // An FSRS deck's due card gets FSRS memory state when graded — proving the session resolves
+        // the scheduler per-item from the card's deck (SM-2 would leave stability at 0).
+        let context = container.mainContext
+        let deck = Deck(name: "FSRS"); deck.schedulerKind = .fsrs
+        context.insert(deck)
+        let card = Card(term: "a", definition: "b", deck: deck)   // new + due
+        context.insert(card)
+        try? context.save()
+
+        let session = StudySession(cards: [card], trackLearning: true)
+        session.grade(known: true)
+        #expect(card.stability > 0)
+    }
+
     @Test func undoRestoresCountsIndexAndSchedule() {
         let cards = makeCards(2)
         let card0 = cards[0]

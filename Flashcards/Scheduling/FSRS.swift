@@ -34,17 +34,21 @@ enum FSRS {
         let stability: Double
         let difficulty: Double
 
-        if current.stability <= 0 || current.lastReviewedAt == nil {
-            // First FSRS review of this unit — seed S and D from the rating.
+        if current.lastReviewedAt == nil {
+            // Never reviewed at all — cold start from the rating.
             stability = initStability(rating, w)
             difficulty = initDifficulty(rating, w)
         } else {
+            // Reviewed before: use existing FSRS state, or seed it from the card's SM-2 schedule the
+            // first time FSRS runs on it (S2.5), so switching a deck to FSRS doesn't discard progress.
+            let priorStability = current.stability > 0 ? current.stability : seededStability(interval: current.interval)
+            let priorDifficulty = current.stability > 0 ? current.difficulty : seededDifficulty(easeFactor: current.easeFactor)
             let elapsedDays = max(now.timeIntervalSince(current.lastReviewedAt!) / 86_400, 0)
-            let r = retrievability(elapsedDays: elapsedDays, stability: current.stability)
-            difficulty = nextDifficulty(current.difficulty, rating: rating, w)
+            let r = retrievability(elapsedDays: elapsedDays, stability: priorStability)
+            difficulty = nextDifficulty(priorDifficulty, rating: rating, w)
             stability = rating == 1
-                ? nextForgetStability(difficulty: difficulty, stability: current.stability, retrievability: r, w)
-                : nextRecallStability(difficulty: difficulty, stability: current.stability, retrievability: r, rating: rating, w)
+                ? nextForgetStability(difficulty: difficulty, stability: priorStability, retrievability: r, w)
+                : nextRecallStability(difficulty: difficulty, stability: priorStability, retrievability: r, rating: rating, w)
         }
 
         let interval = nextInterval(stability: stability, rr: rr)
@@ -115,6 +119,18 @@ enum FSRS {
     }
 
     static func clampDifficulty(_ d: Double) -> Double { min(max(d, 1), 10) }
+
+    // MARK: SM-2 → FSRS seeding (S2.5)
+
+    /// Seed FSRS stability from an SM-2 card's interval the first time FSRS schedules it (interval ≈
+    /// stability at the 0.9 target). Floored so a barely-started card still gets a positive value.
+    static func seededStability(interval: Int) -> Double { max(Double(interval), 0.5) }
+
+    /// Seed FSRS difficulty from an SM-2 ease factor — lower ease (a harder card) ⇒ higher difficulty.
+    /// Approximate; FSRS refines it over the next few reviews. Centered so the default ease maps to ~5.
+    static func seededDifficulty(easeFactor ef: Double) -> Double {
+        clampDifficulty(5.0 - (ef - SM2.defaultEaseFactor) * 2.0)
+    }
 }
 
 /// `Scheduler` conformer wrapping `FSRS`, so a deck can select it (S2.4). Carries the weights +
