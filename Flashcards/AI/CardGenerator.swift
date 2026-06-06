@@ -11,11 +11,12 @@ struct CardGenerator: Sendable {
         provider: AIProvider,
         model: String,
         apiKey: String,
-        existing: [GeneratedCard] = []
+        existing: [GeneratedCard] = [],
+        intent: GenerationIntent = .recall
     ) async throws -> [GeneratedCard] {
         guard !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else { throw AIError.missingKey }
 
-        var request = Self.request(for: provider, prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing)
+        var request = Self.request(for: provider, prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing, intent: intent)
         // Don't let a hung connection spin the "Generating…" UI for the default 60s.
         request.timeoutInterval = 30
 
@@ -39,11 +40,11 @@ struct CardGenerator: Sendable {
         return deduped
     }
 
-    static func request(for provider: AIProvider, prompt: String, count: Int?, model: String, apiKey: String, existing: [GeneratedCard] = []) -> URLRequest {
+    static func request(for provider: AIProvider, prompt: String, count: Int?, model: String, apiKey: String, existing: [GeneratedCard] = [], intent: GenerationIntent = .recall) -> URLRequest {
         switch provider {
-        case .openAI:    OpenAIProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing)
-        case .google:    GeminiProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing)
-        case .anthropic: AnthropicProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing)
+        case .openAI:    OpenAIProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing, intent: intent)
+        case .google:    GeminiProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing, intent: intent)
+        case .anthropic: AnthropicProvider.makeRequest(prompt: prompt, count: count, model: model, apiKey: apiKey, existing: existing, intent: intent)
         }
     }
 

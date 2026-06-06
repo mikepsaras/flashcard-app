@@ -2,7 +2,7 @@ import Foundation
 
 /// OpenAI Chat Completions with JSON response format.
 enum OpenAIProvider {
-    static func makeRequest(prompt: String, count: Int?, model: String, apiKey: String, existing: [GeneratedCard] = []) -> URLRequest {
+    static func makeRequest(prompt: String, count: Int?, model: String, apiKey: String, existing: [GeneratedCard] = [], intent: GenerationIntent = .recall) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -13,7 +13,7 @@ enum OpenAIProvider {
             "temperature": 0.4,
             "response_format": ["type": "json_object"],
             "messages": [
-                ["role": "system", "content": CardJSON.system(count: count, expanding: !existing.isEmpty)],
+                ["role": "system", "content": CardJSON.system(count: count, expanding: !existing.isEmpty, intent: intent)],
                 ["role": "user", "content": CardJSON.user(prompt, count: count, existing: existing)],
             ],
         ]

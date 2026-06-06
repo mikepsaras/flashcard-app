@@ -21,6 +21,7 @@ struct AIGenerationView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AIProvider.selectedProviderKey) private var providerRaw = AIProvider.openAI.rawValue
+    @AppStorage("aiGenerationIntent") private var intentRaw = GenerationIntent.recall.rawValue
 
     @State private var deckName = ""
     @State private var prompt = ""
@@ -36,6 +37,7 @@ struct AIGenerationView: View {
     enum Phase { case input, generating, review, failed }
 
     private var provider: AIProvider { AIProvider(rawValue: providerRaw) ?? .openAI }
+    private var intent: GenerationIntent { GenerationIntent(rawValue: intentRaw) ?? .recall }
     private var apiKey: String { KeychainStore.get(account: provider.keychainAccount) ?? "" }
     private var hasKey: Bool { !apiKey.trimmingCharacters(in: .whitespaces).isEmpty }
     private var selectedCount: Int { cards.filter { included.contains($0.id) }.count }
@@ -184,6 +186,16 @@ struct AIGenerationView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 7) {
+                    fieldLabel("Card style")
+                    Picker("Card style", selection: $intentRaw) {
+                        ForEach(GenerationIntent.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    caption(intent.caption)
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 12) {
                         Text("Number of cards")
                             .lineLimit(1)
@@ -299,7 +311,7 @@ struct AIGenerationView: View {
     private func generate() {
         let key = apiKey
         let model = UserDefaults.standard.string(forKey: provider.modelDefaultsKey) ?? provider.defaultModel
-        let prompt = prompt, provider = provider
+        let prompt = prompt, provider = provider, intent = intent
         let existing = existingCards
         let requestedCount: Int? = autoCount ? nil : count
         errorText = nil
@@ -307,7 +319,7 @@ struct AIGenerationView: View {
         Task {
             do {
                 let result = try await CardGenerator().generate(
-                    prompt: prompt, count: requestedCount, provider: provider, model: model, apiKey: key, existing: existing
+                    prompt: prompt, count: requestedCount, provider: provider, model: model, apiKey: key, existing: existing, intent: intent
                 )
                 cards = result
                 included = Set(result.map(\.id))
@@ -337,7 +349,9 @@ struct AIGenerationView: View {
         // at parse time, but the review list lets the user blank one out before adding.
         for card in cards where included.contains(card.id)
             && !card.term.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            context.insert(Card(term: card.term, definition: card.definition, deck: deck))
+            let newCard = Card(term: card.term, definition: card.definition, deck: deck)
+            newCard.extra = card.extra.trimmingCharacters(in: .whitespacesAndNewlines)
+            context.insert(newCard)
         }
         context.saveAndPersist(touching: deck)
         if let onAdded { onAdded() } else { dismiss() }

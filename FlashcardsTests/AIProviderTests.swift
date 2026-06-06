@@ -150,6 +150,39 @@ import Foundation
         #expect(system.lowercased().contains("code fences"))
     }
 
+    // MARK: Understanding intent + elaboration (B2)
+
+    @Test func parsesExtraElaboration() throws {
+        let json = #"{"cards":[{"term":"Why does ice float?","definition":"It's less dense than water.","extra":"Hydrogen bonds lock water into an open lattice when it freezes, so the same mass takes up more volume."}]}"#
+        let cards = try CardJSON.parseCards(from: json)
+        #expect(cards.count == 1)
+        #expect(cards[0].extra.contains("Hydrogen bonds"))
+    }
+
+    @Test func parsesExtraSynonymKey() throws {
+        // "explanation" is an accepted alias for the elaboration.
+        let cards = try CardJSON.parseCards(from: #"[{"term":"A","definition":"B","explanation":"because"}]"#)
+        #expect(cards.first?.extra == "because")
+    }
+
+    @Test func recallCardsHaveEmptyExtra() throws {
+        let cards = try CardJSON.parseCards(from: #"{"cards":[{"term":"A","definition":"B"}]}"#)
+        #expect(cards.first?.extra == "")
+    }
+
+    @Test func understandingPromptAsksForReasoningAndExtra() {
+        let system = CardJSON.system(count: nil, intent: .understanding)
+        #expect(system.contains("\"extra\""))
+        #expect(system.lowercased().contains("understanding"))
+        #expect(!system.contains("minimum-information principle"))   // not the recall prompt
+    }
+
+    @Test func recallIsTheDefaultIntent() {
+        // Existing callers (system(count:)) get the classic recall prompt unchanged.
+        #expect(CardJSON.system(count: nil) == CardJSON.system(count: nil, intent: .recall))
+        #expect(CardJSON.system(count: nil).contains("minimum-information principle"))
+    }
+
     // MARK: Key tolerance (front/back, question/answer, case-insensitive)
 
     @Test func parsesFrontBackAndQuestionAnswerKeys() throws {

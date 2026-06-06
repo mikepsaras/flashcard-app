@@ -16,14 +16,30 @@ enum CardJSON {
     static let frontKeys = ["term", "front", "question", "q", "prompt", "word"]
     static let backKeys = ["definition", "back", "answer", "a", "def", "meaning", "translation"]
     static let sectionKeys = ["section", "category", "group", "topic"]
+    /// Accepted spellings for a card's optional elaboration (B2 "Test understanding" intent).
+    static let extraKeys = ["extra", "explanation", "why", "rationale", "note"]
 
     /// `count == nil` lets the model choose how many cards to create ("auto"). `expanding`
-    /// switches the instructions to "add new cards that don't duplicate the existing ones".
-    static func system(count: Int?, expanding: Bool = false) -> String {
+    /// switches the instructions to "add new cards that don't duplicate the existing ones". `intent`
+    /// picks the card style — recall facts, or understanding-probing cards with an elaboration (B2).
+    static func system(count: Int?, expanding: Bool = false, intent: GenerationIntent = .recall) -> String {
         // Only constrain the count when an exact number is requested; in auto mode say nothing
         // about quantity, so the model decides how many cards to create with no bias.
         let countSentence = count.map { " Produce exactly \($0) flashcards." } ?? ""
-        let base = """
+        let base = intent == .understanding
+            ? understandingBase(countSentence)
+            : recallBase(countSentence)
+        guard expanding else { return base }
+        return base + " " + """
+        The user is EXPANDING an existing deck. Create only NEW cards that complement the ones \
+        listed in the message — cover gaps, related subtopics, and deeper detail. Do not duplicate \
+        or merely rephrase an existing term, and match the existing cards' style and difficulty.
+        """
+    }
+
+    /// The classic recall prompt: atomic question → short answer cards.
+    private static func recallBase(_ countSentence: String) -> String {
+        """
         You are an expert flashcard author.\(countSentence) Turn the user's notes or topic into \
         high-quality study cards that build durable recall. Follow these card-design rules:
         • One fact per card (the minimum-information principle) — keep each card atomic; split \
@@ -46,11 +62,34 @@ enum CardJSON {
         is fine otherwise. Keep the JSON valid — in particular, escape backslashes in any LaTeX so \
         each string stays well-formed.
         """
-        guard expanding else { return base }
-        return base + " " + """
-        The user is EXPANDING an existing deck. Create only NEW cards that complement the ones \
-        listed in the message — cover gaps, related subtopics, and deeper detail. Do not duplicate \
-        or merely rephrase an existing term, and match the existing cards' style and difficulty.
+    }
+
+    /// The "Test understanding" prompt (B2): cards that make the learner reason, each with a short
+    /// elaboration in an `extra` field so reviewing teaches the underlying principle.
+    private static func understandingBase(_ countSentence: String) -> String {
+        """
+        You are an expert learning designer who writes flashcards that test UNDERSTANDING, not just \
+        recall.\(countSentence) Turn the user's notes or topic into cards that make the learner \
+        reason. Follow these rules:
+        • Each front poses a question that requires applying, explaining, comparing, or predicting — \
+        e.g. "Why does …?", "What happens to … if …?", "How would you … given …?". Do NOT write \
+        "Define X" / "What is X" recall prompts, and avoid yes/no questions.
+        • One idea per card, with a single, unambiguous answer. Keep the answer short — a phrase or a \
+        sentence or two — not an essay.
+        • Add an "extra" field to every card: 1–2 sentences explaining the reasoning behind the \
+        answer — the mechanism, the "why", or a worked step — so reviewing the card teaches the \
+        underlying principle. Keep it concise and self-contained; don't merely repeat the answer.
+        • Be accurate and self-contained — don't refer to "the notes", and don't give away the answer \
+        inside the question.
+        Reply with ONLY a JSON object of the form {"cards":[{"term":"...","definition":"...",\
+        "extra":"..."}]} — no prose around it, and do NOT wrap the JSON in code fences. "term" is the \
+        question, "definition" is the answer, "extra" is the explanation. For example: {"cards":\
+        [{"term":"A cell is placed in pure water. What happens to its volume, and why?","definition":\
+        "It swells, and may burst.","extra":"Water moves osmotically from the low-solute outside to \
+        the high-solute interior until the membrane can no longer resist the pressure."}]}. Inside \
+        any text you MAY use lightweight Markdown (**bold**, *italic*, `code`) and LaTeX math — \
+        inline as $…$, display as $$…$$ — where it makes a card clearer. Keep the JSON valid — in \
+        particular, escape backslashes in any LaTeX so each string stays well-formed.
         """
     }
 
@@ -85,8 +124,8 @@ enum CardJSON {
         return out
     }
 
-    static func combined(_ prompt: String, count: Int?, existing: [GeneratedCard] = []) -> String {
-        system(count: count, expanding: !existing.isEmpty) + "\n\n" + user(prompt, count: count, existing: existing)
+    static func combined(_ prompt: String, count: Int?, existing: [GeneratedCard] = [], intent: GenerationIntent = .recall) -> String {
+        system(count: count, expanding: !existing.isEmpty, intent: intent) + "\n\n" + user(prompt, count: count, existing: existing)
     }
 
     // MARK: Parse
@@ -100,6 +139,7 @@ enum CardJSON {
             let term: String
             let definition: String
             let section: String?
+            let extra: String
 
             private struct AnyKey: CodingKey {
                 var stringValue: String
@@ -126,6 +166,7 @@ enum CardJSON {
                 term = value(CardJSON.frontKeys) ?? ""
                 definition = value(CardJSON.backKeys) ?? ""
                 section = value(CardJSON.sectionKeys)
+                extra = value(CardJSON.extraKeys) ?? ""
             }
         }
     }
@@ -160,7 +201,8 @@ enum CardJSON {
                 return GeneratedCard(
                     term: $0.term.trimmingCharacters(in: .whitespacesAndNewlines),
                     definition: $0.definition.trimmingCharacters(in: .whitespacesAndNewlines),
-                    section: (section?.isEmpty ?? true) ? nil : section
+                    section: (section?.isEmpty ?? true) ? nil : section,
+                    extra: $0.extra.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
             }
             .filter { !$0.term.isEmpty }

@@ -29,6 +29,17 @@ struct CardReviewList: View {
                             TextField("Definition", text: $card.definition, axis: .vertical)
                                 .font(Typography.callout)
                                 .foregroundStyle(.secondary)
+                            // Elaboration ("why"), present on "Test understanding" cards (B2) — shown so
+                            // it's visible and editable before adding; hidden for plain recall cards.
+                            if !card.extra.isEmpty {
+                                HStack(alignment: .top, spacing: 5) {
+                                    Image(systemName: "lightbulb")
+                                        .font(.caption2).foregroundStyle(Theme.accent).padding(.top, 3)
+                                    TextField("Elaboration", text: $card.extra, axis: .vertical)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                             if let cardWarnings = warnings[card.id] {
                                 ForEach(cardWarnings, id: \.self) { warning in
                                     Label(warning.message, systemImage: "exclamationmark.triangle.fill")
