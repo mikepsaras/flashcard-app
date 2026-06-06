@@ -95,6 +95,7 @@ struct SnapshotGalleryTests {
     /// Type-in study (B3): the answer field + Check button beneath the prompt card, before reveal.
     @Test func renderTypeInStudy() throws {
         let (container, deck, _) = try makeContext()
+        deck.typeToAnswer = true   // type-in is resolved per card from its deck now (Today honors it)
         let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
         let plan = StudyPlan(id: "typein", title: deck.name, accent: Color(hex: deck.colorHex),
                              exportText: nil, fourButton: false, typeToAnswer: true) { due }

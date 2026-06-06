@@ -31,12 +31,19 @@ struct StudySessionView: View {
     }
 
     private var accent: Color { plan.accent }
-    private var fourButton: Bool { plan.fourButton }
 
-    /// This card is answered by typing (the deck opted into type-in, and it's a basic card — cloze
-    /// cards keep their fill-in style, which is already production recall).
+    /// Grading style for the CURRENT card, resolved from its own deck — so the cross-deck Today queue
+    /// honors each card's Answer mode as it crosses decks. Single-deck runs share one deck, so this
+    /// matches the plan; the plan flag is only the fallback for a (deckless) card.
+    private var fourButton: Bool {
+        if let deck = session.current?.card.deck { return deck.gradingMode == .fourButton }
+        return plan.fourButton
+    }
+    /// This card is answered by typing — its own deck opted in, and it's a basic card (cloze keeps its
+    /// fill-in style). Per-card, for the same reason as `fourButton`.
     private var typeInCard: Bool {
-        plan.typeToAnswer && session.current?.card.cardType == .basic
+        guard let card = session.current?.card, card.cardType == .basic else { return false }
+        return card.deck?.typeToAnswer ?? plan.typeToAnswer
     }
 
     /// Extra leading space on macOS so the title clears the overlaid traffic lights
