@@ -235,8 +235,8 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let fsrsStatus { Text(fsrsStatus).foregroundStyle(Theme.accent) }
                 Text(fsrsReviewCount < FSRSOptimizer.minimumReviews
-                     ? "FSRS decks use weights validated against the reference implementation. After about \(FSRSOptimizer.minimumReviews) reviews (you have \(fsrsReviewCount)) you can re-fit them to your own memory."
-                     : "Re-fits the 21 FSRS weights to your \(fsrsReviewCount) logged reviews, so intervals track your memory rather than the average. FSRS decks only; SM-2 is unaffected. More reviews ⇒ a better fit.")
+                     ? "FSRS decks use weights validated against the reference implementation. After about \(FSRSOptimizer.minimumReviews) gradeable reviews (excludes first-sights and same-day repeats) you can re-fit them to your own memory — you have \(fsrsReviewCount) so far."
+                     : "Re-fits the 21 FSRS weights to your \(fsrsReviewCount) gradeable reviews (excludes first-sights and same-day repeats), so intervals track your memory rather than the average. FSRS decks only; SM-2 is unaffected. More reviews ⇒ a better fit.")
             }
         }
     }
