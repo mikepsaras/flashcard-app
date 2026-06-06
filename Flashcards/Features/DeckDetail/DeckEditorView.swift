@@ -46,7 +46,7 @@ struct DeckEditorView: View {
             _showLabel = State(initialValue: true)
             _studyReversed = State(initialValue: false)
             _gradingMode = State(initialValue: .twoButton)
-            _schedulerKind = State(initialValue: .sm2)
+            _schedulerKind = State(initialValue: .fsrs)   // new decks default to FSRS (validated)
             _section = State(initialValue: "")
             _showSectionsInStudy = State(initialValue: true)
             _showAdvanced = State(initialValue: false)
@@ -136,7 +136,7 @@ struct DeckEditorView: View {
 
                             VStack(alignment: .leading, spacing: 8) {
                                 schedulerRow
-                                caption("SM-2 is the classic algorithm. FSRS (beta) models memory more precisely and seeds from your existing progress when you switch.")
+                                caption("FSRS models memory more precisely and is the default for new decks; it seeds from your existing progress when you switch a deck. SM-2 is the classic algorithm.")
                             }
                         }
                         .padding(.top, 12)

@@ -23,15 +23,15 @@ struct SM2Scheduler: Scheduler {
     }
 }
 
-/// Which scheduling algorithm a deck uses, backed by `Deck.schedulerRaw`. SM-2 is the default; FSRS is
-/// opt-in per deck (beta) until it's validated against the upstream reference (see `FSRS`).
+/// Which scheduling algorithm a deck uses, backed by `Deck.schedulerRaw`. New decks default to FSRS
+/// (validated against py-fsrs 6.3.1 — see `FSRS`); existing decks stay on SM-2 until opted in.
 enum SchedulerKind: String, CaseIterable, Identifiable, Sendable {
     case sm2, fsrs
     var id: String { rawValue }
     var title: String {
         switch self {
         case .sm2:  "SM-2 (classic)"
-        case .fsrs: "FSRS (beta)"
+        case .fsrs: "FSRS"
         }
     }
     var scheduler: Scheduler {
