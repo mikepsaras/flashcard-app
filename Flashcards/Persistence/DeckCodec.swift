@@ -67,7 +67,6 @@ enum DeckCodec {
         var difficulty: Double?
         var reverseStability: Double?
         var reverseDifficulty: Double?
-        var tags: [String]?
         var extra: String?
         var type: String?
     }
@@ -91,7 +90,7 @@ enum DeckCodec {
         // keep v2 so a deck that predates v3 re-encodes byte-identically (the watcher sees no edit).
         let usesV3 = !deck.schedulerRaw.isEmpty || deck.cardArray.contains { card in
             card.stability != 0 || card.difficulty != 0 || card.reverseStability != 0
-                || card.reverseDifficulty != 0 || !card.tags.isEmpty || !card.extra.isEmpty || !card.typeRaw.isEmpty
+                || card.reverseDifficulty != 0 || !card.extra.isEmpty || !card.typeRaw.isEmpty
         }
         let dto = DeckDTO(
             formatVersion: usesV3 ? 3 : 2,
@@ -227,7 +226,6 @@ enum DeckCodec {
             difficulty: card.difficulty == 0 ? nil : card.difficulty,
             reverseStability: card.reverseStability == 0 ? nil : card.reverseStability,
             reverseDifficulty: card.reverseDifficulty == 0 ? nil : card.reverseDifficulty,
-            tags: card.tags.isEmpty ? nil : card.tags,
             extra: card.extra.isEmpty ? nil : card.extra,
             type: card.typeRaw.isEmpty ? nil : card.typeRaw
         )
@@ -257,7 +255,6 @@ enum DeckCodec {
         card.difficulty = dto.difficulty ?? 0
         card.reverseStability = dto.reverseStability ?? 0
         card.reverseDifficulty = dto.reverseDifficulty ?? 0
-        card.tags = dto.tags ?? []
         card.extra = dto.extra ?? ""
         card.typeRaw = dto.type ?? ""
     }

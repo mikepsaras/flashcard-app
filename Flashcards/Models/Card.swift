@@ -45,10 +45,7 @@ final class Card {
     /// Manual position within the card's section (lower = earlier). Defaulted ⇒ CloudKit-safe.
     var sortOrder: Int = 0
 
-    // MARK: Tags + elaboration
-    /// Free-form topic tags (cross-deck) — the unit for coverage/mastery and the adaptive practice
-    /// mode. Empty ⇒ untagged. Defaulted ⇒ CloudKit-safe.
-    var tags: [String] = []
+    // MARK: Elaboration
     /// Optional elaboration shown alongside the answer — a worked example, a "why", a source.
     /// Empty ⇒ none. Defaulted ⇒ CloudKit-safe.
     var extra: String = ""

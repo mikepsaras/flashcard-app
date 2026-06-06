@@ -181,7 +181,6 @@ import SwiftData
         card.difficulty = 6.0
         card.reverseStability = 3.2
         card.reverseDifficulty = 7.1
-        card.tags = ["biology", "cells"]
         card.extra = "Mnemonic: ATP."
         container.mainContext.insert(card)
         try container.mainContext.save()
@@ -191,7 +190,6 @@ import SwiftData
         #expect(dto.cards[0].stability == 12.5)
         #expect(dto.cards[0].difficulty == 6.0)
         #expect(dto.cards[0].reverseStability == 3.2)
-        #expect(dto.cards[0].tags == ["biology", "cells"])
         #expect(dto.cards[0].extra == "Mnemonic: ATP.")
 
         let other = DeckStore.makeContainer()
@@ -200,12 +198,11 @@ import SwiftData
         #expect(c.difficulty == 6.0)
         #expect(c.reverseStability == 3.2)
         #expect(c.reverseDifficulty == 7.1)
-        #expect(c.tags == ["biology", "cells"])
         #expect(c.extra == "Mnemonic: ATP.")
     }
 
     @Test func deckWithoutV3FeaturesStaysVersion2() throws {
-        // No FSRS/tags/extra ⇒ keep the v2 version line and omit the new keys — no phantom edits.
+        // No FSRS/extra/type ⇒ keep the v2 version line and omit the new keys — no phantom edits.
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "Plain")
         container.mainContext.insert(deck)
@@ -215,12 +212,11 @@ import SwiftData
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
         #expect(dto.formatVersion == 2)
         #expect(dto.cards[0].stability == nil)
-        #expect(dto.cards[0].tags == nil)
         #expect(dto.cards[0].extra == nil)
     }
 
     @Test func v2FileDecodesWithV3Defaults() throws {
-        // A v2 file (no FSRS/tags/extra keys) must load with those fields defaulted.
+        // A v2 file (no FSRS/extra/type keys) must load with those fields defaulted.
         let json = """
         {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
         "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
@@ -230,13 +226,11 @@ import SwiftData
         """
         let dto = try DeckCodec.decodeDTO(Data(json.utf8))
         #expect(dto.cards[0].stability == nil)
-        #expect(dto.cards[0].tags == nil)
 
         let container = DeckStore.makeContainer()
         let c = DeckCodec.makeDeck(from: dto, in: container.mainContext).cardArray.first!
         #expect(c.stability == 0)
         #expect(c.difficulty == 0)
-        #expect(c.tags == [])
         #expect(c.extra == "")
     }
 
