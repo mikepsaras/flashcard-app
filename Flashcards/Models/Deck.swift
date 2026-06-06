@@ -180,7 +180,8 @@ extension Deck {
     /// per card when reverse study is enabled.
     var allReviewItems: [ReviewItem] {
         cardArray.flatMap { card in
-            studyReversed
+            // Cloze cards are studied one way only — reversing a fill-in-the-blank is nonsensical.
+            (studyReversed && card.cardType != .cloze)
                 ? [ReviewItem(card: card, direction: .forward), ReviewItem(card: card, direction: .reverse)]
                 : [ReviewItem(card: card, direction: .forward)]
         }

@@ -52,6 +52,9 @@ final class Card {
     /// Optional elaboration shown alongside the answer — a worked example, a "why", a source.
     /// Empty ⇒ none. Defaulted ⇒ CloudKit-safe.
     var extra: String = ""
+    /// Card kind (a `CardType` raw value). Empty/"basic" ⇒ a normal front↔back card; "cloze" ⇒
+    /// `term` holds cloze text (`{{c1::…}}`) studied with the deletions hidden. Defaulted ⇒ CloudKit-safe.
+    var typeRaw: String = ""
 
     // Inverse of Deck.cards (optional, per CloudKit rules).
     var deck: Deck?
@@ -83,4 +86,24 @@ final class Card {
 extension Card {
     /// Reviewed in either direction.
     var hasBeenReviewed: Bool { lastReviewedAt != nil || reverseLastReviewedAt != nil }
+
+    /// The card's kind, backed by `typeRaw` (empty ⇒ basic). Setting basic stores empty so basic
+    /// cards re-encode unchanged.
+    var cardType: CardType {
+        get { CardType(rawValue: typeRaw) ?? .basic }
+        set { typeRaw = newValue == .basic ? "" : newValue.rawValue }
+    }
+}
+
+/// A card's kind. v1: a normal front↔back card, or a cloze card (deletions in `term`, hidden when
+/// studied). Per-cloze independent scheduling is deferred — a cloze card uses one whole-card schedule.
+enum CardType: String, CaseIterable, Identifiable, Sendable {
+    case basic, cloze
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .basic: "Basic"
+        case .cloze: "Cloze"
+        }
+    }
 }

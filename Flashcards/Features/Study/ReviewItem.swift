@@ -8,12 +8,19 @@ struct ReviewItem: Identifiable {
     let direction: ReviewDirection
 
     var id: String { "\(card.id.uuidString)-\(direction.rawValue)" }
-    var front: String { direction == .forward ? card.term : card.definition }
-    var back: String { direction == .forward ? card.definition : card.term }
+    var front: String {
+        if card.cardType == .cloze { return Cloze.front(card.term) }
+        return direction == .forward ? card.term : card.definition
+    }
+    var back: String {
+        if card.cardType == .cloze { return Cloze.back(card.term) }
+        return direction == .forward ? card.definition : card.term
+    }
     var dueDate: Date { card.dueDate(direction) }
 
     /// Small label shown above the answer side; nil when the deck has labels turned off.
     var backLabel: String? {
+        if card.cardType == .cloze { return nil }   // the revealed sentence needs no label
         let configured = card.deck?.backLabel ?? "Definition"
         if configured.isEmpty { return nil }
         return direction == .forward ? configured : "Term"
