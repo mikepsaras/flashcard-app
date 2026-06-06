@@ -177,6 +177,13 @@ struct StudySessionView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, compact ? Theme.Spacing.m : Theme.Spacing.xl)
                 .padding(.vertical, Theme.Spacing.s)
+
+                // The card's elaboration ("why"), revealed under the card once flipped to the answer (B1).
+                if session.isShowingDefinition, !item.extra.isEmpty {
+                    ElaborationPanel(text: item.extra, accent: accent, compact: compact)
+                        .padding(.horizontal, compact ? Theme.Spacing.m : Theme.Spacing.xl)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
 
             StudyControlsBar(
@@ -190,6 +197,8 @@ struct StudySessionView: View {
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.bottom, Theme.Spacing.m)
         }
+        // Springs the elaboration panel in/out as the card flips.
+        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: session.isShowingDefinition)
     }
 
     /// Shown when nothing's due — a calm reminder that grades won't reschedule. (No track-learning

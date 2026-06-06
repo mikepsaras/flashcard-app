@@ -132,3 +132,32 @@ struct FlashcardView: View {
         }
     }
 }
+
+/// The card's elaboration ("why / worked example / source"), revealed beneath the flashcard once it's
+/// flipped to the answer (B1). A quiet accent-tinted panel that sizes to its (concise) content; the
+/// flexible card above absorbs the vertical space, so the grading bar stays pinned regardless. Rendered
+/// only when the card has non-empty `extra`.
+struct ElaborationPanel: View {
+    let text: String
+    var accent: Color = Theme.accent
+    var compact: Bool = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "lightbulb.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(accent)
+                .padding(.top, 2)
+            MarkdownText(text: text, baseSize: compact ? 14 : 15, mathColor: MathColor.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(accent.opacity(0.18), lineWidth: 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Why: \(text)")
+    }
+}

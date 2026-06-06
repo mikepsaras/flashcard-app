@@ -12,6 +12,7 @@ struct CardEditorView: View {
 
     @State private var term: String
     @State private var definition: String
+    @State private var extra: String
     @State private var cardType: CardType
 
     init(deck: Deck, card: Card) {
@@ -19,6 +20,7 @@ struct CardEditorView: View {
         self.card = card
         _term = State(initialValue: card.term)
         _definition = State(initialValue: card.definition)
+        _extra = State(initialValue: card.extra)
         _cardType = State(initialValue: card.cardType)
     }
 
@@ -46,6 +48,13 @@ struct CardEditorView: View {
                             markdownPreview
                         }
                     }
+
+                    // Elaboration applies to both card kinds — a "why" shown beneath the answer in study (B1).
+                    VStack(alignment: .leading, spacing: 7) {
+                        MultilineField(label: "Elaboration", placeholder: "Optional — a “why”, a worked example, or a source.", text: $extra, minHeight: 72)
+                        Text("Shown beneath the answer while studying. Supports Markdown & LaTeX.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -62,7 +71,7 @@ struct CardEditorView: View {
             }
         }
         #if os(macOS)
-        .frame(width: 480, height: 460)
+        .frame(width: 480, height: 540)
         #endif
     }
 
@@ -130,6 +139,7 @@ struct CardEditorView: View {
     private func save() {
         card.term = term.trimmingCharacters(in: .whitespacesAndNewlines)
         card.definition = definition
+        card.extra = extra.trimmingCharacters(in: .whitespacesAndNewlines)
         card.cardType = cardType
         card.modifiedAt = .now
         context.saveAndPersist(touching: deck)

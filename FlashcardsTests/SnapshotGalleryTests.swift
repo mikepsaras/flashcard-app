@@ -37,6 +37,19 @@ struct SnapshotGalleryTests {
                 .padding(28).background(Theme.windowBackground),
             size: CGSize(width: 620, height: 600), name: "02_card_back")
 
+        // The flipped answer card + its elaboration panel beneath it — the "why" revealed on flip (B1).
+        try Snapshot.write(
+            VStack(spacing: 16) {
+                FlashcardView(term: term, definition: def, isShowingDefinition: true, onTap: {})
+                    .aspectRatio(1.25, contentMode: .fit)
+                ElaborationPanel(
+                    text: "User stories keep teams focused on **user value**, not implementation. The template *“As a ⟨role⟩, I want ⟨goal⟩ so that ⟨benefit⟩”* makes the **so that** clause — the real outcome — explicit.",
+                    accent: Theme.accent)
+            }
+            .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 620, height: 720), name: "05_card_with_elaboration")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/05_card_with_elaboration.png"))
+
         try Snapshot.write(
             StudySessionView(plan: plan, onClose: {}).modelContainer(container),
             size: CGSize(width: 960, height: 720), name: "03_study_screen_mac")

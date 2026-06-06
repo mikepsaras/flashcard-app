@@ -18,6 +18,10 @@ struct ReviewItem: Identifiable {
     }
     var dueDate: Date { card.dueDate(direction) }
 
+    /// Optional elaboration — a "why", a worked example, a source — shown beneath the answer once
+    /// flipped. Empty ⇒ nothing shown. Direction-independent (it's about the card, not the prompt).
+    var extra: String { card.extra }
+
     /// Small label shown above the answer side; nil when the deck has labels turned off.
     var backLabel: String? {
         if card.cardType == .cloze { return nil }   // the revealed sentence needs no label
