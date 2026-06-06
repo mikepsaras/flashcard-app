@@ -10,6 +10,9 @@ struct FlashcardView: View {
     /// The card's section, shown as a chip on the card. Hidden when nil/empty.
     var section: String? = nil
     var accent: Color = Theme.accent
+    /// Shows the quiet "tap/space to flip" hint on the term face. Suppressed in type-in study, where
+    /// the answer field is the affordance instead.
+    var showFlipHint: Bool = true
     var onTap: () -> Void
 
     /// Dynamic-Type floor for the card text (40pt at the default size); the actual size scales with
@@ -22,7 +25,7 @@ struct FlashcardView: View {
             // Dynamic-Type baseline so it stays legible on small windows / large text settings.
             let fontSize = max(geo.size.width * 0.065, termSize)
             ZStack {
-                face(text: term, label: nil, showHint: true, fontSize: fontSize)
+                face(text: term, label: nil, showHint: showFlipHint, fontSize: fontSize)
                     .opacity(isShowingDefinition ? 0 : 1)
 
                 face(text: definition, label: definitionLabel.isEmpty ? nil : definitionLabel, showHint: false, fontSize: fontSize)

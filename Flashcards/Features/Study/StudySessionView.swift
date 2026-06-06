@@ -16,6 +16,11 @@ struct StudySessionView: View {
     @State private var showingResetConfirm = false
     /// Ids of review-log records written this run, so undo can void the right one (S1.3).
     @State private var loggedRecordIDs: [UUID] = []
+    /// Type-in answer (B3), reset per card: the learner's typed text and whether it matched. A nil
+    /// result means "not checked" (e.g. the card was revealed by tapping instead of typing).
+    @State private var typedAnswer = ""
+    @State private var typedResult: Bool? = nil
+    @FocusState private var answerFieldFocused: Bool
 
     init(plan: StudyPlan, onClose: @escaping () -> Void) {
         self.plan = plan
@@ -27,6 +32,14 @@ struct StudySessionView: View {
 
     private var accent: Color { plan.accent }
     private var fourButton: Bool { plan.fourButton }
+
+    /// This card is answered by typing (the deck opted into type-in, and it's a basic card — cloze
+    /// cards keep their fill-in style, which is already production recall).
+    private var typeInCard: Bool {
+        plan.typeToAnswer && session.current?.card.cardType == .basic
+    }
+    /// We're waiting on the learner to type + check the answer (a type-in card, not yet revealed).
+    private var awaitingTypedAnswer: Bool { typeInCard && !session.isShowingDefinition }
 
     /// Extra leading space on macOS so the title clears the overlaid traffic lights
     /// (the window uses a full-size-content title bar during study).
@@ -52,6 +65,12 @@ struct StudySessionView: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .background(Theme.windowBackground)
             .background(keyboardControls)
+            // Clear the typed answer when the card changes (advance / undo / shuffle) so the next
+            // type-in card starts blank.
+            .onChange(of: session.current?.id) { _, _ in
+                typedAnswer = ""
+                typedResult = nil
+            }
             .confirmationDialog("Reset progress for this deck?", isPresented: $showingResetConfirm, titleVisibility: .visible) {
                 Button("Reset Progress", role: .destructive) { performReset() }
                 Button("Cancel", role: .cancel) {}
@@ -169,6 +188,7 @@ struct StudySessionView: View {
                     definitionLabel: item.backLabel ?? "",
                     section: item.section,
                     accent: accent,
+                    showFlipHint: !typeInCard,
                     onTap: { session.flip() }
                 )
                 // A fixed-ratio card that scales with the window — bigger in full screen, same shape.
@@ -186,6 +206,12 @@ struct StudySessionView: View {
                 }
             }
 
+            // Type-in answer (B3): a text field before the reveal, a ✓/✗ result after.
+            if typeInCard, let item = session.current {
+                typeAnswerArea(item: item)
+                    .padding(.horizontal, compact ? Theme.Spacing.m : Theme.Spacing.xl)
+            }
+
             StudyControlsBar(
                 canUndo: session.canUndo,
                 compact: compact,
@@ -199,6 +225,82 @@ struct StudySessionView: View {
         }
         // Springs the elaboration panel in/out as the card flips.
         .animation(.spring(response: 0.5, dampingFraction: 0.85), value: session.isShowingDefinition)
+    }
+
+    // MARK: Type-in answer (B3)
+
+    /// Beneath the card on a type-in card: a text field before the reveal, then a ✓/✗ result row once
+    /// the answer's been checked. (Revealing by tapping the card instead of typing shows no row.)
+    @ViewBuilder private func typeAnswerArea(item: ReviewItem) -> some View {
+        if session.isShowingDefinition {
+            if let typedResult { typeResultRow(matched: typedResult) }
+        } else {
+            typeAnswerField
+        }
+    }
+
+    private var canCheck: Bool { !typedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    private var typeAnswerField: some View {
+        HStack(spacing: 10) {
+            TextField("Type the answer…", text: $typedAnswer)
+                .textFieldStyle(.plain)
+                .font(Typography.body)
+                .padding(.horizontal, 14).padding(.vertical, 11)
+                .background(Theme.cardSurface, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 1))
+                .focused($answerFieldFocused)
+                .submitLabel(.done)
+                .onSubmit(submitTypedAnswer)
+                #if os(iOS)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                #endif
+            Button(action: submitTypedAnswer) {
+                Text("Check")
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18).padding(.vertical, 11)
+                    .background(accent, in: Capsule())
+                    .opacity(canCheck ? 1 : 0.5)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canCheck)
+        }
+        // Focus the field whenever it (re)appears for a new type-in card.
+        .onAppear { answerFieldFocused = true }
+    }
+
+    @ViewBuilder private func typeResultRow(matched: Bool) -> some View {
+        let tint = matched ? Theme.success : Theme.danger
+        HStack(spacing: 8) {
+            Image(systemName: matched ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(tint)
+            if matched {
+                Text("Correct")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(tint)
+            } else {
+                (Text("You typed ").foregroundStyle(.secondary)
+                    + Text("“\(typedAnswer)”").foregroundStyle(.primary).fontWeight(.semibold))
+                    .font(.system(.subheadline, design: .rounded))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.10), in: Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(matched ? "Correct" : "Incorrect. You typed \(typedAnswer)")
+    }
+
+    /// Checks the typed answer against the card's answer (case-insensitively) and reveals it. The
+    /// learner still self-grades after — the ✓/✗ is a hint, not the grade.
+    private func submitTypedAnswer() {
+        guard let item = session.current, !session.isShowingDefinition, canCheck else { return }
+        typedResult = AnswerCheck.matches(typedAnswer, item.back)
+        answerFieldFocused = false
+        session.flip()
     }
 
     /// Shown when nothing's due — a calm reminder that grades won't reschedule. (No track-learning
@@ -404,7 +506,9 @@ struct StudySessionView: View {
     /// ⌘Z undoes. Rendered as zero-size hidden buttons so the shortcuts register without
     /// affecting layout.
     @ViewBuilder private var keyboardControls: some View {
-        if !session.isFinished {
+        // Suppressed while the learner is typing an answer (B3), so Space / S / 1–4 / arrows go into
+        // the text field instead of flipping or grading. Re-enabled once the answer is revealed.
+        if !session.isFinished && !awaitingTypedAnswer {
             Group {
                 Button("Flip") { session.flip() }
                     .keyboardShortcut(.space, modifiers: [])

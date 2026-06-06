@@ -32,6 +32,8 @@ enum DeckCodec {
         // v3: card-section names within the deck + whether to show section chips in study.
         var sectionOrder: [String]?
         var showSectionsInStudy: Bool?
+        // v3: prompt the learner to type the answer (active recall); omitted when off (the default).
+        var typeToAnswer: Bool?
         // Optional deck icon (SF Symbol name or themed preset id); omitted when default.
         var icon: String?
         // v3: scheduling algorithm (a SchedulerKind raw value); omitted when default (SM-2).
@@ -88,7 +90,7 @@ enum DeckCodec {
     static func encode(_ deck: Deck) throws -> Data {
         // Stamp v3 only when a card actually uses a v3 feature (FSRS state, tags, or extra); otherwise
         // keep v2 so a deck that predates v3 re-encodes byte-identically (the watcher sees no edit).
-        let usesV3 = !deck.schedulerRaw.isEmpty || deck.cardArray.contains { card in
+        let usesV3 = !deck.schedulerRaw.isEmpty || deck.typeToAnswer || deck.cardArray.contains { card in
             card.stability != 0 || card.difficulty != 0 || card.reverseStability != 0
                 || card.reverseDifficulty != 0 || !card.extra.isEmpty || !card.typeRaw.isEmpty
         }
@@ -109,6 +111,8 @@ enum DeckCodec {
             // Omit when empty/default so decks not using card sections re-encode without noise.
             sectionOrder: deck.sectionOrder.isEmpty ? nil : deck.sectionOrder,
             showSectionsInStudy: deck.showSectionsInStudy ? nil : false,
+            // Omit when off (the default) so decks not using type-in re-encode unchanged.
+            typeToAnswer: deck.typeToAnswer ? true : nil,
             // Omit when default so decks using the standard icon re-encode without noise.
             icon: deck.icon.isEmpty ? nil : deck.icon,
             // Omit when default (SM-2) so SM-2 decks re-encode unchanged.
@@ -143,6 +147,7 @@ enum DeckCodec {
         deck.section = dto.section ?? ""
         deck.sectionOrder = dto.sectionOrder ?? []
         deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
+        deck.typeToAnswer = dto.typeToAnswer ?? false
         deck.icon = dto.icon ?? ""
         deck.schedulerRaw = dto.scheduler ?? ""
         deck.createdAt = dto.createdAt
@@ -172,6 +177,7 @@ enum DeckCodec {
         deck.section = dto.section ?? ""
         deck.sectionOrder = dto.sectionOrder ?? []
         deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
+        deck.typeToAnswer = dto.typeToAnswer ?? false
         deck.icon = dto.icon ?? ""
         deck.schedulerRaw = dto.scheduler ?? ""
         deck.createdAt = dto.createdAt

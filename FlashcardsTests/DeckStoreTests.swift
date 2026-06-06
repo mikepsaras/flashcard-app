@@ -272,6 +272,26 @@ import SwiftData
         #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).cardArray.first?.cardType == .cloze)
     }
 
+    @Test func typeToAnswerRoundTripsAndStampsVersion3() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Vocab", typeToAnswer: true)
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 3)            // a v3 feature is in use
+        #expect(dto.typeToAnswer == true)
+        let other = DeckStore.makeContainer()
+        #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).typeToAnswer)
+    }
+
+    @Test func typeToAnswerOffOmittedAndStaysVersion2() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Plain deck")         // type-in off (default)
+        container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.typeToAnswer == nil)            // omitted → no phantom edit
+        #expect(dto.formatVersion == 2)
+    }
+
     // MARK: Section
 
     @Test func sectionRoundTrip() throws {

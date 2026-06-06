@@ -194,6 +194,7 @@ struct RootView: View {
             accent: Color(hex: deck.colorHex),
             exportText: deck.cardArray.map { "\($0.term) — \($0.definition)" }.joined(separator: "\n"),
             fourButton: deck.gradingMode == .fourButton,
+            typeToAnswer: deck.typeToAnswer,
             onReset: {
                 for card in deck.cardArray { card.resetSchedule() }
                 context.saveAndPersist(touching: deck)
@@ -229,6 +230,7 @@ struct RootView: View {
             accent: Color(hex: deck.colorHex),
             exportText: nil,
             fourButton: deck.gradingMode == .fourButton,
+            typeToAnswer: deck.typeToAnswer,
             forcePractice: true
         ) {
             let ratings = Elo.replay(ReviewLog.records(from: ReviewLog.defaultURL))

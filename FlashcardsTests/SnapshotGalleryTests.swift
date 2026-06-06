@@ -78,6 +78,18 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/07_controls_four_button.png"))
     }
 
+    /// Type-in study (B3): the answer field + Check button beneath the prompt card, before reveal.
+    @Test func renderTypeInStudy() throws {
+        let (container, deck, _) = try makeContext()
+        let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
+        let plan = StudyPlan(id: "typein", title: deck.name, accent: Color(hex: deck.colorHex),
+                             exportText: nil, fourButton: false, typeToAnswer: true) { due }
+        try Snapshot.write(
+            StudySessionView(plan: plan, onClose: {}).modelContainer(container),
+            size: CGSize(width: 960, height: 720), name: "09_type_in_study")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/09_type_in_study.png"))
+    }
+
     @Test func renderSectionsFeature() throws {
         // Headline visual: the section chip on the study card.
         try Snapshot.write(

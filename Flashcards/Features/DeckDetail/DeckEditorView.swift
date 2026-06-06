@@ -30,6 +30,7 @@ struct DeckEditorView: View {
     @State private var schedulerKind: SchedulerKind
     @State private var section: String
     @State private var showSectionsInStudy: Bool
+    @State private var typeToAnswer: Bool
     @State private var showingAI = false
     @State private var showingIconPicker = false
     @State private var showAdvanced: Bool
@@ -49,6 +50,7 @@ struct DeckEditorView: View {
             _schedulerKind = State(initialValue: .fsrs)   // new decks default to FSRS (validated)
             _section = State(initialValue: "")
             _showSectionsInStudy = State(initialValue: true)
+            _typeToAnswer = State(initialValue: false)
             _showAdvanced = State(initialValue: false)
         case .edit(let deck):
             _name = State(initialValue: deck.name)
@@ -64,6 +66,7 @@ struct DeckEditorView: View {
             _schedulerKind = State(initialValue: deck.schedulerKind)
             _section = State(initialValue: deck.section)
             _showSectionsInStudy = State(initialValue: deck.showSectionsInStudy)
+            _typeToAnswer = State(initialValue: deck.typeToAnswer)
             _showAdvanced = State(initialValue: true)
         }
     }
@@ -122,6 +125,11 @@ struct DeckEditorView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 toggleRow("Study both directions", $studyReversed)
                                 caption("Also quiz the answer back to the term, scheduled separately. A card then counts as two reviews — one each way.")
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                toggleRow("Type the answer", $typeToAnswer)
+                                caption("Quiz yourself by typing the answer before it's revealed — stronger active recall, checked case-insensitively. Cloze cards keep their fill-in style.")
                             }
 
                             VStack(alignment: .leading, spacing: 8) {
@@ -352,7 +360,7 @@ struct DeckEditorView: View {
         let trimmedSection = String(section.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
         let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
-        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
+        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, typeToAnswer: typeToAnswer, icon: icon)
         deck.schedulerKind = schedulerKind
         context.insert(deck)
         return deck
@@ -367,7 +375,7 @@ struct DeckEditorView: View {
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         switch mode {
         case .new:
-            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
+            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, typeToAnswer: typeToAnswer, icon: icon)
             deck.schedulerKind = schedulerKind
             context.insert(deck)
         case .edit(let deck):
@@ -380,6 +388,7 @@ struct DeckEditorView: View {
             deck.schedulerKind = schedulerKind
             deck.section = trimmedSection
             deck.showSectionsInStudy = showSectionsInStudy
+            deck.typeToAnswer = typeToAnswer
             deck.icon = icon
             deck.modifiedAt = .now
         }

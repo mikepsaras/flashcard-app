@@ -12,6 +12,9 @@ struct StudyPlan: Identifiable {
     /// Whether this run uses 4-button grading. Set from the deck's own setting; the
     /// cross-deck Today queue uses 2-button.
     let fourButton: Bool
+    /// Whether basic cards in this run are answered by typing (active recall) before reveal. Set from
+    /// the deck's own setting; the cross-deck Today queue (mixed decks) leaves it off.
+    var typeToAnswer: Bool = false
     /// Resets the underlying deck's spaced-repetition progress (the study screen's ••• → Reset
     /// Progress). `nil` for the cross-deck Today queue, which has no single deck to reset.
     var onReset: (() -> Void)? = nil
