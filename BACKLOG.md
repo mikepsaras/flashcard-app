@@ -279,14 +279,14 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 
 ## E3 — Content model: card types · Phase 2 (interim) / Phase 3 (full)
 
-### ☐ S3.1 — `Card.type` enum (basic | cloze | typeIn)  · **Effort:** S · **Phase:** 2
+### ☑ S3.1 — `Card.type` enum (basic | cloze | typeIn)  · **Effort:** S · **Phase:** 2 · _shipped (basic/cloze; typeIn deferred to S3.3)_
 - **Why:** Interim path to multiple card types without the full Note refactor.
 - **Touches:** `Card.swift` (`typeRaw` defaulted), `DeckCodec`, `ReviewItem`/`Deck.allReviewItems`.
 - **Model/persist:** **v3** (fold into S1.6).
 - **Acceptance:** type persists; defaults to basic; unknown raw ⇒ basic.
 - **Deps:** S1.6.
 
-### ☐ S3.2 — Cloze deletion (interim, ReviewItem expansion)  · **Effort:** M · **Phase:** 2
+### ☑ S3.2 — Cloze deletion (interim, ReviewItem expansion)  · **Effort:** M · **Phase:** 2 · _shipped as hide-all whole-card cloze (decision #8); per-cloze units deferred_
 - **Why:** The single most valuable missing type — atomic recall *in context*, the bridge
   toward relational knowledge; also raises AI-card quality.
 - **Touches:** cloze parser (`{{c1::…}}`), `Deck.allReviewItems`/`ReviewItem` expand one
