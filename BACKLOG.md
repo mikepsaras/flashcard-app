@@ -420,7 +420,7 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
 - Back-fill + live update ratings from `reviewlog.jsonl` so they're reproducible.
   **Deps:** S1.3, S7.1.
 
-### ◐ S7.3 — Difficulty / mastery as surfaced metrics  · **Effort:** M · **Phase:** 2 · _dev surface only; per-topic mastery rating on the deck page still to add_
+### ☑ S7.3 — Difficulty / mastery as surfaced metrics  · **Effort:** M · **Phase:** 2 · _shipped: Mastery % on the deck page (Elo); per-card difficulty surfacing optional_
 - **Why:** Per-topic ability score + trajectory ("Biology 1480 ↑60/mo") is the most
   expertise-*feeling* signal; per-card difficulty aids review. Under FSRS, prefer FSRS-`D`
   for *card* difficulty and reserve Elo for the *learner-ability* score to avoid double-
