@@ -134,12 +134,7 @@ struct DeckEditorView: View {
 
                             VStack(alignment: .leading, spacing: 8) {
                                 answerModeRow
-                                // The button-count choice only applies to flip mode — typing infers the
-                                // grade — so it's nested here rather than sitting beside type-in.
-                                if !typeToAnswer { gradingRow }
-                                caption(typeToAnswer
-                                    ? "You type the answer; it's checked case-insensitively and the grade is set for you — right ⇒ Good, wrong ⇒ Again (you can override). Stronger active recall. Cloze cards keep their fill-in style."
-                                    : "Flip the card and grade yourself. Two buttons mark it known or not; four (Again / Hard / Good / Easy) give the scheduler a finer signal.")
+                                caption(answerModeCaption)
                             }
 
                             VStack(alignment: .leading, spacing: 8) {
@@ -185,16 +180,31 @@ struct DeckEditorView: View {
         #endif
     }
 
-    /// One coherent choice for how you answer this deck — flip & self-grade, or type the answer
-    /// (which infers the grade). Replaces the old separate type-in toggle + grading picker, which
-    /// overlapped confusingly (the button count did nothing under type-in).
+    /// How you answer this deck, as one flat 3-way choice — the two flip-and-self-grade button counts
+    /// plus type-in. Backed by `gradingMode` + `typeToAnswer`, so it needs no new model field.
+    private enum AnswerMode: Hashable { case twoButton, fourButton, typeIn }
+
+    private var answerMode: Binding<AnswerMode> {
+        Binding(
+            get: { typeToAnswer ? .typeIn : (gradingMode == .fourButton ? .fourButton : .twoButton) },
+            set: { mode in
+                switch mode {
+                case .twoButton:  typeToAnswer = false; gradingMode = .twoButton
+                case .fourButton: typeToAnswer = false; gradingMode = .fourButton
+                case .typeIn:     typeToAnswer = true
+                }
+            }
+        )
+    }
+
     private var answerModeRow: some View {
         HStack {
             Text("Answer mode").font(Typography.body)
             Spacer(minLength: 8)
-            Picker("", selection: $typeToAnswer.animation()) {
-                Text("Flip & self-grade").tag(false)
-                Text("Type the answer").tag(true)
+            Picker("", selection: answerMode.animation()) {
+                Text("Flip — 2 buttons").tag(AnswerMode.twoButton)
+                Text("Flip — 4 buttons").tag(AnswerMode.fourButton)
+                Text("Type the answer").tag(AnswerMode.typeIn)
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -205,20 +215,12 @@ struct DeckEditorView: View {
         .fieldBox()
     }
 
-    private var gradingRow: some View {
-        HStack {
-            Text("Grading buttons").font(Typography.body)
-            Spacer(minLength: 8)
-            Picker("", selection: $gradingMode) {
-                ForEach(GradingMode.allCases) { Text($0.title).tag($0) }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
+    private var answerModeCaption: String {
+        switch answerMode.wrappedValue {
+        case .twoButton:  "Flip the card and mark it Known or Not — a simple right/wrong signal."
+        case .fourButton: "Flip and grade Again / Hard / Good / Easy — the finest-grained signal you can give the scheduler."
+        case .typeIn:     "Type the answer (checked case-insensitively); the grade is set objectively from whether you got it right — the most honest signal, and stronger recall. Cloze cards keep their fill-in style."
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .fieldBox()
     }
 
     private var schedulerRow: some View {
