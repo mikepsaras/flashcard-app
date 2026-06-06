@@ -309,41 +309,70 @@ struct StudySessionView: View {
         session.flip()
     }
 
-    /// Bottom controls for a type-in card: just Undo before the reveal, then a Continue button that
-    /// commits the inferred grade (✓ → Good, ✗ → Again) plus a quiet one-tap override — so the learner
-    /// never has to pick Know / Don't-know by hand on a card they just typed.
+    /// Bottom controls for a type-in card. Before the reveal: just Undo. After a *correct* answer:
+    /// Hard / Good / Easy pills (Good is the Enter default) — the objective pass floor with the same
+    /// 4-level granularity FSRS wants, so the learner refines only the upside. After a *wrong* answer:
+    /// Continue (Again) with an "I actually knew it" escape hatch for typos.
     @ViewBuilder private var typeInControls: some View {
         let correct = typedResult ?? false
         VStack(spacing: 12) {
             HStack {
                 undoButton
                 Spacer()
-                if session.isShowingDefinition {
-                    Button { performGrade(correct ? .again : .good) } label: {
-                        Text(correct ? "I was wrong" : "I actually knew it")
+                // Typo escape hatch: it was marked wrong, but you actually knew it ⇒ count as Good.
+                if session.isShowingDefinition && !correct {
+                    Button { performGrade(.good) } label: {
+                        Text("I actually knew it")
                             .font(.system(.caption, design: .rounded, weight: .medium))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .accessibilityHint("Overrides the inferred grade")
+                    .accessibilityHint("Counts this as known")
                 }
             }
             if session.isShowingDefinition {
-                Button { performGrade(correct ? .good : .again) } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: correct ? "checkmark.circle.fill" : "arrow.right.circle.fill")
-                        Text(correct ? "Correct — Continue" : "Continue")
+                if correct {
+                    HStack(spacing: 10) {
+                        refineButton("Hard", .hard)
+                        refineButton("Good", .good, primary: true)
+                            .keyboardShortcut(.return, modifiers: [])
+                        refineButton("Easy", .easy)
                     }
-                    .font(.system(.body, design: .rounded, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(correct ? Theme.success : accent, in: Capsule())
+                } else {
+                    Button { performGrade(.again) } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.right.circle.fill")
+                            Text("Continue")
+                        }
+                        .font(.system(.body, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.return, modifiers: [])
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.return, modifiers: [])
             }
         }
+    }
+
+    /// One pill in the type-in "you got it — how hard was it?" refinement. `primary` (Good) gets a
+    /// solid fill so it reads as the default; Hard/Easy are tinted, matching the 4-button pills.
+    private func refineButton(_ title: String, _ grade: Grade, primary: Bool = false) -> some View {
+        let color = grade.studyColor
+        let fill: Color = primary ? color : color.opacity(Theme.Opacity.fillTint)
+        return Button { performGrade(grade) } label: {
+            Text(title)
+                .font(.system(.body, design: .rounded, weight: .semibold))
+                .foregroundStyle(primary ? Color.white : color)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(fill, in: Capsule())
+                .overlay { if !primary { Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1) } }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 
     /// The small Undo control reused by the type-in bar (the grade-pill bar has its own).
