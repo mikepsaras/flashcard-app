@@ -63,11 +63,12 @@ foundations) · 3 (ambitious / optional)
 12. **Interim `type` enum first; `Note` refactor deferred.** Reaffirms #2 — ship
     cloze/type-in on a `Card.type` enum (S3.1–S3.3, format v3) in Phase 2; commit to the
     full `Note`-above-`Card` model (S3.5, format v4) only once demand is proven.
-13. **Review log = one global `reviewlog.jsonl`.** A single chronological append-only
-    stream in the library folder (each record carries `deckID` / `cardID` / `direction`
-    so per-deck/per-tag slicing still works), not per-deck sidecars — cross-deck
-    calibration/coverage/Elo all read one stream and the `.cards` files stay clean.
-    `DeckFolderWatcher` must ignore it (app-owned, not user-edited).
+13. **Review log = one global `reviewlog.jsonl` in Application Support.** A single
+    chronological append-only stream in the app's private Application Support folder — **not**
+    the visible deck folder (keeps it clean) — each record carrying `deck` / `card` /
+    `direction` so per-deck/per-tag slicing still works. Device-local; a launch migration
+    relocates any log an earlier build left in the library folder. _(Revised from "library
+    folder" after hand-testing flagged the clutter.)_
 
 ---
 

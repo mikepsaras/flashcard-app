@@ -1,16 +1,15 @@
 import Foundation
 
-/// Append-only per-review history — one JSON object per line in `reviewlog.jsonl` in the library
-/// folder. The substrate for FSRS weight optimization, calibration (predicted vs. actual), Elo, and
-/// coverage trends; no feature consumes it yet — this is the Phase 1 enabler (S1.3). The card model
-/// stores only each card's *last* review, so this is the only place the full history lives.
+/// Append-only per-review history — one JSON object per line in `reviewlog.jsonl` in the app's private
+/// Application Support folder (NOT the user's visible deck folder). The substrate for FSRS weight
+/// optimization, calibration (predicted vs. actual), Elo, and coverage trends; no feature consumes it
+/// yet — this is the Phase 1 enabler (S1.3). The card model stores only each card's *last* review, so
+/// this is the only place the full history lives.
 ///
 /// Undo appends a `void` line referencing the record's id rather than rewriting the file, so the log
-/// stays strictly append-only; `records()` nets voids out. App-owned: it sits beside the `.cards`
-/// files, but `DeckStore` only ever touches deck-extension files (so it's never loaded or pruned) and
-/// the folder watcher is paused during study and ignores in-place writes — so appending never triggers
-/// a deck reconcile. Best-effort: a write failure is swallowed, since the log is analytics and never
-/// the schedule's source of truth.
+/// stays strictly append-only; `records()` nets voids out. Device-local — it doesn't follow a synced
+/// library folder across devices. Best-effort: a write failure is swallowed, since the log is analytics
+/// and never the schedule's source of truth.
 enum ReviewLog {
     /// One recorded review. `id` lets an undo void it without rewriting the file.
     struct Record: Codable, Equatable, Identifiable {
@@ -28,6 +27,35 @@ enum ReviewLog {
 
     static let fileName = "reviewlog.jsonl"
     static func fileURL(in directory: URL) -> URL { directory.appendingPathComponent(fileName) }
+
+    /// The app-private folder for the log — `Application Support/Flashcards`, created on demand. Out
+    /// of the user's visible deck folder, and device-local (not synced with the library folder).
+    static var defaultDirectory: URL { resolvedDirectory }
+    /// The log file in `defaultDirectory`.
+    static var defaultURL: URL { fileURL(in: defaultDirectory) }
+
+    private static let resolvedDirectory: URL = {
+        let fm = FileManager.default
+        let base = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                appropriateFor: nil, create: true)) ?? fm.temporaryDirectory
+        let dir = base.appendingPathComponent("Flashcards", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    /// One-time relocation: if an earlier build wrote the log into the (visible) library folder, move
+    /// it into Application Support. Best-effort; safe to call at every launch.
+    static func migrateLegacy(from legacyDirectory: URL, to newURL: URL = defaultURL) {
+        let old = fileURL(in: legacyDirectory)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: old.path), old != newURL else { return }
+        if fm.fileExists(atPath: newURL.path) {
+            try? fm.removeItem(at: old)      // new location already has a log — drop the stray copy
+        } else {
+            try? fm.createDirectory(at: newURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? fm.moveItem(at: old, to: newURL)
+        }
+    }
 
     // MARK: Write
 

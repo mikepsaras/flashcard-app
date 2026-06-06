@@ -66,4 +66,18 @@ import Foundation
             #expect(ReviewLog.records(from: url).isEmpty)
         }
     }
+
+    @Test func migrateLegacyMovesAStrayLogOutOfTheDeckFolder() {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("rl-\(UUID().uuidString)", isDirectory: true)
+        let legacyDir = temp.appendingPathComponent("library", isDirectory: true)
+        let newURL = temp.appendingPathComponent("appsupport/reviewlog.jsonl")
+        try? FileManager.default.createDirectory(at: legacyDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        ReviewLog.append(record(), to: ReviewLog.fileURL(in: legacyDir))   // a stray log in the deck folder
+        ReviewLog.migrateLegacy(from: legacyDir, to: newURL)
+
+        #expect(!FileManager.default.fileExists(atPath: ReviewLog.fileURL(in: legacyDir).path))  // moved out
+        #expect(ReviewLog.records(from: newURL).count == 1)                                       // …and into the new home
+    }
 }

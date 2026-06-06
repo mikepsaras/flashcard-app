@@ -21,6 +21,9 @@ struct FlashcardsApp: App {
             // The library is never auto-seeded and the old SwiftData store is never imported,
             // so an empty folder stays an empty library and nothing resurrects deleted decks.
             DeckStore.migrateLegacyExtension()
+            // Relocate a review log an earlier build left in the (visible) library folder into
+            // Application Support; no-op once moved.
+            ReviewLog.migrateLegacy(from: DeckStore.libraryURL())
             DeckStore.shared.loadAll(into: context)
         }
         _container = State(initialValue: container)

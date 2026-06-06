@@ -302,7 +302,7 @@ struct StudySessionView: View {
             if wasNew { StudyStats.recordNewCardIntroduced() }
             // Append to the per-review history (S1.3); remember the id so undo can void it.
             if let pending {
-                ReviewLog.append(pending, to: ReviewLog.fileURL(in: DeckStore.libraryURL()))
+                ReviewLog.append(pending, to: ReviewLog.defaultURL)
                 loggedRecordIDs.append(pending.id)
             }
         }
@@ -323,7 +323,7 @@ struct StudySessionView: View {
             // Void the matching log record (append-only; no rewrite). The stack stays aligned with
             // the grade history since a session is entirely practice or entirely not.
             if let id = loggedRecordIDs.popLast() {
-                ReviewLog.void(id, to: ReviewLog.fileURL(in: DeckStore.libraryURL()))
+                ReviewLog.void(id, to: ReviewLog.defaultURL)
             }
         }
     }
