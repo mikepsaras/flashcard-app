@@ -14,6 +14,8 @@ struct StudySessionView: View {
     @State private var session: StudySession
     @AppStorage(DefaultsKey.showGradeIntervals) private var showGradeIntervals = false
     @State private var showingResetConfirm = false
+    /// Ids of review-log records written this run, so undo can void the right one (S1.3).
+    @State private var loggedRecordIDs: [UUID] = []
 
     init(plan: StudyPlan, onClose: @escaping () -> Void) {
         self.plan = plan
@@ -289,14 +291,20 @@ struct StudySessionView: View {
         // "true retention" tally buckets by the card's maturity at review time, Anki-style.
         let wasMature = currentIsMature()
         let wasNew = currentIsNew()
+        let pending = pendingReviewRecord(grade: grade)   // from the pre-grade schedule
         session.grade(grade)
-        // Practice runs (nothing due) don't advance schedules, and must not feed the daily
-        // review count / accuracy / streak either — otherwise "Study Again" or studying an
+        // Practice runs (nothing due) don't advance schedules, and must not feed the daily review
+        // count / accuracy / streak / review log either — otherwise "Study Again" or studying an
         // already-caught-up deck would keep a streak alive with nothing actually due.
         if !session.isPractice {
             StudyStats.recordReview(correct: grade.isCorrect, mature: wasMature)
             // Count a first-ever review toward today's new-card quota (S0.2 throttle).
             if wasNew { StudyStats.recordNewCardIntroduced() }
+            // Append to the per-review history (S1.3); remember the id so undo can void it.
+            if let pending {
+                ReviewLog.append(pending, to: ReviewLog.fileURL(in: DeckStore.libraryURL()))
+                loggedRecordIDs.append(pending.id)
+            }
         }
         #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(grade.isCorrect ? .success : .warning)
@@ -312,6 +320,11 @@ struct StudySessionView: View {
         if !session.isPractice {
             StudyStats.unrecordReview(correct: undone.isCorrect, mature: currentIsMature())
             if currentIsNew() { StudyStats.unrecordNewCardIntroduced() }
+            // Void the matching log record (append-only; no rewrite). The stack stays aligned with
+            // the grade history since a session is entirely practice or entirely not.
+            if let id = loggedRecordIDs.popLast() {
+                ReviewLog.void(id, to: ReviewLog.fileURL(in: DeckStore.libraryURL()))
+            }
         }
     }
 
@@ -322,6 +335,22 @@ struct StudySessionView: View {
         guard let item = session.current else { return false }
         let interval = item.direction == .forward ? item.card.interval : item.card.reverseInterval
         return interval >= StudyInsights.matureIntervalDays
+    }
+
+    /// A review-log record for `session.current` built from its PRE-grade schedule (call before
+    /// `session.grade`). nil when there's no current item or it has no deck.
+    private func pendingReviewRecord(grade: Grade, now: Date = .now) -> ReviewLog.Record? {
+        guard let item = session.current, let deckID = item.card.deck?.id else { return nil }
+        let direction = item.direction
+        let interval = direction == .forward ? item.card.interval : item.card.reverseInterval
+        let elapsed = item.card.lastReviewedAt(direction)
+            .map { max(now.timeIntervalSince($0) / 86_400, 0) } ?? 0
+        return ReviewLog.Record(
+            ts: now, deck: deckID, card: item.card.id, direction: direction,
+            grade: grade.rawValue, correct: grade.isCorrect,
+            elapsedDays: elapsed, intervalBefore: interval,
+            mature: interval >= StudyInsights.matureIntervalDays
+        )
     }
 
     /// Whether `session.current` is a *new* unit — its direction has never been reviewed. Read

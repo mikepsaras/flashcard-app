@@ -186,6 +186,7 @@ enum DeveloperTools {
         let test = ((try? context.fetch(FetchDescriptor<Deck>())) ?? []).filter { $0.section == testSection }
         for deck in test { context.delete(deck) }
         StudyStats.reset(defaults: defaults)
+        ReviewLog.reset(at: ReviewLog.fileURL(in: DeckStore.libraryURL()))
         return test.count
     }
 
