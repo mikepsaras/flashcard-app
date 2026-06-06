@@ -405,7 +405,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 
 Elo is a **measurement + selection** layer, explicitly **not** the spaced scheduler.
 
-### ☐ S7.1 — Elo / Glicko engine (pure)  · **Effort:** M · **Phase:** 2
+### ☑ S7.1 — Elo / Glicko engine (pure)  · **Effort:** M · **Phase:** 2 · _shipped (`Elo`); plain Elo for v1, Glicko RD refinement deferred_
 - **Why:** Learner ability θ per topic + card difficulty `d` per direction, on one scale.
 - **Touches:** new `Flashcards/Scheduling/Elo.swift` (or `Insights/`): pure update
   `E=1/(1+10^((d−θ)/400))`, `θ←θ+K(S−E)`, `d←d−K(S−E)`; decaying/confidence-aware **K**
@@ -416,11 +416,11 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
   reproducible/back-fillable from the review log.
 - **Deps:** S1.4 (topics), S1.6 (difficulty field).
 
-### ☐ S7.2 — Drive Elo from the review log  · **Effort:** S · **Phase:** 2
+### ☑ S7.2 — Drive Elo from the review log  · **Effort:** S · **Phase:** 2 · _shipped (`Elo.replay`)_
 - Back-fill + live update ratings from `reviewlog.jsonl` so they're reproducible.
   **Deps:** S1.3, S7.1.
 
-### ☐ S7.3 — Difficulty / mastery as surfaced metrics  · **Effort:** M · **Phase:** 2
+### ◐ S7.3 — Difficulty / mastery as surfaced metrics  · **Effort:** M · **Phase:** 2 · _dev surface only; per-topic mastery rating on the deck page still to add_
 - **Why:** Per-topic ability score + trajectory ("Biology 1480 ↑60/mo") is the most
   expertise-*feeling* signal; per-card difficulty aids review. Under FSRS, prefer FSRS-`D`
   for *card* difficulty and reserve Elo for the *learner-ability* score to avoid double-
@@ -437,7 +437,7 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
 - **Acceptance:** card flagged at a lapse threshold (default ~8); user can suspend/reset/edit.
 - **Deps:** S1.6.
 
-### ☐ S7.5 — Adaptive practice selection (Elo-matched)  · **Effort:** M · **Phase:** 2
+### ☑ S7.5 — Adaptive practice selection (Elo-matched)  · **Effort:** M · **Phase:** 2 · _shipped (`Elo.adaptiveOrder`, weakest-first; forced practice)_
 - **Why:** The one load-bearing use of Elo: pick/order *non-due* cards so success ≈ target
   (~85%, desirable-difficulty sweet spot).
 - **Touches:** a new practice `StudyPlan` selector using θ vs `d`; reuses Practice mode
@@ -446,7 +446,7 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
   target success; never advances the spaced schedule; tag/deck scoped.
 - **Deps:** S7.1, S4.1.
 
-### ☐ S7.6 — Exam-cram mode UX  · **Effort:** M · **Phase:** 2
+### ☑ S7.6 — Exam-cram mode UX  · **Effort:** M · **Phase:** 2 · _shipped (deck ••• → Adaptive Practice); optional exam-date input still to add_
 - **Why:** Product surface for S7.5 — "drill `tag/deck` before <exam date>."
 - **Touches:** entry point in library/deck menu; optional exam-date input; surfaces weakest
   topics; wraps S7.5 selection.
