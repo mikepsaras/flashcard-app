@@ -218,7 +218,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 
 ## E2 — FSRS scheduler (closes gaps 1, 2, 3, 6) · Phase 2
 
-### ☐ S2.1 — Port FSRS algorithm (default weights)  · **Effort:** L · **Phase:** 2
+### ☑ S2.1 — Port FSRS algorithm (default weights)  · **Effort:** L · **Phase:** 2 · _shipped behind the `Scheduler` seam (`FSRS`/`FSRSScheduler` + `SchedulingState` S/D/lastReviewedAt). Needs exact-vector validation vs. py-fsrs before becoming a deck default._
 - **Why:** Modern, ~20–30% more efficient scheduling; principled stability/difficulty model.
 - **Touches:** new `Flashcards/Scheduling/FSRS.swift` (pure), conforming to `Scheduler`.
 - **Model/persist:** uses S1.2 fields.
@@ -460,8 +460,9 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
 
 - **Phase 0 — ✅ DONE (zero migration):** S0.1–S0.5 shipped to `main`. *(Also landed S5.1/S5.2/S5.4 content via S0.4.)*
 - **Phase 1 — ✅ DONE (format v2→v3):** S1.1–S1.6 shipped. (S2.4/S3.1/S7.1/S7.4 fields fold into a later migration as they land.)
-- **Phase 2 — features on foundations:** E2 (FSRS) · S3.1–S3.4 (cloze/type-in) · E4.1 ·
-  E5 · E6 (metrics/coverage) · E7 (Elo practice + difficulty).
+- **Phase 2 — 🚧 in progress:** S2.1 (FSRS algorithm) shipped behind the seam; next is
+  S2.4/2.5/2.6 to wire it in (per-deck selection, seed S/D from SM-2, grading UI). Then
+  S3.1–S3.4 (cloze/type-in) · E4.1 · E5 · E6 (metrics/coverage) · E7 (Elo practice + difficulty).
 - **Phase 3 — ambitious/optional:** S2.7 · S3.5/S3.6 (Note refactor, occlusion/MCQ) ·
   S4.2 (prereq DAG) · S5.5 · S6.5.
 
