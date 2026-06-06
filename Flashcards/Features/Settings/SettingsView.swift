@@ -23,6 +23,10 @@ struct SettingsView: View {
     @State private var showingResetStats = false
     @State private var showingResetProgress = false
     @State private var showingDeleteAll = false
+    // FSRS per-user weight optimization (S2.7).
+    @State private var fsrsOptimizing = false
+    @State private var fsrsStatus: String?
+    @State private var fsrsReviewCount = 0
 
     // Hidden developer mode (unlocked by tapping the version 7×) + its test-data tools.
     @AppStorage(DefaultsKey.developerMode) private var developerMode = false
@@ -55,6 +59,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             studyingSection
+            schedulingSection
             remindersSection
             aiSection
             storageSection
@@ -117,7 +122,7 @@ struct SettingsView: View {
         } message: {
             Text("Permanently deletes every deck and card, and clears your statistics. This can’t be undone.")
         }
-        .onAppear { loadAI() }
+        .onAppear { loadAI(); loadFSRSReviewCount() }
         .task {
             // Resync the reminder toggle if notification permission was revoked in System
             // Settings (otherwise it stays "on" while no nudges ever fire).
@@ -197,6 +202,61 @@ struct SettingsView: View {
             Text("Reminders")
         } footer: {
             Text("A daily nudge to review. Notifications stay on this device.")
+        }
+    }
+
+    /// Spaced-repetition tuning: re-fit the FSRS weights to the user's own review history (S2.7).
+    private var schedulingSection: some View {
+        Section {
+            if FSRSWeights.isCustomized() {
+                Label("Using your personalized FSRS weights.", systemImage: "wand.and.stars")
+                    .foregroundStyle(Theme.accent)
+            }
+            Button { optimizeFSRS() } label: {
+                HStack {
+                    Label("Tune FSRS to my reviews", systemImage: "slider.horizontal.3")
+                    Spacer()
+                    if fsrsOptimizing { ProgressView().controlSize(.small) }
+                }
+            }
+            .disabled(fsrsOptimizing || fsrsReviewCount < FSRSOptimizer.minimumReviews)
+            if FSRSWeights.isCustomized() {
+                Button(role: .destructive) {
+                    FSRSWeights.set(nil)
+                    fsrsStatus = "Reverted to the default FSRS weights."
+                } label: {
+                    Label("Reset to default weights", systemImage: "arrow.counterclockwise")
+                }
+                .disabled(fsrsOptimizing)
+            }
+        } header: {
+            Text("Spaced Repetition")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                if let fsrsStatus { Text(fsrsStatus).foregroundStyle(Theme.accent) }
+                Text(fsrsReviewCount < FSRSOptimizer.minimumReviews
+                     ? "FSRS decks use weights validated against the reference implementation. After about \(FSRSOptimizer.minimumReviews) reviews (you have \(fsrsReviewCount)) you can re-fit them to your own memory."
+                     : "Re-fits the 21 FSRS weights to your \(fsrsReviewCount) logged reviews, so intervals track your memory rather than the average. FSRS decks only; SM-2 is unaffected. More reviews ⇒ a better fit.")
+            }
+        }
+    }
+
+    private func loadFSRSReviewCount() {
+        fsrsReviewCount = FSRSOptimizer.scoredReviewCount(
+            FSRSOptimizer.sequences(from: ReviewLog.records(from: ReviewLog.defaultURL)))
+    }
+
+    private func optimizeFSRS() {
+        fsrsOptimizing = true
+        fsrsStatus = nil
+        Task {
+            let seqs = FSRSOptimizer.sequences(from: ReviewLog.records(from: ReviewLog.defaultURL))
+            let result = await Task.detached(priority: .userInitiated) { FSRSOptimizer.optimize(seqs) }.value
+            FSRSWeights.set(result.weights)
+            fsrsReviewCount = result.scoredReviews
+            let drop = result.lossBefore > 0 ? (result.lossBefore - result.lossAfter) / result.lossBefore * 100 : 0
+            fsrsStatus = "Tuned to \(result.scoredReviews) reviews — error \(String(format: "%.3f", result.lossBefore)) → \(String(format: "%.3f", result.lossAfter)) (down \(max(Int(drop.rounded()), 0))%)."
+            fsrsOptimizing = false
         }
     }
 

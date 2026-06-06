@@ -37,7 +37,37 @@ enum SchedulerKind: String, CaseIterable, Identifiable, Sendable {
     var scheduler: Scheduler {
         switch self {
         case .sm2:  SM2Scheduler()
-        case .fsrs: FSRSScheduler()
+        case .fsrs: FSRSScheduler(weights: FSRSWeights.current())
+        }
+    }
+}
+
+/// Persisted per-user FSRS weights (S2.7). Unset ⇒ the validated defaults; an optimization run
+/// (Settings → "Tune FSRS to my reviews", via `FSRSOptimizer`) stores a 21-element array. Stored as
+/// JSON in `UserDefaults` so it travels with the app's settings, not a deck file.
+enum FSRSWeights {
+    static let defaultsKey = "fsrsCustomWeights"
+
+    /// The weights the FSRS scheduler should use — the stored personalized set, or the defaults.
+    static func current(_ defaults: UserDefaults = .standard) -> [Double] {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let weights = try? JSONDecoder().decode([Double].self, from: data),
+              weights.count == FSRS.defaultWeights.count
+        else { return FSRS.defaultWeights }
+        return weights
+    }
+
+    static func isCustomized(_ defaults: UserDefaults = .standard) -> Bool {
+        defaults.data(forKey: defaultsKey) != nil
+    }
+
+    /// Stores (or, with `nil`, clears) the personalized weights. A wrong-length array is ignored.
+    static func set(_ weights: [Double]?, defaults: UserDefaults = .standard) {
+        if let weights, weights.count == FSRS.defaultWeights.count,
+           let data = try? JSONEncoder().encode(weights) {
+            defaults.set(data, forKey: defaultsKey)
+        } else {
+            defaults.removeObject(forKey: defaultsKey)
         }
     }
 }
