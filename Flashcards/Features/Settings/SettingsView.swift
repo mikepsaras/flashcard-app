@@ -328,6 +328,7 @@ struct SettingsView: View {
             Button { showingStressSheet = true } label: { Label("Stress test…", systemImage: "gauge.high") }
             Button { showingSeedHistory = true } label: { Label("Seed review history", systemImage: "calendar.badge.clock") }
             Button { runSeedReviewLog() } label: { Label("Seed review log (calibration)", systemImage: "scope") }
+            Button { runSeedLibraryReviewLog() } label: { Label("Seed Elo (weak spots / mastery)", systemImage: "chart.line.uptrend.xyaxis") }
             Button(role: .destructive) { showingRemoveTestData = true } label: { Label("Remove all test data", systemImage: "trash") }
             Toggle(isOn: $showGradeIntervals) {
                 Label("Show projected intervals while studying", systemImage: "calendar.badge.clock")
@@ -386,7 +387,14 @@ struct SettingsView: View {
     private func runLoadSample() {
         let r = DeveloperTools.loadSampleLibrary(into: context)
         context.saveAndPersist()
-        devStatus = "Loaded \(r.decks) decks · \(r.cards) cards. Tip: also “Seed review history” for full Insights."
+        devStatus = "Loaded \(r.decks) decks · \(r.cards) cards. Tip: “Seed Elo (weak spots / mastery)” + “Seed review history” fill the Insights."
+    }
+
+    /// Seeds the review log against the REAL library cards so Insights “Weak spots”, per-deck Mastery,
+    /// and adaptive practice populate (unlike the calibration seeder, whose ids don't resolve to cards).
+    private func runSeedLibraryReviewLog() {
+        let n = DeveloperTools.seedReviewLogForLibrary(into: context)
+        devStatus = "Seeded \(n) review-log records for the current library — open Insights for “Weak spots”, and a deck for its Mastery %."
     }
 
     /// Reveals `reviewlog.jsonl` in Finder (macOS) and reports a record-count summary (both platforms),

@@ -27,9 +27,11 @@ enum DeveloperTools {
                             colorHex: spec.colorHex, studyReversed: spec.reversed,
                             section: testSection, sectionOrder: spec.sections)
             context.insert(deck)
+            deck.typeToAnswer = spec.typeToAnswer
             for (i, c) in spec.cards.enumerated() {
                 let card = Card(term: c.term, definition: c.definition, deck: deck, section: c.section, sortOrder: i)
                 applyState(c.state, to: card, reversed: spec.reversed)
+                card.extra = c.extra
                 context.insert(card)
                 cards += 1
             }
@@ -183,6 +185,39 @@ enum DeveloperTools {
         ReviewLog.appendBatch(records, to: url)
     }
 
+    /// Writes synthetic per-review history into the review log for the cards ALREADY in the library, so
+    /// the Elo-driven features (Insights "Weak spots", per-deck Mastery %, adaptive practice) populate
+    /// without grinding through real reviews — unlike `seedReviewLog`, whose throwaway ids don't resolve
+    /// to real cards. Each card gets a stable intrinsic success rate so some read clearly weak; ~8–14
+    /// reviews each, spread over recent days. **Replaces** the existing log. Run after `loadSampleLibrary`.
+    @discardableResult
+    static func seedReviewLogForLibrary(into context: ModelContext, now: Date = .now, to url: URL = ReviewLog.defaultURL) -> Int {
+        let decks = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+        ReviewLog.reset(at: url)
+        var records: [ReviewLog.Record] = []
+        for deck in decks {
+            for card in deck.cardArray {
+                // A stable per-card skill (0…1) from its id, so some cards are reliably weak across the run.
+                let skill = Double(abs(card.id.hashValue) % 1000) / 1000.0
+                let successP = 0.25 + skill * 0.7                       // 0.25…0.95 chance correct
+                let reviews = Int.random(in: 8...14)                   // ≥ Elo.minGamesForDisplay, so it qualifies
+                for r in 0..<reviews {
+                    let interval = Int.random(in: 1...40)
+                    let elapsed = Double(interval) * Double.random(in: 0.5...1.4)
+                    let correct = Double.random(in: 0..<1) < successP
+                    records.append(ReviewLog.Record(
+                        ts: now.addingTimeInterval(Double(-(reviews - r)) * 86_400),
+                        deck: deck.id, card: card.id, direction: .forward,
+                        grade: correct ? 4 : 0, correct: correct, elapsedDays: elapsed,
+                        intervalBefore: interval, mature: interval >= StudyInsights.matureIntervalDays))
+                }
+            }
+        }
+        records.sort { $0.ts < $1.ts }   // chronological, so the Elo replay is well-ordered
+        ReviewLog.appendBatch(records, to: url)
+        return records.count
+    }
+
     struct HistoryLogs { var reviews: [String: Int]; var correct: [String: Int]; var mature: [String: Int]; var matureCorrect: [String: Int] }
 
     /// Pure generator for the four day-logs — separated so it's unit-testable without touching
@@ -255,8 +290,8 @@ enum DeveloperTools {
 
     // MARK: Sample specs
 
-    private struct CardSpec { var term: String; var definition: String; var section = ""; var state: CardState = .new }
-    private struct DeckSpec { var name: String; var colorHex: String; var reversed = false; var sections: [String] = []; var cards: [CardSpec] }
+    private struct CardSpec { var term: String; var definition: String; var section = ""; var state: CardState = .new; var extra = "" }
+    private struct DeckSpec { var name: String; var colorHex: String; var reversed = false; var sections: [String] = []; var typeToAnswer = false; var cards: [CardSpec] }
 
     private static let sampleSpecs: [DeckSpec] = [
         DeckSpec(name: "Spanish Essentials", colorHex: "#FF9500", sections: ["Verbs", "Nouns", "Adjectives"], cards: [
@@ -270,7 +305,7 @@ enum DeveloperTools {
             CardSpec(term: "rápido", definition: "fast", section: "Adjectives", state: .upcoming),
             CardSpec(term: "feliz", definition: "happy", section: "Adjectives", state: .new),
         ]),
-        DeckSpec(name: "World Capitals", colorHex: "#34C759", reversed: true, cards: [
+        DeckSpec(name: "World Capitals", colorHex: "#34C759", reversed: true, typeToAnswer: true, cards: [
             CardSpec(term: "France", definition: "Paris", state: .mature),
             CardSpec(term: "Japan", definition: "Tokyo", state: .mature),
             CardSpec(term: "Egypt", definition: "Cairo", state: .learning),
@@ -283,7 +318,8 @@ enum DeveloperTools {
         DeckSpec(name: "Biology", colorHex: "#FF2D55", sections: ["Cells", "Genetics"], cards: [
             CardSpec(term: "Mitochondria", definition: "The powerhouse of the cell.", section: "Cells", state: .mature),
             CardSpec(term: "Ribosome", definition: "Site of protein synthesis.", section: "Cells", state: .learning),
-            CardSpec(term: "Osmosis", definition: "Diffusion of water across a semipermeable membrane.", section: "Cells", state: .due),
+            CardSpec(term: "Osmosis", definition: "Diffusion of water across a semipermeable membrane.", section: "Cells", state: .due,
+                     extra: "Water moves toward the side with **more** solute, with no energy spent — it's entropy equalizing concentrations. This is why a cell in pure water swells and one in brine shrivels."),
             CardSpec(term: "Nucleus", definition: "Holds the cell's genetic material.", section: "Cells", state: .new),
             CardSpec(term: "Allele", definition: "A variant form of a gene.", section: "Genetics", state: .upcoming),
             CardSpec(term: "Genotype", definition: "The genetic makeup of an organism.", section: "Genetics", state: .overdue),
@@ -291,7 +327,8 @@ enum DeveloperTools {
             CardSpec(term: "Mutation", definition: "A change in a DNA sequence.", section: "Genetics", state: .new),
         ]),
         DeckSpec(name: "Computer Science", colorHex: "#3478F6", sections: ["Algorithms", "Networking"], cards: [
-            CardSpec(term: "Big-O notation", definition: "Describes an algorithm's worst-case growth rate.", section: "Algorithms", state: .mature),
+            CardSpec(term: "Big-O notation", definition: "Describes an algorithm's worst-case growth rate.", section: "Algorithms", state: .mature,
+                     extra: "It drops constants and lower-order terms — $O(2n + 5)$ is just $O(n)$ — so it measures how cost **scales**, not absolute speed. An $O(n)$ algorithm can be slower than an $O(n^2)$ one on small inputs."),
             CardSpec(term: "Binary search", definition: "O(log n) search over a sorted array.", section: "Algorithms", state: .mature),
             CardSpec(term: "Quicksort", definition: "Divide-and-conquer sort, avg O(n log n).", section: "Algorithms", state: .due),
             CardSpec(term: "Hash table", definition: "Key → value store with avg O(1) lookup.", section: "Algorithms", state: .learning),
@@ -309,7 +346,8 @@ enum DeveloperTools {
             CardSpec(term: "Oxidation", definition: "Loss of electrons.", state: .new),
         ]),
         DeckSpec(name: "Math Formulas", colorHex: "#5AC8FA", cards: [
-            CardSpec(term: "Quadratic formula", definition: "$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$", state: .mature),
+            CardSpec(term: "Quadratic formula", definition: "$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$", state: .mature,
+                     extra: "Derived by **completing the square** on $ax^2 + bx + c = 0$. The discriminant $b^2 - 4ac$ tells you the number of real roots: positive → two, zero → one, negative → none."),
             CardSpec(term: "Pythagorean theorem", definition: "$a^2 + b^2 = c^2$", state: .mature),
             CardSpec(term: "Area of a circle", definition: "$A = \\pi r^2$", state: .learning),
             CardSpec(term: "Euler's identity", definition: "$e^{i\\pi} + 1 = 0$", state: .due),
