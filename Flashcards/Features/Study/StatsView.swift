@@ -209,6 +209,12 @@ struct StatsContentView: View {
 
     /// Predicted recall *now* and measured *mature* retention as a legend under a graph that cycles
     /// Spread → Trend → Curve on tap (a chip names the current one) — no segmented control / tabs.
+    /// Calibration of predicted vs. actual recall from the review log (E6); nil until enough reviews.
+    /// Read on render — fine for realistic log sizes; cache if logs ever grow large.
+    private var calibration: Calibration.Summary? {
+        Calibration.summary(from: ReviewLog.records(from: ReviewLog.defaultURL))
+    }
+
     private var memoryCard: some View {
         // Until something's been reviewed, both numbers are nil — show a "study to see this" state
         // rather than hiding the card, so its place on the page (and what it tracks) is visible.
@@ -237,6 +243,19 @@ struct StatsContentView: View {
                             .foregroundStyle(Theme.accent)
                             .padding(.top, 1)
                         Text(takeaway)
+                            .font(Typography.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 2)
+                }
+                if let calibration {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "scope")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 1)
+                        Text(Calibration.takeaway(calibration))
                             .font(Typography.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
