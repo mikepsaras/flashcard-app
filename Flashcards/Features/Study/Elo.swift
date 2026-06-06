@@ -52,4 +52,20 @@ enum Elo {
                 > (ratings.difficulty[unitKey(card: $1.card.id, direction: $1.direction)] ?? initialRating)
         }
     }
+
+    /// A friendly "mastery" reading for one deck: the learner's expected success rate (0…1) over the
+    /// cards they've been rated on, plus the games behind it. `nil` until `minGamesForDisplay` reviews.
+    /// Pass the records for ONE deck (caller filters) so the replay stays cheap and scoped.
+    static func mastery(deckRecords records: [ReviewLog.Record]) -> (rate: Double, games: Int)? {
+        guard let deck = records.first?.deck else { return nil }
+        let ratings = replay(records)
+        let topic = topicKey(deck: deck)
+        let games = ratings.topicGames[topic] ?? 0
+        guard games >= minGamesForDisplay, !ratings.difficulty.isEmpty else { return nil }
+        let ability = ratings.ability[topic] ?? initialRating
+        let rate = ratings.difficulty.values
+            .map { 1.0 / (1.0 + pow(10.0, ($0 - ability) / 400.0)) }
+            .reduce(0, +) / Double(ratings.difficulty.count)
+        return (rate, games)
+    }
 }

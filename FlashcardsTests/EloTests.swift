@@ -51,4 +51,18 @@ final class EloTests {
         #expect(ordered.first?.card.id == hard.id)   // weakest (hardest) card drilled first
         #expect(ordered.last?.card.id == easy.id)
     }
+
+    @Test func masteryRisesWithConsistentSuccess() {
+        let deck = UUID()
+        let cards = (0..<5).map { _ in UUID() }
+        let records = (0..<40).map { rec(deck: deck, card: cards[$0 % 5], correct: true) }   // all correct
+        let m = Elo.mastery(deckRecords: records)!
+        #expect(m.rate > 0.5)     // beating the cards ⇒ above-even mastery
+        #expect(m.games == 40)
+    }
+
+    @Test func masteryNilBelowMinimumGames() {
+        let deck = UUID(), card = UUID()
+        #expect(Elo.mastery(deckRecords: (0..<3).map { _ in rec(deck: deck, card: card, correct: true) }) == nil)
+    }
 }

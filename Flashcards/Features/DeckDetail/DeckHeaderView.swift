@@ -8,6 +8,9 @@ struct DeckHeaderView: View {
     var onStudy: () -> Void
 
     @AppStorage(DefaultsKey.retentionHorizon) private var retentionHorizonRaw = RetentionHorizon.week.rawValue
+    /// Per-deck Elo mastery (E7) — expected success on this deck's cards; nil until enough reviews.
+    /// Loaded off the render path in `.task`, so a large review log isn't parsed on every redraw.
+    @State private var mastery: (rate: Double, games: Int)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -31,6 +34,9 @@ struct DeckHeaderView: View {
                 if deck.cardCount > 0 { retentionRing }
                 stat(value: "\(deck.cardCount)", label: "Cards")
                 stat(value: "\(deck.dueCount)", label: "Due", tint: deck.dueCount > 0 ? Theme.accent : .secondary)
+                if let mastery {
+                    stat(value: "\(Int((mastery.rate * 100).rounded()))%", label: "Mastery", tint: Theme.accent)
+                }
                 Spacer(minLength: 0)
             }
 
@@ -45,6 +51,9 @@ struct DeckHeaderView: View {
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.windowBackground)
+        .task(id: deck.id) {
+            mastery = Elo.mastery(deckRecords: ReviewLog.records(from: ReviewLog.defaultURL).filter { $0.deck == deck.id })
+        }
     }
 
     private var studyButtonTitle: String {
