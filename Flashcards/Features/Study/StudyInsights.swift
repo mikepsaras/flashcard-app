@@ -307,7 +307,7 @@ struct StudyInsights: Equatable {
 
             // Fold this deck into its library Category aggregate ("" ⇒ Uncategorized).
             let category = deck.section
-            var cat = byCategory[category] ?? CategoryStat(id: category, name: category.isEmpty ? "Uncategorized" : category,
+            var cat = byCategory[category] ?? CategoryStat(id: category, name: category.isEmpty ? "No Subject" : category,
                                                            totalCards: 0, due: 0, newCount: 0, learningCount: 0, matureCount: 0)
             cat.totalCards += stat.totalCards
             cat.due += stat.due

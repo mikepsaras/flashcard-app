@@ -82,7 +82,7 @@ struct DeckLibraryView: View {
             }
 
             ForEach(groupedDecks) { group in
-                Section(group.section ?? (hasAnySections ? "Uncategorized" : "Decks")) {
+                Section(group.section ?? (hasAnySections ? "No Subject" : "Decks")) {
                     ForEach(group.decks) { deck in
                         deckRow(deck)
                     }

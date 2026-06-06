@@ -85,8 +85,8 @@ struct DeckEditorView: View {
                     LabeledField(label: "Description", placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        LabeledField(label: "Category", placeholder: "e.g. Languages", text: $section)
-                        caption("Groups decks in the library. Each deck belongs to one category; leave blank for Uncategorized.")
+                        LabeledField(label: "Subject", placeholder: "e.g. Languages", text: $section)
+                        caption("Groups decks in the library. Each deck belongs to one subject; leave blank for No Subject.")
                     }
 
                     // Compact appearance row: an icon-picker popover beside the color swatches, so the

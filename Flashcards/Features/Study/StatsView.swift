@@ -702,7 +702,7 @@ enum LibraryGrouping: Int, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .deck:     "By deck"
-        case .category: "By category"
+        case .category: "By subject"
         case .section:  "By section"
         }
     }

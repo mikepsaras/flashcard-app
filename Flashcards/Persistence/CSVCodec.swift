@@ -178,7 +178,7 @@ enum StatsCSV {
             }
         }
         if !insights.categories.isEmpty {
-            blank(); row(["Category", "Cards", "Due", "New", "Learning", "Mature"])
+            blank(); row(["Subject", "Cards", "Due", "New", "Learning", "Mature"])
             for c in insights.categories {
                 row([c.name, "\(c.totalCards)", "\(c.due)", "\(c.newCount)", "\(c.learningCount)", "\(c.matureCount)"])
             }

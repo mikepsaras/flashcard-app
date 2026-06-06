@@ -25,8 +25,9 @@ final class Deck {
     /// Which scheduling algorithm this deck studies with (a `SchedulerKind` raw value). Empty ⇒ the
     /// default, SM-2; `"fsrs"` opts the deck into FSRS. Defaulted ⇒ CloudKit-safe.
     var schedulerRaw: String = ""
-    /// The single section this deck belongs to; the library groups decks into sections by it.
-    /// Empty ⇒ "Uncategorized". CloudKit-safe: defaulted.
+    /// The single **Subject** this deck belongs to (the library groups decks by it). Named `section`
+    /// internally for historical reasons — distinct from a card's within-deck `section`. Empty ⇒
+    /// "No Subject". CloudKit-safe: defaulted.
     var section: String = ""
     /// Ordered card-section names *within* this deck (Reminders-style). Distinct from `section`
     /// above (which groups the deck in the library): this lets an empty section persist and sets
