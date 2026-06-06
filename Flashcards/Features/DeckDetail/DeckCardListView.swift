@@ -454,10 +454,39 @@ private struct CardRowView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            scheduleBadge
+            HStack(spacing: 6) {
+                healthBadge
+                // A suspended card is out of study, so its "Due"/"New" schedule state would mislead.
+                if !card.suspended { scheduleBadge }
+            }
         }
         .padding(.vertical, 3)
+        .opacity(card.suspended ? 0.6 : 1)   // visibly dim a parked leech
         .contentShape(Rectangle())
+    }
+
+    /// Leech / suspended flag (S7.4), shown ahead of the schedule badge. A suspended card shows only
+    /// this; an active leech shows it alongside the schedule badge.
+    @ViewBuilder private var healthBadge: some View {
+        if card.suspended {
+            labeledPill("Suspended", systemImage: "pause.circle.fill", color: .secondary)
+                .help("Suspended — held out of study. Open the card to resume.")
+        } else if card.isLeech {
+            labeledPill("Leech", systemImage: "exclamationmark.triangle.fill", color: .orange)
+                .help("Leech — failed \(card.lapses) times. Open the card to suspend or reset.")
+        }
+    }
+
+    private func labeledPill(_ text: String, systemImage: String, color: Color) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+            Text(text)
+        }
+        .font(.system(.caption2, design: .rounded, weight: .bold))
+        .foregroundStyle(color)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.15), in: Capsule())
     }
 
     @ViewBuilder private var scheduleBadge: some View {

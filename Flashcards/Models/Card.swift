@@ -53,6 +53,16 @@ final class Card {
     /// `term` holds cloze text (`{{c1::…}}`) studied with the deletions hidden. Defaulted ⇒ CloudKit-safe.
     var typeRaw: String = ""
 
+    // MARK: Card health — leech detection (S7.4)
+    /// How many times this card has lapsed (graded **Again** in a real, tracked review). A single
+    /// **whole-card** counter — deliberately not per-direction like the schedules above — because a
+    /// leech is reformulated as a whole (you rewrite the term/definition pair), and "I keep failing
+    /// this" reads the same whichever way the card was asked. Defaulted ⇒ CloudKit-safe.
+    var lapses: Int = 0
+    /// When true, the card is held out of every study queue (see `Deck.allReviewItems`) — the user's
+    /// way to park a leech until they reformulate it, without deleting its history. Defaulted ⇒ CloudKit-safe.
+    var suspended: Bool = false
+
     // Inverse of Deck.cards (optional, per CloudKit rules).
     var deck: Deck?
 
@@ -83,6 +93,14 @@ final class Card {
 extension Card {
     /// Reviewed in either direction.
     var hasBeenReviewed: Bool { lastReviewedAt != nil || reverseLastReviewedAt != nil }
+
+    /// Lapse count at or above which a card is treated as a **leech** — one you keep failing, worth
+    /// suspending or reformulating (S7.4). The decision-log default is 8.
+    static let leechThreshold = 8
+
+    /// A card you keep failing: `lapses` has reached `leechThreshold`. Independent of `suspended` —
+    /// a suspended card is still a leech by count; suspension just parks it out of study.
+    var isLeech: Bool { lapses >= Card.leechThreshold }
 
     /// The card's kind, backed by `typeRaw` (empty ⇒ basic). Setting basic stores empty so basic
     /// cards re-encode unchanged.

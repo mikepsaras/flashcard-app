@@ -7,7 +7,8 @@ import SwiftData
 /// Format v2 adds reverse-direction scheduling + `studyReversed`, plus — added later, the same
 /// way grading mode was — optional per-card `section` and the deck's `sectionOrder` +
 /// `showSectionsInStudy`. Format v3 adds optional per-card FSRS state (`stability`/`difficulty`,
-/// forward + reverse), `tags`, and `extra`. All of these are optional and omitted when empty/default,
+/// forward + reverse), `tags`, `extra`, and leech-detection state (`lapses`/`suspended`). All of these
+/// are optional and omitted when empty/default,
 /// so files not using them re-encode identically (no phantom edits) — and the version line only
 /// advances to 3 when a card actually uses a v3 feature (`encode` stamps 2 otherwise), so existing
 /// v2 files stay byte-for-byte unchanged. Manual card order rides in the order of the `cards` array
@@ -71,6 +72,10 @@ enum DeckCodec {
         var reverseDifficulty: Double?
         var extra: String?
         var type: String?
+        // v3: leech detection (S7.4) — whole-card lapse count + suspended flag. Optional and omitted
+        // when 0/false, so cards that never lapsed re-encode byte-identically (no phantom edits).
+        var lapses: Int?
+        var suspended: Bool?
     }
 
     private static var encoder: JSONEncoder {
@@ -93,6 +98,7 @@ enum DeckCodec {
         let usesV3 = !deck.schedulerRaw.isEmpty || deck.typeToAnswer || deck.cardArray.contains { card in
             card.stability != 0 || card.difficulty != 0 || card.reverseStability != 0
                 || card.reverseDifficulty != 0 || !card.extra.isEmpty || !card.typeRaw.isEmpty
+                || card.lapses != 0 || card.suspended
         }
         let dto = DeckDTO(
             formatVersion: usesV3 ? 3 : 2,
@@ -233,7 +239,10 @@ enum DeckCodec {
             reverseStability: card.reverseStability == 0 ? nil : card.reverseStability,
             reverseDifficulty: card.reverseDifficulty == 0 ? nil : card.reverseDifficulty,
             extra: card.extra.isEmpty ? nil : card.extra,
-            type: card.typeRaw.isEmpty ? nil : card.typeRaw
+            type: card.typeRaw.isEmpty ? nil : card.typeRaw,
+            // v3 leech state — omit when default so cards that never lapsed re-encode identically.
+            lapses: card.lapses == 0 ? nil : card.lapses,
+            suspended: card.suspended ? true : nil
         )
     }
 
@@ -263,5 +272,7 @@ enum DeckCodec {
         card.reverseDifficulty = dto.reverseDifficulty ?? 0
         card.extra = dto.extra ?? ""
         card.typeRaw = dto.type ?? ""
+        card.lapses = dto.lapses ?? 0
+        card.suspended = dto.suspended ?? false
     }
 }

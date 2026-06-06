@@ -184,11 +184,13 @@ extension Deck {
     var resolvedScheduler: Scheduler { schedulerKind.scheduler }
 
     /// Every review unit this deck offers: forward for each card, plus a reverse unit
-    /// per card when reverse study is enabled.
+    /// per card when reverse study is enabled. Suspended (leech) cards are held out of study
+    /// entirely (S7.4), so they never appear in any due/practice/cram queue or `dueCount`.
     var allReviewItems: [ReviewItem] {
-        cardArray.flatMap { card in
+        cardArray.flatMap { card -> [ReviewItem] in
+            guard !card.suspended else { return [] }
             // Cloze cards are studied one way only — reversing a fill-in-the-blank is nonsensical.
-            (studyReversed && card.cardType != .cloze)
+            return (studyReversed && card.cardType != .cloze)
                 ? [ReviewItem(card: card, direction: .forward), ReviewItem(card: card, direction: .reverse)]
                 : [ReviewItem(card: card, direction: .forward)]
         }

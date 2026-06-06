@@ -55,6 +55,10 @@ struct CardEditorView: View {
                         Text("Shown beneath the answer while studying. Supports Markdown & LaTeX.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
+
+                    // Leech / card-health controls (S7.4) — only once the card has lapsed or been
+                    // suspended, so a healthy card has nothing to act on.
+                    if card.lapses > 0 || card.suspended { cardHealthSection }
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -134,6 +138,64 @@ struct CardEditorView: View {
             .padding(12)
             .fieldBox()
         }
+    }
+
+    /// Leech / card-health controls (S7.4): the lapse count, plus Suspend (hold the card out of every
+    /// study queue) and Reset Lapses. These act **immediately** — distinct from the term/definition
+    /// edit the Save button commits — so toggling suspension doesn't depend on also saving text edits.
+    private var cardHealthSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: card.isLeech ? "exclamationmark.triangle.fill" : "stethoscope")
+                    .foregroundStyle(card.isLeech ? .orange : .secondary)
+                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.isLeech ? "Leech" : "Card Health")
+                        .font(.system(.subheadline, weight: .semibold))
+                    Text(healthSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    card.suspended.toggle()
+                    persistHealthChange()
+                } label: {
+                    Label(card.suspended ? "Resume" : "Suspend",
+                          systemImage: card.suspended ? "play.circle" : "pause.circle")
+                }
+                Button {
+                    card.lapses = 0
+                    persistHealthChange()
+                } label: {
+                    Label("Reset Lapses", systemImage: "arrow.counterclockwise")
+                }
+                .disabled(card.lapses == 0)
+                Spacer(minLength: 0)
+            }
+            .buttonStyle(.bordered)
+            .font(Typography.callout)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fieldBox()
+    }
+
+    private var healthSubtitle: String {
+        let lapseText = card.lapses == 1 ? "Failed once" : "Failed \(card.lapses) times"
+        if card.suspended {
+            return card.lapses == 0 ? "Held out of study." : "\(lapseText) · held out of study."
+        }
+        if card.isLeech { return "\(lapseText) — consider reformulating or suspending it." }
+        return lapseText + "."
+    }
+
+    /// Persists a Suspend/Reset action right away (bumping `modifiedAt` so the deck re-encodes).
+    private func persistHealthChange() {
+        card.modifiedAt = .now
+        context.saveAndPersist(touching: deck)
     }
 
     private func save() {

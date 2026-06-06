@@ -32,6 +32,8 @@ final class StudySession {
         let previousIndex: Int
         let previousCorrect: Int
         let previousWrong: Int
+        /// The card's whole-card lapse count before this grade, restored on undo (S7.4).
+        let previousLapses: Int
         /// The item's requeue count before this grade, restored on undo.
         let previousRequeueCount: Int
         /// Index where a copy was re-inserted for another look this session, or nil if the grade
@@ -168,6 +170,7 @@ final class StudySession {
             previousIndex: index,
             previousCorrect: correctCount,
             previousWrong: wrongCount,
+            previousLapses: card.lapses,
             previousRequeueCount: requeueCounts[item.id] ?? 0,
             requeuedAt: requeuedAt
         ))
@@ -178,6 +181,10 @@ final class StudySession {
             let scheduler = card.deck?.resolvedScheduler ?? SM2Scheduler()
             let updated = scheduler.schedule(current: card.schedulingState(direction), grade: grade, now: now)
             card.apply(updated, direction: direction, reviewedAt: now)
+            // A failed recall (Again) is a lapse — bump the whole-card counter so cards you keep
+            // failing surface as leeches (S7.4). Gated exactly like rescheduling above (real, tracked,
+            // non-practice run), counted once per failed grade, and reversed by undo's snapshot.
+            if !grade.isCorrect { card.lapses += 1 }
             // Mark the deck modified so the (saveAndPersist-bypassing) study persist re-writes it:
             // `DeckStore` skips encoding decks whose `modifiedAt` is unchanged, and apply() only bumps
             // the *card's* modifiedAt.
@@ -217,6 +224,9 @@ final class StudySession {
             lastReviewedAt: move.previousReviewedAt,
             modifiedAt: move.previousModifiedAt
         )
+        // Reverse any lapse this grade counted (S7.4). Restored unconditionally to the captured value
+        // for the same reason the schedule is — never gate on the live `trackLearning` flag.
+        move.item.card.lapses = move.previousLapses
 
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
             index = move.previousIndex

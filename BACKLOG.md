@@ -432,11 +432,13 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
   framed as engagement/insight, not the schedule.
 - **Deps:** S7.1, S6.3.
 
-### ☐ S7.4 — Leech detection  · **Effort:** S · **Phase:** 2
+### ☑ S7.4 — Leech detection  · **Effort:** S · **Phase:** 2 · _shipped (whole-card `lapses` Int + `suspended`, format v3; `Card.leechThreshold` = 8; Again-grade increment in `StudySession` with undo; leech/suspended badge in the deck list + Suspend/Reset in the card editor; suspended cards excluded from `Deck.allReviewItems`)_
 - **Why:** Flag broken cards to suspend/reformulate. **Primary signal:** lapse counter
   (add `lapses` Int, **v3**); difficulty corroborates. **Touches:** `Card.swift`,
   `StudySession` (increment on `again`), surfacing in deck detail.
 - **Acceptance:** card flagged at a lapse threshold (default ~8); user can suspend/reset/edit.
+- **Decision:** a single **whole-card** `lapses` (not per-direction) — a leech is reformulated as a
+  whole, and the failed-recall signal reads the same in either direction.
 - **Deps:** S1.6.
 
 ### ☑ S7.5 — Adaptive practice selection (Elo-matched)  · **Effort:** M · **Phase:** 2 · _shipped (`Elo.adaptiveOrder`, weakest-first; forced practice)_

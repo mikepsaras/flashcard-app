@@ -232,6 +232,63 @@ import SwiftData
         #expect(c.stability == 0)
         #expect(c.difficulty == 0)
         #expect(c.extra == "")
+        #expect(c.lapses == 0)        // leech state absent in v2 ⇒ defaults
+        #expect(c.suspended == false)
+    }
+
+    // MARK: v3 — leech detection (S7.4)
+
+    @Test func leechStateRoundTripsAndStampsVersion3() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Leechy")
+        container.mainContext.insert(deck)
+        let card = Card(term: "q", definition: "a", deck: deck)
+        card.lapses = 9            // past the default threshold…
+        card.suspended = true      // …and parked out of study
+        container.mainContext.insert(card)
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 3)            // a v3 feature is in use
+        #expect(dto.cards[0].lapses == 9)
+        #expect(dto.cards[0].suspended == true)
+
+        let other = DeckStore.makeContainer()
+        let c = DeckCodec.makeDeck(from: dto, in: other.mainContext).cardArray.first!
+        #expect(c.lapses == 9)
+        #expect(c.suspended)
+        #expect(c.isLeech)
+    }
+
+    @Test func noLeechStateOmittedAndStaysVersion2() throws {
+        // A card that never lapsed and isn't suspended must omit both keys and keep the v2 line,
+        // so decks predating leech detection re-encode byte-identically (no phantom edits).
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Plain")
+        container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 2)
+        #expect(dto.cards[0].lapses == nil)
+        #expect(dto.cards[0].suspended == nil)
+    }
+
+    @Test func suspendedAloneStampsVersion3() throws {
+        // Suspension with zero lapses is still a v3 feature — the flag must survive and bump the line.
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Parked")
+        container.mainContext.insert(deck)
+        let card = Card(term: "a", definition: "b", deck: deck)
+        card.suspended = true
+        container.mainContext.insert(card)
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 3)
+        #expect(dto.cards[0].lapses == nil)         // 0 ⇒ omitted
+        #expect(dto.cards[0].suspended == true)
     }
 
     @Test func schedulerSelectionRoundTripsAndStampsVersion3() throws {

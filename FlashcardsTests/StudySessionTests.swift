@@ -365,4 +365,81 @@ final class StudySessionTests {
         #expect(out.prefix(2).allSatisfy { $0.card.lastReviewedAt != nil })     // reviews still lead
         #expect(out.dropFirst(2).allSatisfy { $0.card.lastReviewedAt == nil })  // new after
     }
+
+    // MARK: Leech detection (S7.4)
+
+    @Test func againGradeCountsLapseAndUndoReversesIt() {
+        let cards = makeCards(1)
+        let card = cards[0]
+        #expect(card.lapses == 0)
+
+        let session = StudySession(cards: cards, trackLearning: true)
+        session.grade(.again)              // a failed recall in a real, tracked run is a lapse
+        #expect(card.lapses == 1)
+
+        session.undo()
+        #expect(card.lapses == 0)          // undo reverses the lapse exactly
+    }
+
+    @Test func correctGradesDoNotCountLapses() {
+        let cards = makeCards(2)
+        let session = StudySession(cards: cards, trackLearning: true)
+        session.grade(.good)               // a pass
+        session.grade(.hard)               // Hard is q=3 — still a pass, not a lapse
+        #expect(cards[0].lapses == 0)
+        #expect(cards[1].lapses == 0)
+    }
+
+    @Test func practiceRunDoesNotCountLapses() {
+        // Nothing due ⇒ practice; schedules (and the lapse counter) are left untouched, so drilling
+        // a future-due card by missing it can't inflate its leech count.
+        let context = container.mainContext
+        let deck = Deck(name: "Practice"); context.insert(deck)
+        let card = Card(term: "a", definition: "b", deck: deck, dueDate: .now.addingTimeInterval(5 * 86_400))
+        context.insert(card)
+        try? context.save()
+
+        let session = StudySession(cards: [card], trackLearning: true)
+        #expect(session.isPractice)
+        session.grade(.again)
+        #expect(card.lapses == 0)
+    }
+
+    @Test func notTrackingDoesNotCountLapses() {
+        let cards = makeCards(1)
+        let card = cards[0]
+        let session = StudySession(cards: cards, trackLearning: false)
+        session.grade(.again)
+        #expect(card.lapses == 0)          // gated like rescheduling — no tracking, no lapse
+    }
+
+    @Test func repeatedMissesCrossTheLeechThreshold() {
+        let card = makeCards(1)[0]
+        #expect(card.isLeech == false)
+        // A card you keep failing day after day crosses the leech line. Reset the due date each round
+        // so the run is a real (tracked, non-practice) one — a miss pushes the card to tomorrow.
+        for _ in 0..<Card.leechThreshold {
+            card.dueDate = .now
+            let session = StudySession(cards: [card], trackLearning: true)
+            session.grade(.again)
+        }
+        #expect(card.lapses == Card.leechThreshold)
+        #expect(card.isLeech)
+    }
+
+    @Test func suspendedCardExcludedFromStudyQueues() {
+        let context = container.mainContext
+        let deck = Deck(name: "Leechy"); context.insert(deck)
+        let active = Card(term: "a", definition: "b", deck: deck)
+        let parked = Card(term: "c", definition: "d", deck: deck)
+        parked.suspended = true
+        context.insert(active); context.insert(parked)
+        try? context.save()
+
+        // The suspended card is held out of every queue derived from allReviewItems.
+        #expect(deck.allReviewItems.count == 1)
+        #expect(deck.allReviewItems.first?.card.id == active.id)
+        #expect(deck.dueReviewItems.allSatisfy { $0.card.id == active.id })
+        #expect(deck.dueCount == 1)
+    }
 }
