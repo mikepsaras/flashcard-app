@@ -381,7 +381,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 - Deepens S0.5 using the review log. **Touches:** `StudyInsights`, `StatsView`,
   `DeckHeaderView`. **Deps:** S1.3.
 
-### ☐ S6.2 — Calibration curve (predicted vs actual)  · **Effort:** M · **Phase:** 2
+### ◐ S6.2 — Calibration curve (predicted vs actual)  · **Effort:** M · **Phase:** 2 · _engine + Insights takeaway shipped (`Calibration`, review-log's first consumer); per-bucket curve chart still to add_
 - **Why:** The honest "is my sense of mastery real?" meter — compares predicted recall to
   actual pass rate. **Touches:** `StudyInsights` (new aggregation over `reviewlog.jsonl`),
   `StatsView` chart. **Deps:** S1.3.
