@@ -92,4 +92,27 @@ import Foundation
         #expect(seeded.stability > coldStart.stability * 3)   // clearly seeded from the 30-day interval
         #expect(seeded.interval > coldStart.interval)
     }
+
+    @Test func matchesPyFSRS6ReferenceVectors() {
+        // Exact outputs from py-fsrs 6.3.1 (default params, desired_retention 0.9, no learning/
+        // relearning steps, fuzzing off), reviewing on each due date: (rating, S, D, interval).
+        let seq: [(Grade, Double, Double, Int)] = [
+            (.good, 2.306500, 2.118104, 2),
+            (.good, 10.964332, 2.111214, 11),
+            (.good, 46.280217, 2.104331, 46),
+            (.again, 2.932580, 7.389976, 3),
+            (.good, 7.778226, 7.377814, 8),
+            (.easy, 28.386509, 6.486830, 28),
+            (.hard, 51.926443, 7.653023, 52),
+        ]
+        var clock = Date(timeIntervalSince1970: 1_700_000_000)
+        var state = SchedulingState.initial(now: clock)
+        for (index, step) in seq.enumerated() {
+            state = FSRS.schedule(current: state, grade: step.0, now: clock, calendar: cal)
+            #expect(abs(state.stability - step.1) < 0.001, "stability at step \(index)")
+            #expect(abs(state.difficulty - step.2) < 0.001, "difficulty at step \(index)")
+            #expect(state.interval == step.3, "interval at step \(index)")
+            clock = clock.addingTimeInterval(Double(state.interval) * 86_400)   // review on the due date
+        }
+    }
 }

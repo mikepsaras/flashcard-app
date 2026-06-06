@@ -1,26 +1,22 @@
 import Foundation
 
-/// Free Spaced Repetition Scheduler (FSRS-4.5) — a `Scheduler` conformer that models memory as
-/// **stability** (S, days until recall drops to the target) and **difficulty** (D, 1–10) rather than
-/// SM-2's single ease factor. Pure + deterministic (inject `now`/`calendar`). Uses the published
-/// FSRS-4.5 default weights and a 0.9 target retention.
+/// Free Spaced Repetition Scheduler (**FSRS-6**) — a `Scheduler` conformer modeling memory as
+/// **stability** (S, days) and **difficulty** (D, 1–10) rather than SM-2's single ease factor. Ported
+/// from py-fsrs 6.3.1 (MIT) and validated against it to <0.001 on reference vectors (see `FSRSTests`).
 ///
-/// ⚠️ Phase 2 scaffold (S2.1): the formulas follow the FSRS-4.5 reference, but the constants/weights
-/// should be validated against the upstream implementation (py-fsrs / fsrs4anki) before this is wired
-/// as a deck's default scheduler (S2.4/S2.6). Nothing selects it yet — it's landed behind the
-/// `Scheduler` seam so it can be exercised in isolation. Per-user weight optimization is S2.7.
+/// Implements the long-term path plus the same-day (short-term) path. App-level in-session learning
+/// steps live in `StudySession` (S0.1), so the scheduler's own learning/relearning steps are unused —
+/// equivalent to py-fsrs configured with empty steps. Pure + deterministic (inject `now`/`calendar`).
 enum FSRS {
-    /// Published FSRS-4.5 default weights, w0…w16.
+    /// py-fsrs 6.3.1 default parameters, w0…w20 (w20 is the learnable decay).
     static let defaultWeights: [Double] = [
-        0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61,
+        0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796,
+        1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
     ]
-    /// Target recall probability at the next due date. Will become a user setting; default 0.9 (decision #6).
+    /// Target recall at the next due date (a user setting later). Default 0.9 (decision #6).
     static let defaultRequestRetention = 0.9
-
-    // Forgetting curve: R(t) = (1 + FACTOR·t/S)^DECAY, reaching the target at the scheduled interval.
-    private static let factor = 19.0 / 81.0
-    private static let decay = -0.5
-    private static let maxInterval = 36_500   // ~100 years
+    static let stabilityMin = 0.001
+    static let maxInterval = 36_500
 
     static func schedule(
         current: SchedulingState,
@@ -30,45 +26,51 @@ enum FSRS {
         weights w: [Double] = defaultWeights,
         requestRetention rr: Double = defaultRequestRetention
     ) -> SchedulingState {
-        let rating = fsrsRating(grade)               // 1…4
+        let rating = fsrsRating(grade)
+        let decay = -w[20]
+        let factor = pow(0.9, 1.0 / decay) - 1
+
         let stability: Double
         let difficulty: Double
 
         if current.lastReviewedAt == nil {
-            // Never reviewed at all — cold start from the rating.
-            stability = initStability(rating, w)
-            difficulty = initDifficulty(rating, w)
+            // First-ever review — seed S/D from the rating.
+            stability = clampStability(w[rating - 1])
+            difficulty = clampDifficulty(initialDifficulty(rating, w))
         } else {
-            // Reviewed before: use existing FSRS state, or seed it from the card's SM-2 schedule the
-            // first time FSRS runs on it (S2.5), so switching a deck to FSRS doesn't discard progress.
-            let priorStability = current.stability > 0 ? current.stability : seededStability(interval: current.interval)
-            let priorDifficulty = current.stability > 0 ? current.difficulty : seededDifficulty(easeFactor: current.easeFactor)
-            let elapsedDays = max(now.timeIntervalSince(current.lastReviewedAt!) / 86_400, 0)
-            let r = retrievability(elapsedDays: elapsedDays, stability: priorStability)
-            difficulty = nextDifficulty(priorDifficulty, rating: rating, w)
-            stability = rating == 1
-                ? nextForgetStability(difficulty: difficulty, stability: priorStability, retrievability: r, w)
-                : nextRecallStability(difficulty: difficulty, stability: priorStability, retrievability: r, rating: rating, w)
+            // Existing FSRS state, or seed from the card's SM-2 schedule the first time FSRS runs (S2.5).
+            // py-fsrs computes the new stability from the *prior* difficulty, then updates difficulty.
+            let priorS = current.stability > 0 ? current.stability : seededStability(interval: current.interval)
+            let priorD = current.stability > 0 ? current.difficulty : clampDifficulty(seededDifficulty(easeFactor: current.easeFactor))
+            let elapsedDays = max(0, Int(now.timeIntervalSince(current.lastReviewedAt!) / 86_400))   // integer days, like py-fsrs
+            difficulty = nextDifficulty(priorD, rating: rating, w)
+            if elapsedDays < 1 {
+                stability = shortTermStability(priorS, rating: rating, w)
+            } else {
+                let r = pow(1 + factor * Double(elapsedDays) / priorS, decay)
+                stability = rating == 1
+                    ? forgetStability(difficulty: priorD, stability: priorS, retrievability: r, w)
+                    : recallStability(difficulty: priorD, stability: priorS, retrievability: r, rating: rating, w)
+            }
         }
 
-        let interval = nextInterval(stability: stability, rr: rr)
-        let target = calendar.date(byAdding: .day, value: interval, to: now) ?? now
-        let due = calendar.startOfDay(for: target)   // same start-of-day snapping as SM-2
+        let interval = nextInterval(stability: stability, decay: decay, factor: factor, rr: rr)
+        let due = calendar.startOfDay(for: calendar.date(byAdding: .day, value: interval, to: now) ?? now)
 
         return SchedulingState(
-            easeFactor: current.easeFactor,           // unused by FSRS; preserved
+            easeFactor: current.easeFactor,
             interval: interval,
             repetitions: rating == 1 ? 0 : current.repetitions + 1,
             dueDate: due,
             stability: stability,
             difficulty: difficulty,
-            lastReviewedAt: now                       // this review becomes the next "elapsed" anchor
+            lastReviewedAt: now
         )
     }
 
-    // MARK: FSRS-4.5 formulas
+    // MARK: FSRS-6 formulas (ported from py-fsrs 6.3.1)
 
-    /// Maps the app's Grade (again/hard/good/easy) to an FSRS rating 1…4.
+    /// Maps the app's Grade to an FSRS rating 1…4 (Again/Hard/Good/Easy).
     static func fsrsRating(_ grade: Grade) -> Int {
         switch grade {
         case .again: 1
@@ -78,63 +80,58 @@ enum FSRS {
         }
     }
 
-    static func initStability(_ rating: Int, _ w: [Double]) -> Double {
-        max(w[rating - 1], 0.1)
+    static func initialDifficulty(_ rating: Int, _ w: [Double]) -> Double {
+        w[4] - exp(w[5] * Double(rating - 1)) + 1
     }
 
-    static func initDifficulty(_ rating: Int, _ w: [Double]) -> Double {
-        clampDifficulty(w[4] - exp(w[5] * Double(rating - 1)) + 1)
+    /// Days until recall is predicted to fall to `rr`; at rr = 0.9 this is ≈ S. py-fsrs rounds (banker's).
+    static func nextInterval(stability: Double, decay: Double, factor: Double, rr: Double) -> Int {
+        let raw = (stability / factor) * (pow(rr, 1.0 / decay) - 1)
+        return min(max(Int(raw.rounded(.toNearestOrEven)), 1), maxInterval)
     }
 
-    /// Probability of recall after `t` days at the given stability.
-    static func retrievability(elapsedDays t: Double, stability s: Double) -> Double {
-        pow(1 + factor * t / s, decay)
-    }
-
-    /// Linear change by rating, then mean reversion toward the easiest initial difficulty.
+    /// Linear-damped change by rating, then mean reversion toward the (unclamped) Easy initial difficulty.
     static func nextDifficulty(_ d: Double, rating: Int, _ w: [Double]) -> Double {
-        let next = d - w[6] * Double(rating - 3)
-        let reverted = w[7] * initDifficulty(4, w) + (1 - w[7]) * next
-        return clampDifficulty(reverted)
+        let target = initialDifficulty(4, w)                       // Easy, unclamped
+        let delta = -(w[6] * Double(rating - 3))
+        let damped = d + (10.0 - d) * delta / 9.0                  // linear damping
+        return clampDifficulty(w[7] * target + (1 - w[7]) * damped)
     }
 
-    /// New stability after a successful recall (rating ≥ 2). Grows more for low difficulty, low prior
-    /// stability, and lower retrievability (a harder-won success); hard penalty / easy bonus applied.
-    static func nextRecallStability(difficulty d: Double, stability s: Double, retrievability r: Double, rating: Int, _ w: [Double]) -> Double {
+    /// New stability after a successful recall (rating ≥ 2), using the prior difficulty.
+    static func recallStability(difficulty d: Double, stability s: Double, retrievability r: Double, rating: Int, _ w: [Double]) -> Double {
         let hardPenalty = rating == 2 ? w[15] : 1
         let easyBonus = rating == 4 ? w[16] : 1
-        return s * (1 + exp(w[8]) * (11 - d) * pow(s, -w[9]) * (exp((1 - r) * w[10]) - 1) * hardPenalty * easyBonus)
+        return clampStability(s * (1 + exp(w[8]) * (11 - d) * pow(s, -w[9]) * (exp((1 - r) * w[10]) - 1) * hardPenalty * easyBonus))
     }
 
-    /// New (lower) stability after a lapse (rating == 1) — a graded drop, not a reset to zero.
-    static func nextForgetStability(difficulty d: Double, stability s: Double, retrievability r: Double, _ w: [Double]) -> Double {
-        w[11] * pow(d, -w[12]) * (pow(s + 1, w[13]) - 1) * exp((1 - r) * w[14])
+    /// New (lower) stability after a lapse (rating == 1) — the FSRS-6 long-term value capped by a
+    /// short-term ceiling, so a lapse always loses some stability rather than zeroing it.
+    static func forgetStability(difficulty d: Double, stability s: Double, retrievability r: Double, _ w: [Double]) -> Double {
+        let longTerm = w[11] * pow(d, -w[12]) * (pow(s + 1, w[13]) - 1) * exp((1 - r) * w[14])
+        let shortTermCap = s / exp(w[17] * w[18])
+        return clampStability(min(longTerm, shortTermCap))
     }
 
-    /// Days until recall is predicted to fall to `rr`: t = (S/FACTOR)·(rr^(1/DECAY) − 1). At rr = 0.9
-    /// this is ≈ S. Floored at 1 day, capped at `maxInterval`.
-    static func nextInterval(stability s: Double, rr: Double) -> Int {
-        let raw = (s / factor) * (pow(rr, 1.0 / decay) - 1)
-        return min(max(Int(raw.rounded()), 1), maxInterval)
+    /// Stability change for a same-day (elapsed < 1 day) review.
+    static func shortTermStability(_ s: Double, rating: Int, _ w: [Double]) -> Double {
+        var increase = exp(w[17] * (Double(rating - 3) + w[18])) * pow(s, -w[19])
+        if rating == 3 || rating == 4 { increase = max(increase, 1.0) }   // Good/Easy never shrink S same-day
+        return clampStability(s * increase)
     }
 
+    static func clampStability(_ s: Double) -> Double { max(s, stabilityMin) }
     static func clampDifficulty(_ d: Double) -> Double { min(max(d, 1), 10) }
 
     // MARK: SM-2 → FSRS seeding (S2.5)
 
-    /// Seed FSRS stability from an SM-2 card's interval the first time FSRS schedules it (interval ≈
-    /// stability at the 0.9 target). Floored so a barely-started card still gets a positive value.
+    /// Seed FSRS stability from an SM-2 card's interval the first time FSRS schedules it (interval ≈ S).
     static func seededStability(interval: Int) -> Double { max(Double(interval), 0.5) }
-
-    /// Seed FSRS difficulty from an SM-2 ease factor — lower ease (a harder card) ⇒ higher difficulty.
-    /// Approximate; FSRS refines it over the next few reviews. Centered so the default ease maps to ~5.
-    static func seededDifficulty(easeFactor ef: Double) -> Double {
-        clampDifficulty(5.0 - (ef - SM2.defaultEaseFactor) * 2.0)
-    }
+    /// Seed FSRS difficulty from an SM-2 ease factor — lower ease (harder) ⇒ higher difficulty.
+    static func seededDifficulty(easeFactor ef: Double) -> Double { 5.0 - (ef - SM2.defaultEaseFactor) * 2.0 }
 }
 
-/// `Scheduler` conformer wrapping `FSRS`, so a deck can select it (S2.4). Carries the weights +
-/// target retention it schedules with (defaults today; per-user / per-setting later).
+/// `Scheduler` conformer wrapping `FSRS`, selectable per deck (S2.4).
 struct FSRSScheduler: Scheduler {
     var weights: [Double] = FSRS.defaultWeights
     var requestRetention: Double = FSRS.defaultRequestRetention
