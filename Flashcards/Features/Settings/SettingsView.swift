@@ -444,11 +444,15 @@ struct SettingsView: View {
 
     private func runSeedReviewLog() {
         DeveloperTools.seedReviewLog()
-        if let summary = Calibration.summary(from: ReviewLog.records(from: ReviewLog.defaultURL)) {
-            devStatus = "Seeded \(summary.sampleCount) review-log records. \(Calibration.takeaway(summary))"
-        } else {
-            devStatus = "Seeded review-log records."
+        let records = ReviewLog.records(from: ReviewLog.defaultURL)
+        var parts: [String] = ["Seeded \(records.count) review-log records."]
+        if let summary = Calibration.summary(from: records) { parts.append(Calibration.takeaway(summary)) }
+        let ratings = Elo.replay(records)
+        if let topAbility = ratings.ability.values.max() {
+            let hard = ratings.difficulty.values.filter { $0 > 1650 }.count
+            parts.append("Elo: top topic ability \(Int(topAbility.rounded())), \(hard) hard card(s).")
         }
+        devStatus = parts.joined(separator: " ")
     }
 
     private func runRemoveTestData() {

@@ -158,15 +158,25 @@ enum DeveloperTools {
     /// Seeds synthetic per-review records into the review log (slightly overconfident) so the
     /// calibration metric (E6) has data to show without grinding through hundreds of real reviews.
     /// Replaces the existing log.
-    static func seedReviewLog(count: Int = 400, now: Date = .now, to url: URL = ReviewLog.defaultURL) {
+    static func seedReviewLog(count: Int = 600, now: Date = .now, to url: URL = ReviewLog.defaultURL) {
         ReviewLog.reset(at: url)
+        // A small pool of decks + cards (each with an intrinsic difficulty) so both calibration AND Elo
+        // aggregate: correctness tracks the schedule's prediction (overconfident, for calibration) with
+        // a small per-card offset (so Elo recovers relative difficulty).
+        struct PoolCard { let id = UUID(); let deck: UUID; let difficulty: Double }
+        let decks = (0..<4).map { _ in UUID() }
+        var pool: [PoolCard] = []
+        for deck in decks { for _ in 0..<30 { pool.append(PoolCard(deck: deck, difficulty: Double.random(in: 1300...1750))) } }
+
         var records: [ReviewLog.Record] = []
         for _ in 0..<max(count, 0) {
+            let card = pool.randomElement()!
             let interval = Int.random(in: 1...60)
             let elapsed = Double(interval) * Double.random(in: 0.4...1.6)            // reviewed around due
             let predicted = pow(0.9, elapsed / Double(interval))
-            let correct = Double.random(in: 0..<1) < predicted * 0.9                 // schedule ~overconfident
-            records.append(ReviewLog.Record(ts: now, deck: UUID(), card: UUID(), direction: .forward,
+            let offset = (1525 - card.difficulty) / 2000                            // ±~0.1 by card difficulty
+            let correct = Double.random(in: 0..<1) < min(max(predicted * 0.9 + offset, 0.02), 0.98)
+            records.append(ReviewLog.Record(ts: now, deck: card.deck, card: card.id, direction: .forward,
                                             grade: correct ? 4 : 0, correct: correct, elapsedDays: elapsed,
                                             intervalBefore: interval, mature: interval >= StudyInsights.matureIntervalDays))
         }
