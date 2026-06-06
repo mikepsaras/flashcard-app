@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
@@ -321,6 +324,7 @@ struct SettingsView: View {
             Button { runLoadSample() } label: { Label("Load sample library", systemImage: "square.stack.3d.up.fill") }
             Button { runLoadPhase0() } label: { Label("Load Phase 0 test set", systemImage: "flask.fill") }
             Button { showingLinterPreview = true } label: { Label("Preview card linter (S0.4)", systemImage: "checklist") }
+            Button { revealReviewLog() } label: { Label("Reveal review log", systemImage: "doc.text.magnifyingglass") }
             Button { showingStressSheet = true } label: { Label("Stress test…", systemImage: "gauge.high") }
             Button { showingSeedHistory = true } label: { Label("Seed review history", systemImage: "calendar.badge.clock") }
             Button(role: .destructive) { showingRemoveTestData = true } label: { Label("Remove all test data", systemImage: "trash") }
@@ -382,6 +386,22 @@ struct SettingsView: View {
         let r = DeveloperTools.loadSampleLibrary(into: context)
         context.saveAndPersist()
         devStatus = "Loaded \(r.decks) decks · \(r.cards) cards. Tip: also “Seed review history” for full Insights."
+    }
+
+    /// Reveals `reviewlog.jsonl` in Finder (macOS) and reports a record-count summary (both platforms),
+    /// so the per-review log (S1.3) is inspectable after studying without hunting for the file.
+    private func revealReviewLog() {
+        let url = ReviewLog.defaultURL
+        let records = ReviewLog.records(from: url)
+        let correct = records.filter(\.correct).count
+        devStatus = "Review log: \(records.count) review\(records.count == 1 ? "" : "s") (\(correct) correct) · \(url.path)"
+        #if canImport(AppKit)
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])   // select the file
+        } else {
+            NSWorkspace.shared.open(ReviewLog.defaultDirectory)     // not written yet — open the folder
+        }
+        #endif
     }
 
     private func runLoadPhase0() {
