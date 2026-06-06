@@ -12,12 +12,14 @@ struct CardEditorView: View {
 
     @State private var term: String
     @State private var definition: String
+    @State private var cardType: CardType
 
     init(deck: Deck, card: Card) {
         self.deck = deck
         self.card = card
         _term = State(initialValue: card.term)
         _definition = State(initialValue: card.definition)
+        _cardType = State(initialValue: card.cardType)
     }
 
     private var canSave: Bool {
@@ -28,11 +30,21 @@ struct CardEditorView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    MultilineField(label: "Front", placeholder: "Front of the card", text: $term, minHeight: 56)
-                    MultilineField(label: "Back", placeholder: "Back of the card", text: $definition, minHeight: 120)
+                    Picker("Type", selection: $cardType) {
+                        ForEach(CardType.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
 
-                    if !term.isEmpty || !definition.isEmpty {
-                        markdownPreview
+                    if cardType == .cloze {
+                        MultilineField(label: "Cloze text", placeholder: "Use {{c1::answer}} to hide text", text: $term, minHeight: 120)
+                        clozeHint.font(.caption).foregroundStyle(.secondary)
+                        if Cloze.hasCloze(term) { clozePreview }
+                    } else {
+                        MultilineField(label: "Front", placeholder: "Front of the card", text: $term, minHeight: 56)
+                        MultilineField(label: "Back", placeholder: "Back of the card", text: $definition, minHeight: 120)
+                        if !term.isEmpty || !definition.isEmpty {
+                            markdownPreview
+                        }
                     }
                 }
                 .padding(20)
@@ -90,9 +102,35 @@ struct CardEditorView: View {
             + Text(". See Help ▸ Formatting.")
     }
 
+    /// Cloze syntax hint + live front/back preview of how the deletions render.
+    private var clozeHint: Text {
+        Text("Wrap text in ")
+            + Text("{{c1::answer}}").monospaced().foregroundStyle(Theme.accent)
+            + Text(" to hide it while studying. Add a hint with ")
+            + Text("{{c1::answer::hint}}").monospaced()
+            + Text(".")
+    }
+
+    private var clozePreview: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Preview")
+                .font(.system(.subheadline, weight: .medium))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                MarkdownText(text: Cloze.front(term), baseSize: 17, weight: .semibold)
+                MarkdownText(text: Cloze.back(term), baseSize: 16, mathColor: MathColor.secondary)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .fieldBox()
+        }
+    }
+
     private func save() {
         card.term = term.trimmingCharacters(in: .whitespacesAndNewlines)
         card.definition = definition
+        card.cardType = cardType
         card.modifiedAt = .now
         context.saveAndPersist(touching: deck)
         dismiss()

@@ -262,6 +262,22 @@ import SwiftData
         #expect(deck.schedulerKind == .sm2)
     }
 
+    @Test func clozeTypeRoundTripsAndStampsVersion3() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Cloze deck")
+        container.mainContext.insert(deck)
+        let card = Card(term: "The {{c1::sun}} is a star.", definition: "", deck: deck)
+        card.cardType = .cloze
+        container.mainContext.insert(card)
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 3)
+        #expect(dto.cards[0].type == "cloze")
+        let other = DeckStore.makeContainer()
+        #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).cardArray.first?.cardType == .cloze)
+    }
+
     // MARK: Section
 
     @Test func sectionRoundTrip() throws {
