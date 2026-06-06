@@ -245,7 +245,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   1d); covered by tests at multiple maturities.
 - **Deps:** S2.1.
 
-### ☐ S2.4 — Per-deck scheduler selection  · **Effort:** M · **Phase:** 2
+### ☑ S2.4 — Per-deck scheduler selection  · **Effort:** M · **Phase:** 2 · _shipped; default SM-2, FSRS opt-in via the deck editor; session resolves per-item_
 - **Why:** Roll out FSRS gradually; keep SM-2 selectable.
 - **Touches:** `Deck.swift` (`schedulerRaw` defaulted), `DeckCodec`, Settings/deck editor,
   `StudySessionView`/queue resolve the deck's scheduler.
@@ -254,14 +254,14 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   opted in); switch is non-destructive.
 - **Deps:** S1.1, S2.1.
 
-### ☐ S2.5 — Seed FSRS S/D from existing SM-2 state  · **Effort:** S · **Phase:** 2
+### ☑ S2.5 — Seed FSRS S/D from existing SM-2 state  · **Effort:** S · **Phase:** 2 · _shipped; FSRS seeds S from interval, D from ease on first run_
 - **Why:** Preserve years of progress when a deck moves to FSRS.
 - **Touches:** migration in `FSRS.swift`/`DeckCodec` (runs in S1.6 load path).
 - **Acceptance:** initial stability/difficulty derived from current interval/ease so the
   first FSRS interval is continuous with the old schedule (no mass re-due); tested.
 - **Deps:** S2.1, S1.6.
 
-### ☐ S2.6 — Grading UI under FSRS  · **Effort:** S · **Phase:** 2
+### ☑ S2.6 — Grading UI under FSRS  · **Effort:** S · **Phase:** 2 · _no change needed: the per-deck 2-/4-button grading already feeds FSRS (rating 1–4); default stays 2-button (decision #7)_
 - **Why:** FSRS reads binary or 4-grade natively (no manual ease), dissolving the two-
   button signal-loss problem — decide the default.
 - **Touches:** `GradingMode.swift`, `StudyControlsBar`, deck setting.
@@ -460,9 +460,11 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
 
 - **Phase 0 — ✅ DONE (zero migration):** S0.1–S0.5 shipped to `main`. *(Also landed S5.1/S5.2/S5.4 content via S0.4.)*
 - **Phase 1 — ✅ DONE (format v2→v3):** S1.1–S1.6 shipped. (S2.4/S3.1/S7.1/S7.4 fields fold into a later migration as they land.)
-- **Phase 2 — 🚧 in progress:** S2.1 (FSRS algorithm) shipped behind the seam; next is
-  S2.4/2.5/2.6 to wire it in (per-deck selection, seed S/D from SM-2, grading UI). Then
-  S3.1–S3.4 (cloze/type-in) · E4.1 · E5 · E6 (metrics/coverage) · E7 (Elo practice + difficulty).
+- **Phase 2 — 🚧 in progress:** **FSRS shipped end-to-end** (S2.1 algorithm · S2.4 per-deck
+  selection · S2.5 SM-2 seeding · S2.6 grading) — opt-in per deck, default SM-2. **Remaining
+  before FSRS can become the default:** exact-vector validation vs. py-fsrs (the S2.1 caveat),
+  and S2.7 weight optimization (Phase 3). Then S3.1–S3.4 (cloze/type-in) · E4.1 · E5 · E6
+  (metrics/coverage) · E7 (Elo practice + difficulty).
 - **Phase 3 — ambitious/optional:** S2.7 · S3.5/S3.6 (Note refactor, occlusion/MCQ) ·
   S4.2 (prereq DAG) · S5.5 · S6.5.
 
