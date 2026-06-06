@@ -229,12 +229,14 @@ final class StudySessionTests {
 
     // MARK: Learning-step requeue (S0.1)
 
-    @Test func missedCardRequeuedAtMostOncePerSession() {
+    @Test func missedCardRequeuesUpToCapThenStops() {
         let session = StudySession(cards: makeCards(1), trackLearning: true)
-        session.grade(known: false)        // miss ⇒ requeue (queue grows to 2)
-        #expect(session.total == 2)
-        session.grade(known: false)        // miss the requeued copy ⇒ NOT requeued again (cap 1)
-        #expect(session.total == 2)
+        // Keep missing the same card: it returns up to the cap (3), so the run grows 1→2→3→4, then
+        // stops requeuing (it's still rescheduled for a future day).
+        session.grade(known: false); #expect(session.total == 2)
+        session.grade(known: false); #expect(session.total == 3)
+        session.grade(known: false); #expect(session.total == 4)
+        session.grade(known: false); #expect(session.total == 4)   // cap reached — no more requeues
         #expect(session.isFinished)
     }
 

@@ -44,9 +44,10 @@ final class StudySession {
     /// lightweight learning step, so a miss isn't gone until tomorrow but doesn't reappear
     /// instantly either.
     private static let requeueSpacing = 3
-    /// A missed card is re-shown at most this many times per session, so chronically failing one
-    /// card can't grow the run without bound.
-    private static let maxRequeuesPerItem = 1
+    /// A missed card keeps returning for another look until it's passed — up to this many requeues
+    /// per card, so a card you genuinely can't get can't grow the run without bound (it's still
+    /// rescheduled for a future day either way).
+    private static let maxRequeuesPerItem = 3
     /// Re-show count per item id this session, enforcing `maxRequeuesPerItem` and kept honest
     /// across undo.
     private var requeueCounts: [String: Int] = [:]

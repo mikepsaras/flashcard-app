@@ -200,16 +200,22 @@ struct RootView: View {
             }
         ) {
             let dueSorted = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
-            // Genuinely nothing due ⇒ practice over the whole deck (unchanged). Otherwise study
-            // the due set with new-card introductions throttled to the daily quota (S0.2). The
-            // practice fallback is gated on the *unthrottled* due check, so an exhausted new
-            // quota yields an empty (finished) run — never a practice pass that bypasses it.
-            if dueSorted.isEmpty { return deck.allReviewItems }
+            let interleaveBy: ((ReviewItem) -> String)? =
+                DefaultsKey.interleaveStudyValue() ? { $0.card.section } : nil
+            // Genuinely nothing due ⇒ practice over the whole deck, interleaved across sections when
+            // the toggle is on (so the setting behaves the same in practice as in a due run — KI-2).
+            // Otherwise study the due set with new-card introductions throttled to the daily quota
+            // (S0.2). The practice fallback is gated on the *unthrottled* due check, so an exhausted
+            // new quota yields an empty (finished) run — never a practice pass that bypasses it.
+            if dueSorted.isEmpty {
+                let all = deck.allReviewItems
+                return interleaveBy.map { StudySession.interleaved(all, by: $0) } ?? all
+            }
             return StudySession.prioritizingReviews(
                 dueSorted,
                 newPerDay: DefaultsKey.newCardsPerDayValue(),
                 introducedToday: StudyStats.newCardsIntroducedToday(),
-                interleaveBy: DefaultsKey.interleaveStudyValue() ? { $0.card.section } : nil
+                interleaveBy: interleaveBy
             )
         }
     }
