@@ -21,6 +21,9 @@ final class StudySession {
     /// never advanced in practice, so repeating it can't inflate intervals; the ✓/✕ scoreboard
     /// still works.
     let isPractice: Bool
+    /// The spaced-repetition algorithm this run advances cards with. Defaults to SM-2; injectable so
+    /// FSRS (and per-deck selection) can slot in without touching the study loop.
+    let scheduler: Scheduler
 
     /// Snapshot captured before each grade so undo can restore exactly.
     private struct Move {
@@ -52,9 +55,10 @@ final class StudySession {
     /// across undo.
     private var requeueCounts: [String: Int] = [:]
 
-    init(items: [ReviewItem], trackLearning: Bool, now: Date = .now) {
+    init(items: [ReviewItem], trackLearning: Bool, scheduler: Scheduler = SM2Scheduler(), now: Date = .now) {
         self.items = items
         self.trackLearning = trackLearning
+        self.scheduler = scheduler
         // Nothing due ⇒ practice. Studying cards that aren't due (and advancing them) would
         // push their intervals out further with every pass, so practice leaves them alone.
         self.isPractice = !items.isEmpty && items.allSatisfy { !$0.card.isDue($0.direction, now: now) }
@@ -171,7 +175,7 @@ final class StudySession {
         ))
 
         if trackLearning && !isPractice {
-            let updated = SM2.schedule(current: card.schedulingState(direction), grade: grade, now: now)
+            let updated = scheduler.schedule(current: card.schedulingState(direction), grade: grade, now: now)
             card.apply(updated, direction: direction, reviewedAt: now)
             // Mark the deck modified so the (saveAndPersist-bypassing) study persist re-writes it:
             // `DeckStore` skips encoding decks whose `modifiedAt` is unchanged, and apply() only bumps

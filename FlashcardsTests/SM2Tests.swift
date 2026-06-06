@@ -15,6 +15,15 @@ import Foundation
         #expect(s.dueDate == cal.startOfDay(for: cal.date(byAdding: .day, value: 1, to: now)!))
     }
 
+    @Test func sm2SchedulerMatchesStaticAlgorithm() {
+        // The protocol wrapper (S1.1) must be behavior-identical to the static algorithm.
+        for grade in Grade.allCases {
+            let viaStatic = SM2.schedule(current: .initial(now: now), grade: grade, now: now, calendar: cal)
+            let viaProtocol = SM2Scheduler().schedule(current: .initial(now: now), grade: grade, now: now, calendar: cal)
+            #expect(viaStatic == viaProtocol)
+        }
+    }
+
     @Test func dueDateSnapsToStartOfDay() {
         let s = SM2.schedule(current: .initial(now: now), grade: .good, now: now, calendar: cal)
         #expect(s.dueDate == cal.startOfDay(for: s.dueDate))   // exactly midnight
