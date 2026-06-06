@@ -51,7 +51,7 @@ foundations) · 3 (ambitious / optional)
 8. **Cloze scheduling = whole-card for v1.** One schedule per cloze card initially;
    per-cloze-index independent scheduling is deferred to the `Note` refactor (S3.5),
    tracked as a TODO in S3.2.
-9. **Topic unit = tags (S1.4).** Coverage, per-topic mastery, and Elo learner-ability are
+9. **~~Topic unit = tags~~ → Subject/Deck/Section.** Reversed after review: the existing **Subject → Deck → Section** hierarchy covers coverage, mastery, and per-topic Elo. Tags (the dormant `Card.tags` field) were **deleted**; revisit only if cross-cutting/cross-deck concepts become a real need.
    computed per **tag** (cross-deck, many-to-many — the right grain for "expertise in X");
    deck `section` stays a secondary grouping.
 10. **Elo confidence = Glicko-style (rating + deviation).** Track a deviation so new
@@ -184,7 +184,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   reader aggregates by card/topic/day; corrupt lines skipped; unit-tested.
 - **Deps:** none. Enables S2.7, S6.2, S6.5, S7.2.
 
-### ☑ S1.4 — Tags on `Card`  · **Effort:** S · **Phase:** 1 · _shipped (model+codec); tag-editing UI deferred to S4.1_
+### ✖ S1.4 — Tags on `Card`  · _DROPPED — field deleted; Subject/Deck/Section used instead (see decision #9)._
 - **Why:** Cheapest unit of relational structure; unlocks cross-deck topic study and the
   coverage/mastery denominator (E6) and per-topic Elo (E7).
 - **Touches:** `Card.swift` (`tags: [String] = []`); `DeckCodec`; editors
