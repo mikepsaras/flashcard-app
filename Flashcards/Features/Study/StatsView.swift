@@ -8,6 +8,10 @@ import UniformTypeIdentifiers
 /// dashboard (so it previews/snapshots from fixtures, and renders under `ImageRenderer`, which
 /// doesn't lay out `ScrollView` content).
 struct StatsView: View {
+    /// Launches a study run (the "Practice weak spots" action). nil ⇒ the button is hidden, e.g. in
+    /// previews/snapshots. Wired to RootView's `studyPlan` like the Today queue.
+    var onStudy: ((StudyPlan) -> Void)? = nil
+
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @AppStorage(StudyStats.revisionKey) private var statsRevision = 0
     @State private var showingExporter = false
@@ -23,6 +27,7 @@ struct StatsView: View {
             matureByDay: StudyStats.matureReviewsByDay(),
             matureCorrectByDay: StudyStats.matureCorrectByDay()
         )
+        let focus = FocusInsights.make(decks: decks, records: ReviewLog.records(from: ReviewLog.defaultURL))
         Group {
             if insights.totalCards == 0 && insights.reviewsAllTime == 0 {
                 ContentUnavailableView(
@@ -32,7 +37,8 @@ struct StatsView: View {
                 )
             } else {
                 ScrollView {
-                    StatsContentView(insights: insights, reviewsByDay: reviews)
+                    StatsContentView(insights: insights, reviewsByDay: reviews, focus: focus,
+                                     onPracticeWeakSpots: onStudy == nil ? nil : { onStudy?(weakSpotsPlan()) })
                         .padding(Theme.Spacing.m)
                 }
             }
@@ -57,6 +63,17 @@ struct StatsView: View {
         ) { _ in }
     }
 
+    /// A cross-deck "practice your weak spots" run — every card, weakest (highest Elo difficulty)
+    /// first, in forced practice so drilling never touches the spaced schedule. Items resolve fresh
+    /// when the session starts.
+    private func weakSpotsPlan() -> StudyPlan {
+        let decks = self.decks
+        return StudyPlan(id: "weak-spots", title: "Weak Spots", accent: Theme.accent,
+                         exportText: nil, fourButton: false, forcePractice: true) {
+            FocusInsights.practiceItems(decks: decks, records: ReviewLog.records(from: ReviewLog.defaultURL))
+        }
+    }
+
     /// Builds the Insights CSV (summary + per-deck/category/section tables + daily log) and opens the
     /// save panel. Recomputed fresh from the current logs on tap.
     private func exportCSV() {
@@ -77,6 +94,9 @@ struct StatsContentView: View {
     let reviewsByDay: [String: Int]
     var now: Date = .now
     var calendar: Calendar = .current
+    /// Weak-spots data (E7) + the "Practice" action. Defaulted so previews/snapshots render without them.
+    var focus: FocusInsights = FocusInsights()
+    var onPracticeWeakSpots: (() -> Void)? = nil
 
     /// 0 ⇒ the trailing-12-months view ("Past year"); otherwise a calendar year (e.g. 2025) to show.
     @AppStorage(DefaultsKey.heatmapYear) private var heatmapYear = 0
@@ -130,6 +150,7 @@ struct StatsContentView: View {
             }
             heatmapCard
             memoryCard
+            focusCard
             libraryCard
         }
         .frame(maxWidth: 940)          // keep the dashboard readable instead of stretching edge-to-edge
@@ -392,6 +413,59 @@ struct StatsContentView: View {
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardSurface(cornerRadius: Theme.Radius.tile)
+    }
+
+    // MARK: Weak spots (E7 — what to study next)
+
+    /// The cards you miss most often (lowest Elo-derived expected success), with a one-tap drill.
+    /// Hidden until there's enough review history for any card to qualify, so it never shows empty.
+    @ViewBuilder private var focusCard: some View {
+        if !focus.weakCards.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                HStack(spacing: Theme.Spacing.s) {
+                    Text("Weak spots").font(Typography.headline).foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    if let onPracticeWeakSpots {
+                        Button(action: onPracticeWeakSpots) {
+                            Label("Practice", systemImage: "scope")
+                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Theme.accent.opacity(Theme.Opacity.fillSubtle), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.accent)
+                        .accessibilityLabel("Practice your weak spots")
+                    }
+                }
+                Text("The cards you miss most often — drill these to shore up what you don't yet know.")
+                    .font(Typography.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 8) {
+                    ForEach(focus.weakCards) { weakRow($0) }
+                }
+            }
+            .padding(Theme.Spacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardSurface(cornerRadius: Theme.Radius.tile)
+        }
+    }
+
+    /// One weak-spot row: deck icon · prompt + deck name · expected-success %, tinted by strength.
+    private func weakRow(_ card: FocusInsights.WeakCard) -> some View {
+        let pct = Int((card.successRate * 100).rounded())
+        return HStack(spacing: 10) {
+            DeckIconChip(icon: card.deckIcon, colorHex: card.deckColorHex, size: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.prompt).font(Typography.body).lineLimit(1)
+                Text(card.deckName).font(Typography.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text("\(pct)%")
+                .font(.system(.callout, design: .rounded, weight: .bold)).monospacedDigit()
+                .foregroundStyle(Theme.retentionTint(card.successRate))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(card.prompt), \(card.deckName): \(pct) percent expected success")
     }
 
     /// "Your library" — overall maturity, then one breakdown table that the user cycles through the

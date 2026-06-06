@@ -166,7 +166,7 @@ struct RootView: View {
         case .today:
             TodayDetailView { studyPlan = $0 }
         case .insights:
-            StatsView()
+            StatsView(onStudy: { studyPlan = $0 })
         case .deck:
             if let deck = selectedDeck {
                 DeckDetailView(deck: deck, onStudy: { studyPlan = deckPlan(deck) }, onCram: { studyPlan = cramPlan(deck) })

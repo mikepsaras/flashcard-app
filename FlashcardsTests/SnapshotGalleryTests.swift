@@ -304,13 +304,22 @@ struct SnapshotGalleryTests {
         let insights = StudyInsights.make(
             decks: decks, reviewsByDay: reviews, correctByDay: correct,
             matureByDay: matureReviews, matureCorrectByDay: matureCorrect, now: now)
+        // A "Weak spots" fixture (E7) so the focus card renders with the Practice action.
+        let focus = FocusInsights(weakCards: [
+            .init(id: "1", prompt: "Which Agile ceremony re-plans the sprint backlog mid-sprint?",
+                  deckName: "Project Management", deckColorHex: "#3478F6", deckIcon: "graduationcap.fill", successRate: 0.31, games: 9),
+            .init(id: "2", prompt: "What does a work-in-progress (WIP) limit protect against?",
+                  deckName: "Project Management", deckColorHex: "#3478F6", deckIcon: "graduationcap.fill", successRate: 0.46, games: 7),
+            .init(id: "3", prompt: "Story points estimate relative ___, not calendar time.",
+                  deckName: "Agile Basics", deckColorHex: "#34C759", deckIcon: "bolt.fill", successRate: 0.59, games: 12),
+        ])
         try Snapshot.write(
-            StatsContentView(insights: insights, reviewsByDay: reviews, now: now)
+            StatsContentView(insights: insights, reviewsByDay: reviews, now: now, focus: focus, onPracticeWeakSpots: {})
                 .padding(Theme.Spacing.m)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(Theme.groupedBackground)
                 .environment(\.colorScheme, .dark),
-            size: CGSize(width: 740, height: 1180), name: "11_insights_mac")
+            size: CGSize(width: 740, height: 1380), name: "11_insights_mac")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/11_insights_mac.png"))
     }
 
