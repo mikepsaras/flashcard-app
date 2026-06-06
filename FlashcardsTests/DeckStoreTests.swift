@@ -139,7 +139,7 @@ import SwiftData
         try container.mainContext.save()
 
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 2)
+        #expect(dto.formatVersion == 2)   // reverse state alone is a v2 feature
         #expect(dto.studyReversed == true)
         #expect(dto.cards[0].reverseInterval == 4)
 
@@ -168,6 +168,76 @@ import SwiftData
         #expect(deck.studyReversed == false)
         #expect(deck.cardArray.first?.reverseEaseFactor == 2.5)
         #expect(deck.cardArray.first?.reverseRepetitions == 0)
+    }
+
+    // MARK: v3 — FSRS state, tags, extra
+
+    @Test func v3FieldsRoundTripAndStampVersion3() throws {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "FSRS deck", studyReversed: true)
+        container.mainContext.insert(deck)
+        let card = Card(term: "q", definition: "a", deck: deck)
+        card.stability = 12.5
+        card.difficulty = 6.0
+        card.reverseStability = 3.2
+        card.reverseDifficulty = 7.1
+        card.tags = ["biology", "cells"]
+        card.extra = "Mnemonic: ATP."
+        container.mainContext.insert(card)
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 3)                       // a v3 feature is in use
+        #expect(dto.cards[0].stability == 12.5)
+        #expect(dto.cards[0].difficulty == 6.0)
+        #expect(dto.cards[0].reverseStability == 3.2)
+        #expect(dto.cards[0].tags == ["biology", "cells"])
+        #expect(dto.cards[0].extra == "Mnemonic: ATP.")
+
+        let other = DeckStore.makeContainer()
+        let c = DeckCodec.makeDeck(from: dto, in: other.mainContext).cardArray.first!
+        #expect(c.stability == 12.5)
+        #expect(c.difficulty == 6.0)
+        #expect(c.reverseStability == 3.2)
+        #expect(c.reverseDifficulty == 7.1)
+        #expect(c.tags == ["biology", "cells"])
+        #expect(c.extra == "Mnemonic: ATP.")
+    }
+
+    @Test func deckWithoutV3FeaturesStaysVersion2() throws {
+        // No FSRS/tags/extra ⇒ keep the v2 version line and omit the new keys — no phantom edits.
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Plain")
+        container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == 2)
+        #expect(dto.cards[0].stability == nil)
+        #expect(dto.cards[0].tags == nil)
+        #expect(dto.cards[0].extra == nil)
+    }
+
+    @Test func v2FileDecodesWithV3Defaults() throws {
+        // A v2 file (no FSRS/tags/extra keys) must load with those fields defaulted.
+        let json = """
+        {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
+        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
+        "cards":[{"id":"\(UUID().uuidString)","term":"a","definition":"b",\
+        "createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
+        "easeFactor":2.5,"interval":0,"repetitions":0,"dueDate":"2024-01-01T00:00:00Z"}]}
+        """
+        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
+        #expect(dto.cards[0].stability == nil)
+        #expect(dto.cards[0].tags == nil)
+
+        let container = DeckStore.makeContainer()
+        let c = DeckCodec.makeDeck(from: dto, in: container.mainContext).cardArray.first!
+        #expect(c.stability == 0)
+        #expect(c.difficulty == 0)
+        #expect(c.tags == [])
+        #expect(c.extra == "")
     }
 
     // MARK: Section

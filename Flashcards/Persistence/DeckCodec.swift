@@ -6,12 +6,17 @@ import SwiftData
 ///
 /// Format v2 adds reverse-direction scheduling + `studyReversed`, plus — added later, the same
 /// way grading mode was — optional per-card `section` and the deck's `sectionOrder` +
-/// `showSectionsInStudy`. All of these are optional and omitted when empty/default, so files not
-/// using them re-encode identically (no phantom edits). Manual card order rides in the order of
-/// the `cards` array (unsectioned first, then by section), not an explicit field, so a sectionless
-/// deck's file is byte-for-byte unchanged. v1 files still decode (missing ⇒ defaults).
+/// `showSectionsInStudy`. Format v3 adds optional per-card FSRS state (`stability`/`difficulty`,
+/// forward + reverse), `tags`, and `extra`. All of these are optional and omitted when empty/default,
+/// so files not using them re-encode identically (no phantom edits) — and the version line only
+/// advances to 3 when a card actually uses a v3 feature (`encode` stamps 2 otherwise), so existing
+/// v2 files stay byte-for-byte unchanged. Manual card order rides in the order of the `cards` array
+/// (unsectioned first, then by section), not an explicit field. v1 + v2 files still decode
+/// (missing ⇒ defaults).
 enum DeckCodec {
-    static let formatVersion = 2
+    /// The current (max) format version. `encode` stamps a file with the lowest version that can
+    /// represent its content — 3 only when a v3 feature is in use — to avoid churning v2 files.
+    static let formatVersion = 3
 
     struct DeckDTO: Codable, Equatable {
         var formatVersion: Int = DeckCodec.formatVersion
@@ -54,6 +59,14 @@ enum DeckCodec {
         var reverseRepetitions: Int?
         var reverseDueDate: Date?
         var reverseLastReviewedAt: Date?
+        // v3: FSRS state (forward + reverse), topic tags, and answer elaboration — all optional and
+        // omitted when default, so v1/v2 files (and cards not using them) re-encode unchanged.
+        var stability: Double?
+        var difficulty: Double?
+        var reverseStability: Double?
+        var reverseDifficulty: Double?
+        var tags: [String]?
+        var extra: String?
     }
 
     private static var encoder: JSONEncoder {
@@ -71,7 +84,14 @@ enum DeckCodec {
 
     @MainActor
     static func encode(_ deck: Deck) throws -> Data {
+        // Stamp v3 only when a card actually uses a v3 feature (FSRS state, tags, or extra); otherwise
+        // keep v2 so a deck that predates v3 re-encodes byte-identically (the watcher sees no edit).
+        let usesV3 = deck.cardArray.contains { card in
+            card.stability != 0 || card.difficulty != 0 || card.reverseStability != 0
+                || card.reverseDifficulty != 0 || !card.tags.isEmpty || !card.extra.isEmpty
+        }
         let dto = DeckDTO(
+            formatVersion: usesV3 ? 3 : 2,
             id: deck.id,
             name: deck.name,
             deckDescription: deck.deckDescription,
@@ -194,7 +214,14 @@ enum DeckCodec {
             section: card.section.isEmpty ? nil : card.section,
             reverseEaseFactor: card.reverseEaseFactor, reverseInterval: card.reverseInterval,
             reverseRepetitions: card.reverseRepetitions, reverseDueDate: card.reverseDueDate,
-            reverseLastReviewedAt: card.reverseLastReviewedAt
+            reverseLastReviewedAt: card.reverseLastReviewedAt,
+            // v3 — omit when default so existing files re-encode identically (no phantom edits).
+            stability: card.stability == 0 ? nil : card.stability,
+            difficulty: card.difficulty == 0 ? nil : card.difficulty,
+            reverseStability: card.reverseStability == 0 ? nil : card.reverseStability,
+            reverseDifficulty: card.reverseDifficulty == 0 ? nil : card.reverseDifficulty,
+            tags: card.tags.isEmpty ? nil : card.tags,
+            extra: card.extra.isEmpty ? nil : card.extra
         )
     }
 
@@ -217,5 +244,12 @@ enum DeckCodec {
         card.reverseRepetitions = dto.reverseRepetitions ?? 0
         card.reverseDueDate = dto.reverseDueDate ?? dto.createdAt
         card.reverseLastReviewedAt = dto.reverseLastReviewedAt
+        // v3 fields — default when absent (v1/v2 files, or cards that don't use them).
+        card.stability = dto.stability ?? 0
+        card.difficulty = dto.difficulty ?? 0
+        card.reverseStability = dto.reverseStability ?? 0
+        card.reverseDifficulty = dto.reverseDifficulty ?? 0
+        card.tags = dto.tags ?? []
+        card.extra = dto.extra ?? ""
     }
 }

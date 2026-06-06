@@ -30,12 +30,28 @@ final class Card {
     var reverseDueDate: Date = Date.now
     var reverseLastReviewedAt: Date?
 
+    // MARK: FSRS scheduling state (Phase 1 scaffold; populated once FSRS schedules a card)
+    // Memory stability (days) + difficulty, per direction. 0 ⇒ not yet initialized by FSRS; the SM-2
+    // scheduler ignores these. CloudKit-safe: every scalar defaulted.
+    var stability: Double = 0
+    var difficulty: Double = 0
+    var reverseStability: Double = 0
+    var reverseDifficulty: Double = 0
+
     // MARK: Sectioning — grouping cards within a deck (Reminders-style)
     /// The card's section within its deck; empty ⇒ the unsectioned area. The deck's set of
     /// section names + their order lives on `Deck.sectionOrder`; cards reference one by name.
     var section: String = ""
     /// Manual position within the card's section (lower = earlier). Defaulted ⇒ CloudKit-safe.
     var sortOrder: Int = 0
+
+    // MARK: Tags + elaboration
+    /// Free-form topic tags (cross-deck) — the unit for coverage/mastery and the adaptive practice
+    /// mode. Empty ⇒ untagged. Defaulted ⇒ CloudKit-safe.
+    var tags: [String] = []
+    /// Optional elaboration shown alongside the answer — a worked example, a "why", a source.
+    /// Empty ⇒ none. Defaulted ⇒ CloudKit-safe.
+    var extra: String = ""
 
     // Inverse of Deck.cards (optional, per CloudKit rules).
     var deck: Deck?
