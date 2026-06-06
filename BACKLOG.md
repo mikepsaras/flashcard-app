@@ -153,7 +153,7 @@ High payoff-to-cost; de-risk the foundations by landing UX/flow improvements fir
 
 One batched migration. Land these together; everything in Phase 2 builds on them.
 
-### ☐ S1.1 — `Scheduler` protocol; plug SM-2 behind it  · **Effort:** M · **Phase:** 1
+### ☑ S1.1 — `Scheduler` protocol; plug SM-2 behind it  · **Effort:** M · **Phase:** 1 · _shipped_
 - **Why:** Clean seam to swap/select algorithms per deck without touching the study engine.
 - **Touches:** new `Flashcards/Scheduling/Scheduler.swift`; refactor `SM2.swift` to conform;
   `Card+Scheduling.swift`; `StudySession.grade()` calls the protocol.
@@ -162,7 +162,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   `SM2Tests`/`StudySessionTests` pass unchanged; injected `now` preserved.
 - **Deps:** none.
 
-### ☐ S1.2 — FSRS state fields on `Card` (per direction)  · **Effort:** S · **Phase:** 1
+### ☑ S1.2 — FSRS state fields on `Card` (per direction)  · **Effort:** S · **Phase:** 1 · _shipped; S/D seeding from SM-2 deferred to S2.5_
 - **Why:** FSRS needs stability + difficulty per direction; SM-2 ignores them.
 - **Touches:** `Flashcards/Models/Card.swift` (add `stability`, `difficulty`, +`reverse…`,
   defaulted); `Card+Scheduling.swift` accessors.
@@ -170,7 +170,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 - **Acceptance:** fields present, defaulted, CloudKit-safe; SM-2 path unaffected.
 - **Deps:** none (migrate in S1.6).
 
-### ☐ S1.3 — Review-log sidecar store  · **Effort:** M · **Phase:** 1
+### ☑ S1.3 — Review-log sidecar store  · **Effort:** M · **Phase:** 1 · _shipped (`ReviewLog`)_
 - **Why:** Only each card's *last* review is stored today (no history). FSRS optimization,
   calibration, real retention curves, Elo trajectory, and coverage trends all need
   per-review records.
@@ -183,7 +183,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   reader aggregates by card/topic/day; corrupt lines skipped; unit-tested.
 - **Deps:** none. Enables S2.7, S6.2, S6.5, S7.2.
 
-### ☐ S1.4 — Tags on `Card`  · **Effort:** S · **Phase:** 1
+### ☑ S1.4 — Tags on `Card`  · **Effort:** S · **Phase:** 1 · _shipped (model+codec); tag-editing UI deferred to S4.1_
 - **Why:** Cheapest unit of relational structure; unlocks cross-deck topic study and the
   coverage/mastery denominator (E6) and per-topic Elo (E7).
 - **Touches:** `Card.swift` (`tags: [String] = []`); `DeckCodec`; editors
@@ -192,7 +192,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 - **Acceptance:** tags persist round-trip; editable in card editors; CloudKit-safe default.
 - **Deps:** migrate in S1.6. Used by S4.1, S6.3, S7.3.
 
-### ☐ S1.5 — `extra` / example field on `Card`  · **Effort:** S · **Phase:** 1
+### ☑ S1.5 — `extra` / example field on `Card`  · **Effort:** S · **Phase:** 1 · _shipped (model+codec); rendering deferred to the features that populate it_
 - **Why:** Foundation for application/elaboration cards (worked examples, why/how) shown on
   the answer side — bridges recall toward transfer.
 - **Touches:** `Card.swift` (`extra: String = ""`); `DeckCodec`; `FlashcardView` answer face
@@ -202,7 +202,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   Markdown+LaTeX honored.
 - **Deps:** migrate in S1.6. Used by S5.6.
 
-### ☐ S1.6 — `DeckCodec` + format v3 + seed-migration + tests  · **Effort:** M · **Phase:** 1
+### ☑ S1.6 — `DeckCodec` + format v3 + seed-migration + tests  · **Effort:** M · **Phase:** 1 · _shipped; conditional v3 stamping ⇒ zero phantom edits on v2 files_
 - **Why:** Single batched migration carrying S1.2/S1.4/S1.5 (+ interim cloze type if S3.2
   lands here).
 - **Touches:** `Flashcards/Persistence/DeckCodec.swift`, format-version constant,
@@ -458,7 +458,7 @@ Elo is a **measurement + selection** layer, explicitly **not** the spaced schedu
 ## Phase plan (sequencing)
 
 - **Phase 0 — ✅ DONE (zero migration):** S0.1–S0.5 shipped to `main`. *(Also landed S5.1/S5.2/S5.4 content via S0.4.)*
-- **Phase 1 — one format bump (v2→v3):** S1.1–S1.6 (+ fold in S2.4/S3.1/S7.1/S7.4 fields).
+- **Phase 1 — ✅ DONE (format v2→v3):** S1.1–S1.6 shipped. (S2.4/S3.1/S7.1/S7.4 fields fold into a later migration as they land.)
 - **Phase 2 — features on foundations:** E2 (FSRS) · S3.1–S3.4 (cloze/type-in) · E4.1 ·
   E5 · E6 (metrics/coverage) · E7 (Elo practice + difficulty).
 - **Phase 3 — ambitious/optional:** S2.7 · S3.5/S3.6 (Note refactor, occlusion/MCQ) ·
@@ -490,7 +490,7 @@ enough to block Phase 0.
   yields fewer than the session cap. **Needs confirmation** of the exact composition. Proper
   fix rides with **E6** (honest counts) — surface a "X due · ≤N new today" breakdown or show
   the actually-studyable count, so the header doesn't overstate what a session will present.
-- **KI-2 — Interleave toggle has no effect on practice runs.** S0.3 applies interleaving only
+- **KI-2 — Interleave toggle has no effect on practice runs. ✅ RESOLVED** (ce3d7fa — practice runs now honor the toggle). S0.3 applied interleaving only
   to the *due* queue; the practice path (nothing due → `deck.allReviewItems`) is returned
   untouched, so toggling interleave does nothing when re-studying an already-cleared deck.
   Options: extend interleaving to practice runs, or just document it. (For now, test interleave
