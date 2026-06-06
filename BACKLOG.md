@@ -269,10 +269,10 @@ One batched migration. Land these together; everything in Phase 2 builds on them
   decays pathology remains.
 - **Deps:** S2.1.
 
-### ☐ S2.7 — FSRS weight optimization from review log  · **Effort:** XL · **Phase:** 3
-- **Why:** Per-user-tuned weights beat defaults.
-- **Touches:** offline/optional optimizer over `reviewlog.jsonl`; stored weights.
-- **Acceptance:** opt-in; needs sufficient history; falls back to defaults; never blocks UI.
+### ☑ S2.7 — FSRS weight optimization from review log  · **Effort:** XL · **Phase:** 3 · _shipped: `FSRSOptimizer` (BCE loss + Adam w/ numerical gradients + L2-to-default), `FSRSWeights` store, Settings → Spaced Repetition "Tune FSRS to my reviews" (off-main, gated at 100 reviews)_
+- **Why:** Per-user-tuned weights beat defaults — and make richer rating signals (type-in Hard/Good/Easy) pay off.
+- **Touches:** `FSRSOptimizer` over `reviewlog.jsonl`; `FSRSWeights` (UserDefaults); `SchedulerKind.fsrs` injects them; Settings control + reset.
+- **Acceptance:** opt-in; needs sufficient history; falls back to defaults; runs off the main thread. ✓
 - **Deps:** S1.3, S2.1.
 
 ---
