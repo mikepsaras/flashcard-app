@@ -218,7 +218,7 @@ One batched migration. Land these together; everything in Phase 2 builds on them
 
 ## E2 — FSRS scheduler (closes gaps 1, 2, 3, 6) · Phase 2
 
-### ☑ S2.1 — Port FSRS algorithm (default weights)  · **Effort:** L · **Phase:** 2 · _shipped behind the `Scheduler` seam (`FSRS`/`FSRSScheduler` + `SchedulingState` S/D/lastReviewedAt). Needs exact-vector validation vs. py-fsrs before becoming a deck default._
+### ☑ S2.1 — Port FSRS algorithm  · **Phase:** 2 · _shipped **FSRS-6**, validated vs py-fsrs 6.3.1 to <0.001 (matchesPyFSRS6ReferenceVectors), now the **default for new decks** (existing stay SM-2)._
 - **Why:** Modern, ~20–30% more efficient scheduling; principled stability/difficulty model.
 - **Touches:** new `Flashcards/Scheduling/FSRS.swift` (pure), conforming to `Scheduler`.
 - **Model/persist:** uses S1.2 fields.
