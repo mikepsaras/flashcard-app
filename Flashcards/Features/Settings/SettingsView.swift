@@ -109,8 +109,9 @@ struct SettingsView: View {
         }
         .confirmationDialog("Delete all decks?", isPresented: $showingDeleteAll, titleVisibility: .visible) {
             Button("Delete Everything", role: .destructive) {
-                DeckStore.shared.deleteAllDecks(context)
-                StudyStats.reset()
+                // Routed through RootView so it deselects any open deck before deleting (a separate
+                // Settings window can't clear the main window's selection — see AppActions.LibraryWipe).
+                AppActions.shared.requestWipe(.allDecks)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -199,12 +200,25 @@ struct SettingsView: View {
         }
     }
 
+    /// Whether a key is actually saved in the Keychain for the selected provider (read live, so the
+    /// footer reflects the real stored state — not just the in-memory field).
+    private var keyIsStored: Bool { KeychainStore.get(account: aiProvider.keychainAccount) != nil }
+
     private var aiSection: some View {
         Section {
             Picker("Provider", selection: $aiProviderRaw) {
                 ForEach(AIProvider.allCases) { Text($0.displayName).tag($0.rawValue) }
             }
-            SecureField("API key", text: $apiKey)
+            HStack(spacing: 8) {
+                SecureField("API key", text: $apiKey)
+                    // Commit on Return too, in case the per-keystroke onChange didn't fire (paste/autofill).
+                    .onSubmit { KeychainStore.set(apiKey, account: aiProvider.keychainAccount) }
+                if keyIsStored {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                        .help("A key is saved in your Keychain for \(aiProvider.displayName).")
+                }
+            }
             TextField("Model", text: $model, prompt: Text(aiProvider.defaultModel))
                 .font(.system(.body, design: .monospaced))
                 #if os(iOS)
@@ -222,7 +236,13 @@ struct SettingsView: View {
         } header: {
             Text("AI Card Generation")
         } footer: {
-            Text("Your key is stored in this device's Keychain and used only to call \(aiProvider.displayName) directly. Get one at \(aiProvider.keyConsoleURL).")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(keyIsStored
+                     ? "✓ A key is saved for \(aiProvider.displayName)."
+                     : "No key saved yet for \(aiProvider.displayName) — paste one above.")
+                    .foregroundStyle(keyIsStored ? .green : .secondary)
+                Text("Your key is stored in this device's Keychain and used only to call \(aiProvider.displayName) directly. Get one at \(aiProvider.keyConsoleURL).")
+            }
         }
     }
 
@@ -464,9 +484,10 @@ struct SettingsView: View {
     }
 
     private func runRemoveTestData() {
-        let n = DeveloperTools.removeAllTestData(into: context)
-        context.saveAndPersist()
-        devStatus = "Removed \(n) test deck\(n == 1 ? "" : "s") and cleared seeded stats."
+        // Routed through RootView (the main window owns deck selection) so it deselects before
+        // deleting — deleting a deck the detail pane still shows crashes (see AppActions.LibraryWipe).
+        AppActions.shared.requestWipe(.testData)
+        devStatus = "Removed the sample decks and cleared seeded stats/log."
     }
 
     @ViewBuilder private var testStatusView: some View {

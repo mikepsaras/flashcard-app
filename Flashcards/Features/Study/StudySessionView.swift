@@ -38,8 +38,6 @@ struct StudySessionView: View {
     private var typeInCard: Bool {
         plan.typeToAnswer && session.current?.card.cardType == .basic
     }
-    /// We're waiting on the learner to type + check the answer (a type-in card, not yet revealed).
-    private var awaitingTypedAnswer: Bool { typeInCard && !session.isShowingDefinition }
 
     /// Extra leading space on macOS so the title clears the overlaid traffic lights
     /// (the window uses a full-size-content title bar during study).
@@ -212,14 +210,22 @@ struct StudySessionView: View {
                     .padding(.horizontal, compact ? Theme.Spacing.m : Theme.Spacing.xl)
             }
 
-            StudyControlsBar(
-                canUndo: session.canUndo,
-                compact: compact,
-                fourButton: fourButton,
-                intervalFor: intervalProvider,
-                onUndo: { performUndo() },
-                onGrade: { performGrade($0) }
-            )
+            // Type-in cards infer the grade from the typed answer (✓ → Good, ✗ → Again), so they get
+            // a Continue bar instead of the Know / grade pills; flip-mode cards keep the pills.
+            Group {
+                if typeInCard {
+                    typeInControls
+                } else {
+                    StudyControlsBar(
+                        canUndo: session.canUndo,
+                        compact: compact,
+                        fourButton: fourButton,
+                        intervalFor: intervalProvider,
+                        onUndo: { performUndo() },
+                        onGrade: { performGrade($0) }
+                    )
+                }
+            }
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.bottom, Theme.Spacing.m)
         }
@@ -295,12 +301,61 @@ struct StudySessionView: View {
     }
 
     /// Checks the typed answer against the card's answer (case-insensitively) and reveals it. The
-    /// learner still self-grades after — the ✓/✗ is a hint, not the grade.
+    /// grade is then inferred from the match (see `typeInControls`); the learner can still override.
     private func submitTypedAnswer() {
         guard let item = session.current, !session.isShowingDefinition, canCheck else { return }
         typedResult = AnswerCheck.matches(typedAnswer, item.back)
         answerFieldFocused = false
         session.flip()
+    }
+
+    /// Bottom controls for a type-in card: just Undo before the reveal, then a Continue button that
+    /// commits the inferred grade (✓ → Good, ✗ → Again) plus a quiet one-tap override — so the learner
+    /// never has to pick Know / Don't-know by hand on a card they just typed.
+    @ViewBuilder private var typeInControls: some View {
+        let correct = typedResult ?? false
+        VStack(spacing: 12) {
+            HStack {
+                undoButton
+                Spacer()
+                if session.isShowingDefinition {
+                    Button { performGrade(correct ? .again : .good) } label: {
+                        Text(correct ? "I was wrong" : "I actually knew it")
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHint("Overrides the inferred grade")
+                }
+            }
+            if session.isShowingDefinition {
+                Button { performGrade(correct ? .good : .again) } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: correct ? "checkmark.circle.fill" : "arrow.right.circle.fill")
+                        Text(correct ? "Correct — Continue" : "Continue")
+                    }
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(correct ? Theme.success : accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.return, modifiers: [])
+            }
+        }
+    }
+
+    /// The small Undo control reused by the type-in bar (the grade-pill bar has its own).
+    private var undoButton: some View {
+        Button { performUndo() } label: {
+            Label("Undo", systemImage: "arrow.uturn.backward")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(session.canUndo ? Color.secondary : Color.secondary.opacity(0.4))
+        .disabled(!session.canUndo)
+        .accessibilityLabel("Undo")
     }
 
     /// Shown when nothing's due — a calm reminder that grades won't reschedule. (No track-learning
@@ -506,9 +561,10 @@ struct StudySessionView: View {
     /// ⌘Z undoes. Rendered as zero-size hidden buttons so the shortcuts register without
     /// affecting layout.
     @ViewBuilder private var keyboardControls: some View {
-        // Suppressed while the learner is typing an answer (B3), so Space / S / 1–4 / arrows go into
-        // the text field instead of flipping or grading. Re-enabled once the answer is revealed.
-        if !session.isFinished && !awaitingTypedAnswer {
+        // Suppressed for type-in cards (B3): before the reveal so Space / S / 1–4 / arrows type into
+        // the field, and after it because the grade is inferred via Continue (Return) — the flip-mode
+        // shortcuts would otherwise grade or flip the answer back.
+        if !session.isFinished && !typeInCard {
             Group {
                 Button("Flip") { session.flip() }
                     .keyboardShortcut(.space, modifiers: [])

@@ -71,6 +71,26 @@ struct RootView: View {
                 watcher.isPaused = studying
                 if !studying { DeckStore.shared.reconcile(into: context) }
             }
+            .onChange(of: AppActions.shared.wipeTick) { _, _ in
+                // A destructive library action from the Settings window. Deselect any open deck FIRST,
+                // then delete — in one transaction, so the detail pane never renders a deleted deck
+                // (which traps reading its persisted properties). See AppActions.LibraryWipe.
+                guard let wipe = AppActions.shared.pendingWipe else { return }
+                AppActions.shared.pendingWipe = nil
+                #if os(macOS)
+                selection = [.today]
+                #else
+                selection = .today
+                #endif
+                switch wipe {
+                case .testData:
+                    DeveloperTools.removeAllTestData(into: context)
+                    context.saveAndPersist()
+                case .allDecks:
+                    DeckStore.shared.deleteAllDecks(context)
+                    StudyStats.reset()
+                }
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     // Not while studying: a reconcile can delete cards the live

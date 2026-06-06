@@ -150,6 +150,16 @@ import Foundation
         #expect(system.lowercased().contains("code fences"))
     }
 
+    // MARK: Keychain (API-key storage)
+
+    @Test func keychainRoundTrips() {
+        let account = "apiKey.test.\(UUID().uuidString)"
+        KeychainStore.set("sk-test-123", account: account)
+        #expect(KeychainStore.get(account: account) == "sk-test-123")   // fails ⇒ keychain write isn't persisting
+        KeychainStore.delete(account: account)
+        #expect(KeychainStore.get(account: account) == nil)
+    }
+
     // MARK: Understanding intent + elaboration (B2)
 
     @Test func parsesExtraElaboration() throws {

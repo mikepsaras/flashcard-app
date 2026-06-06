@@ -14,4 +14,17 @@ final class AppActions {
 
     /// Bumped by the Help ▸ Formatting Guide menu command (⌘?); RootView opens the guide window.
     var showFormattingGuideTick = 0
+
+    /// A library-wide destructive action requested from the Settings window. It's run by RootView
+    /// (not Settings) because deleting a deck the main window's detail pane still shows reads the
+    /// deleted model's properties and crashes — and Settings, a separate window, can't clear that
+    /// selection. RootView deselects, then deletes, in one transaction.
+    enum LibraryWipe { case testData, allDecks }
+    var pendingWipe: LibraryWipe?
+    var wipeTick = 0
+
+    func requestWipe(_ wipe: LibraryWipe) {
+        pendingWipe = wipe
+        wipeTick += 1
+    }
 }
