@@ -8,6 +8,7 @@ struct DeckDetailView: View {
     @Query private var allDecks: [Deck]
     @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
     var onStudy: () -> Void
+    var onCram: () -> Void = {}
 
     private var otherDecks: [Deck] { allDecks.filter { $0.id != deck.id } }
 
@@ -101,6 +102,8 @@ struct DeckDetailView: View {
 
     private var moreMenu: some View {
         Menu {
+            Button { onCram() } label: { Label("Adaptive Practice", systemImage: "scope") }
+            Divider()
             if let fileURL = DeckStore.shared.fileURL(for: deck) {
                 ShareLink(item: fileURL) { Label("Share Deck File", systemImage: "square.and.arrow.up") }
             }

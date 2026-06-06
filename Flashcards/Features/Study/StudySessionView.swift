@@ -22,7 +22,7 @@ struct StudySessionView: View {
         self.onClose = onClose
         // Grading always advances the spaced-repetition schedule for due cards; the engine still
         // skips rescheduling in Practice mode (nothing due), so caught-up review is safe.
-        _session = State(initialValue: StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: true))
+        _session = State(initialValue: StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: true, forcePractice: plan.forcePractice))
     }
 
     private var accent: Color { plan.accent }
@@ -372,7 +372,7 @@ struct StudySessionView: View {
     }
 
     private func restart() {
-        session = StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: true)
+        session = StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: true, forcePractice: plan.forcePractice)
     }
 
     /// Reset Progress (••• menu): wipe the deck's schedules via the plan's hook, then start a fresh

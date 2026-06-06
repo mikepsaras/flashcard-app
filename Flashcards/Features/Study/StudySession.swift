@@ -52,12 +52,14 @@ final class StudySession {
     /// across undo.
     private var requeueCounts: [String: Int] = [:]
 
-    init(items: [ReviewItem], trackLearning: Bool, now: Date = .now) {
+    init(items: [ReviewItem], trackLearning: Bool, forcePractice: Bool = false, now: Date = .now) {
         self.items = items
         self.trackLearning = trackLearning
         // Nothing due ⇒ practice. Studying cards that aren't due (and advancing them) would
         // push their intervals out further with every pass, so practice leaves them alone.
-        self.isPractice = !items.isEmpty && items.allSatisfy { !$0.card.isDue($0.direction, now: now) }
+        // `forcePractice` (adaptive cram) forces it regardless of due status, so drilling can't
+        // corrupt the spaced schedule.
+        self.isPractice = forcePractice || (!items.isEmpty && items.allSatisfy { !$0.card.isDue($0.direction, now: now) })
     }
 
     /// Convenience: a forward-only run (used by tests and single-direction callers).

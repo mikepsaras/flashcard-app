@@ -15,5 +15,8 @@ struct StudyPlan: Identifiable {
     /// Resets the underlying deck's spaced-repetition progress (the study screen's ••• → Reset
     /// Progress). `nil` for the cross-deck Today queue, which has no single deck to reset.
     var onReset: (() -> Void)? = nil
+    /// Forces practice mode (schedules never advance) regardless of due status — used by the adaptive
+    /// cram run so drilling can't corrupt the spaced schedule.
+    var forcePractice: Bool = false
     let makeItems: () -> [ReviewItem]
 }

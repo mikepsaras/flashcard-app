@@ -169,7 +169,7 @@ struct RootView: View {
             StatsView()
         case .deck:
             if let deck = selectedDeck {
-                DeckDetailView(deck: deck) { studyPlan = deckPlan(deck) }
+                DeckDetailView(deck: deck, onStudy: { studyPlan = deckPlan(deck) }, onCram: { studyPlan = cramPlan(deck) })
                     .id(deck.persistentModelID)
             } else {
                 placeholder
@@ -217,6 +217,22 @@ struct RootView: View {
                 introducedToday: StudyStats.newCardsIntroducedToday(),
                 interleaveBy: interleaveBy
             )
+        }
+    }
+
+    /// Adaptive practice / exam-cram over the whole deck: every card, ordered weakest-first by Elo
+    /// difficulty (E7), in forced practice mode so the spaced schedule is never touched.
+    private func cramPlan(_ deck: Deck) -> StudyPlan {
+        StudyPlan(
+            id: "cram-\(deck.id.uuidString)",
+            title: deck.name.isEmpty ? "Practice" : "\(deck.name) · Practice",
+            accent: Color(hex: deck.colorHex),
+            exportText: nil,
+            fourButton: deck.gradingMode == .fourButton,
+            forcePractice: true
+        ) {
+            let ratings = Elo.replay(ReviewLog.records(from: ReviewLog.defaultURL))
+            return Elo.adaptiveOrder(deck.allReviewItems, ratings: ratings)
         }
     }
 }
