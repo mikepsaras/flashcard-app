@@ -6,9 +6,11 @@ extension Card {
     func schedulingState(_ direction: ReviewDirection = .forward) -> SchedulingState {
         switch direction {
         case .forward:
-            SchedulingState(easeFactor: easeFactor, interval: interval, repetitions: repetitions, dueDate: dueDate)
+            SchedulingState(easeFactor: easeFactor, interval: interval, repetitions: repetitions, dueDate: dueDate,
+                            stability: stability, difficulty: difficulty, lastReviewedAt: lastReviewedAt)
         case .reverse:
-            SchedulingState(easeFactor: reverseEaseFactor, interval: reverseInterval, repetitions: reverseRepetitions, dueDate: reverseDueDate)
+            SchedulingState(easeFactor: reverseEaseFactor, interval: reverseInterval, repetitions: reverseRepetitions, dueDate: reverseDueDate,
+                            stability: reverseStability, difficulty: reverseDifficulty, lastReviewedAt: reverseLastReviewedAt)
         }
     }
 
@@ -32,12 +34,16 @@ extension Card {
             interval = state.interval
             repetitions = state.repetitions
             dueDate = state.dueDate
+            stability = state.stability
+            difficulty = state.difficulty
             lastReviewedAt = reviewedAt
         case .reverse:
             reverseEaseFactor = state.easeFactor
             reverseInterval = state.interval
             reverseRepetitions = state.repetitions
             reverseDueDate = state.dueDate
+            reverseStability = state.stability
+            reverseDifficulty = state.difficulty
             reverseLastReviewedAt = reviewedAt
         }
         modifiedAt = reviewedAt
@@ -52,12 +58,16 @@ extension Card {
             interval = state.interval
             repetitions = state.repetitions
             dueDate = state.dueDate
+            stability = state.stability
+            difficulty = state.difficulty
             self.lastReviewedAt = lastReviewedAt
         case .reverse:
             reverseEaseFactor = state.easeFactor
             reverseInterval = state.interval
             reverseRepetitions = state.repetitions
             reverseDueDate = state.dueDate
+            reverseStability = state.stability
+            reverseDifficulty = state.difficulty
             reverseLastReviewedAt = lastReviewedAt
         }
         self.modifiedAt = modifiedAt

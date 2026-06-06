@@ -7,6 +7,13 @@ struct SchedulingState: Equatable {
     var interval: Int      // days until next review
     var repetitions: Int
     var dueDate: Date
+    // FSRS memory state — ignored by SM-2, used by the FSRS scheduler. `stability`/`difficulty` are 0
+    // until FSRS first schedules the card; `lastReviewedAt` is an input (the previous review time)
+    // FSRS needs to compute elapsed time, populated by the `Card` bridge. All defaulted so SM-2 call
+    // sites are unaffected.
+    var stability: Double = 0
+    var difficulty: Double = 0
+    var lastReviewedAt: Date?
 
     static func initial(now: Date = .now) -> SchedulingState {
         SchedulingState(
