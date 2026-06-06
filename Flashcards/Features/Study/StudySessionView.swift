@@ -215,7 +215,8 @@ struct StudySessionView: View {
     private var intervalProvider: ((Grade) -> String)? {
         guard showGradeIntervals, let item = session.current else { return nil }
         let state = item.card.schedulingState(item.direction)
-        return { grade in Self.intervalText(SM2.schedule(current: state, grade: grade).interval) }
+        let scheduler = item.card.deck?.resolvedScheduler ?? SM2Scheduler()
+        return { grade in Self.intervalText(scheduler.schedule(current: state, grade: grade).interval) }
     }
 
     private static func intervalText(_ days: Int) -> String {

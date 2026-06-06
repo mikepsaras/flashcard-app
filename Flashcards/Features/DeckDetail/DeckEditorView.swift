@@ -27,6 +27,7 @@ struct DeckEditorView: View {
     @State private var showLabel: Bool
     @State private var studyReversed: Bool
     @State private var gradingMode: GradingMode
+    @State private var schedulerKind: SchedulerKind
     @State private var section: String
     @State private var showSectionsInStudy: Bool
     @State private var showingAI = false
@@ -45,6 +46,7 @@ struct DeckEditorView: View {
             _showLabel = State(initialValue: true)
             _studyReversed = State(initialValue: false)
             _gradingMode = State(initialValue: .twoButton)
+            _schedulerKind = State(initialValue: .sm2)
             _section = State(initialValue: "")
             _showSectionsInStudy = State(initialValue: true)
             _showAdvanced = State(initialValue: false)
@@ -59,6 +61,7 @@ struct DeckEditorView: View {
             _showLabel = State(initialValue: !deck.backLabel.isEmpty)
             _studyReversed = State(initialValue: deck.studyReversed)
             _gradingMode = State(initialValue: deck.gradingMode)
+            _schedulerKind = State(initialValue: deck.schedulerKind)
             _section = State(initialValue: deck.section)
             _showSectionsInStudy = State(initialValue: deck.showSectionsInStudy)
             _showAdvanced = State(initialValue: true)
@@ -130,6 +133,11 @@ struct DeckEditorView: View {
                                 gradingRow
                                 caption("Two buttons mark a card known or not. Four buttons (Again / Hard / Good / Easy) give the spaced-repetition scheduler a finer signal.")
                             }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                schedulerRow
+                                caption("SM-2 is the classic algorithm. FSRS (beta) models memory more precisely and seeds from your existing progress when you switch.")
+                            }
                         }
                         .padding(.top, 12)
                     } label: {
@@ -175,6 +183,22 @@ struct DeckEditorView: View {
             Spacer(minLength: 8)
             Picker("", selection: $gradingMode) {
                 ForEach(GradingMode.allCases) { Text($0.title).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .fieldBox()
+    }
+
+    private var schedulerRow: some View {
+        HStack {
+            Text("Scheduler").font(Typography.body)
+            Spacer(minLength: 8)
+            Picker("", selection: $schedulerKind) {
+                ForEach(SchedulerKind.allCases) { Text($0.title).tag($0) }
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -329,6 +353,7 @@ struct DeckEditorView: View {
         let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
+        deck.schedulerKind = schedulerKind
         context.insert(deck)
         return deck
     }
@@ -343,6 +368,7 @@ struct DeckEditorView: View {
         switch mode {
         case .new:
             let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
+            deck.schedulerKind = schedulerKind
             context.insert(deck)
         case .edit(let deck):
             deck.name = trimmed
@@ -351,6 +377,7 @@ struct DeckEditorView: View {
             deck.backLabel = label
             deck.studyReversed = studyReversed
             deck.gradingMode = gradingMode
+            deck.schedulerKind = schedulerKind
             deck.section = trimmedSection
             deck.showSectionsInStudy = showSectionsInStudy
             deck.icon = icon
