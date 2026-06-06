@@ -70,6 +70,13 @@ enum ReviewLog {
         appendRaw(#"{"void":"\#(id.uuidString)"}"#, to: url)
     }
 
+    /// Appends many records in a single write (used by the dev seeder, to avoid one file open per record).
+    static func appendBatch(_ records: [Record], to url: URL) {
+        let lines = records.compactMap(encodeLine).joined(separator: "\n")
+        guard !lines.isEmpty else { return }
+        appendRaw(lines, to: url)
+    }
+
     /// Removes the log entirely (Reset progress / dev cleanup). No-op if absent.
     static func reset(at url: URL) { try? FileManager.default.removeItem(at: url) }
 

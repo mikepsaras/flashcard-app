@@ -327,6 +327,7 @@ struct SettingsView: View {
             Button { revealReviewLog() } label: { Label("Reveal review log", systemImage: "doc.text.magnifyingglass") }
             Button { showingStressSheet = true } label: { Label("Stress test…", systemImage: "gauge.high") }
             Button { showingSeedHistory = true } label: { Label("Seed review history", systemImage: "calendar.badge.clock") }
+            Button { runSeedReviewLog() } label: { Label("Seed review log (calibration)", systemImage: "scope") }
             Button(role: .destructive) { showingRemoveTestData = true } label: { Label("Remove all test data", systemImage: "trash") }
             Toggle(isOn: $showGradeIntervals) {
                 Label("Show projected intervals while studying", systemImage: "calendar.badge.clock")
@@ -439,6 +440,15 @@ struct SettingsView: View {
     private func runSeedHistory() {
         DeveloperTools.seedReviewHistory()
         devStatus = "Seeded ~3 years of review history."
+    }
+
+    private func runSeedReviewLog() {
+        DeveloperTools.seedReviewLog()
+        if let summary = Calibration.summary(from: ReviewLog.records(from: ReviewLog.defaultURL)) {
+            devStatus = "Seeded \(summary.sampleCount) review-log records. \(Calibration.takeaway(summary))"
+        } else {
+            devStatus = "Seeded review-log records."
+        }
     }
 
     private func runRemoveTestData() {

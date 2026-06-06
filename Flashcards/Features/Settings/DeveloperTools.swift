@@ -155,6 +155,24 @@ enum DeveloperTools {
                                  mature: logs.mature, matureCorrect: logs.matureCorrect, defaults: defaults)
     }
 
+    /// Seeds synthetic per-review records into the review log (slightly overconfident) so the
+    /// calibration metric (E6) has data to show without grinding through hundreds of real reviews.
+    /// Replaces the existing log.
+    static func seedReviewLog(count: Int = 400, now: Date = .now, to url: URL = ReviewLog.defaultURL) {
+        ReviewLog.reset(at: url)
+        var records: [ReviewLog.Record] = []
+        for _ in 0..<max(count, 0) {
+            let interval = Int.random(in: 1...60)
+            let elapsed = Double(interval) * Double.random(in: 0.4...1.6)            // reviewed around due
+            let predicted = pow(0.9, elapsed / Double(interval))
+            let correct = Double.random(in: 0..<1) < predicted * 0.9                 // schedule ~overconfident
+            records.append(ReviewLog.Record(ts: now, deck: UUID(), card: UUID(), direction: .forward,
+                                            grade: correct ? 4 : 0, correct: correct, elapsedDays: elapsed,
+                                            intervalBefore: interval, mature: interval >= StudyInsights.matureIntervalDays))
+        }
+        ReviewLog.appendBatch(records, to: url)
+    }
+
     struct HistoryLogs { var reviews: [String: Int]; var correct: [String: Int]; var mature: [String: Int]; var matureCorrect: [String: Int] }
 
     /// Pure generator for the four day-logs — separated so it's unit-testable without touching
