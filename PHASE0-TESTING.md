@@ -39,10 +39,14 @@ The Developer footer shows a live readout: **New introduced today: N of LIMIT ·
 
 ## S0.3 — Interleaving
 
-- Study **② Interleave Demo** (sections Alpha / Beta / Gamma, all due).
-- **Expect:** the section chip on the card **alternates** Alpha → Beta → Gamma → … rather
-  than showing all of Alpha first. Toggle **Settings → Studying → Interleave topics** off and
-  restudy to see the difference (grouped by section/due order).
+- Study **② Interleave Demo** (sections Alpha / Beta / Gamma, all due) with **Interleave topics ON**.
+- **Expect:** the section chip **round-robins** Alpha → Beta → Gamma → Alpha → … instead of all
+  of Alpha first. This deterministic A→B→C cycle is the reliable signal.
+- To compare with the toggle OFF, the cards must be **due** — first **Reset Progress** (study
+  screen ••• → Reset Progress) or reload the test set. A plain re-study after grading the cards
+  is a *practice* run, which doesn't apply interleaving at all (see KI-2 in BACKLOG.md), so the
+  toggle appears to do nothing. With the toggle OFF the order is the stored due order (not
+  guaranteed to look clustered), so trust the ON = round-robin signal.
 - Cross-deck: the **Today** queue interleaves across *decks* the same way.
 
 ## S0.4 — AI card-quality linter

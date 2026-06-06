@@ -479,6 +479,23 @@ enough to block Phase 0.
 
 ---
 
+## Known issues (found in Phase 0 hand-testing)
+
+- **KI-1 — Today count vs. actually-studied count mismatch (minor; revisit).** Reported:
+  100+ due in **Today**, but a capped session studied only **18** (not the 20 cap). Most
+  likely the S0.2 new-card throttle interacting with the unthrottled count: a session is
+  `due reviews + min(newPerDay − introducedToday, available new)`, while the Today header
+  shows **all** due cards unthrottled. So a Today queue dominated by new cards (e.g. right
+  after loading the 60-card New Flood deck), with some new already introduced earlier today,
+  yields fewer than the session cap. **Needs confirmation** of the exact composition. Proper
+  fix rides with **E6** (honest counts) — surface a "X due · ≤N new today" breakdown or show
+  the actually-studyable count, so the header doesn't overstate what a session will present.
+- **KI-2 — Interleave toggle has no effect on practice runs.** S0.3 applies interleaving only
+  to the *due* queue; the practice path (nothing due → `deck.allReviewItems`) is returned
+  untouched, so toggling interleave does nothing when re-studying an already-cleared deck.
+  Options: extend interleaving to practice runs, or just document it. (For now, test interleave
+  with *due* cards — Reset Progress between runs.)
+
 ## Risk register
 
 - **Migration data loss (high impact):** mitigate with exhaustive v1/v2→v3 round-trip tests
