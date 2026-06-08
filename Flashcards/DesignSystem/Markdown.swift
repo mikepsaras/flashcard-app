@@ -16,8 +16,9 @@ enum Markdown {
         )) ?? AttributedString(text)
     }
 
-    /// First non-empty line for a one-line preview, with a leading list marker shown as "•" and math
-    /// delimiters stripped so a row never shows a raw `$…$`.
+    /// First non-empty line for a one-line preview, with a leading bullet, quote, or heading marker
+    /// shown as "•" (ordered "1." markers are left as-is) and math delimiters stripped so a row never
+    /// shows a raw `$…$`.
     static func previewLine(_ text: String) -> AttributedString {
         let line = text.split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }

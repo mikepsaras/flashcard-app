@@ -853,7 +853,7 @@ struct RetentionTrendChart: View {
             VStack(spacing: 3) {
                 plot(points)
                 HStack {
-                    Text("\(trend.count) wks ago")
+                    Text("\(max(trend.count - 1, 0)) wks ago")
                     Spacer()
                     Text("now")
                 }

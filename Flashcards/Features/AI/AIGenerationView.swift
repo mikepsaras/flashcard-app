@@ -225,10 +225,13 @@ struct AIGenerationView: View {
                     .onChange(of: countText) { _, newValue in
                         let filtered = String(newValue.filter(\.isNumber).prefix(3))
                         if filtered != newValue { countText = filtered; return }
-                        if let value = Int(filtered) { count = min(max(value, 1), 100) }
+                        // An empty field falls back to 1 rather than silently keeping a stale count; the
+                        // resync below stays out of the way while the field is blank, so it can still be
+                        // cleared and retyped.
+                        count = filtered.isEmpty ? 1 : min(max(Int(filtered) ?? count, 1), 100)
                     }
                     .onChange(of: count) { _, newValue in
-                        if countText != String(newValue) { countText = String(newValue) }
+                        if !countText.isEmpty, countText != String(newValue) { countText = String(newValue) }
                     }
                     caption(autoCount
                         ? "The AI decides how many cards to create. Generated with \(provider.displayName)."

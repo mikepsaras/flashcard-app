@@ -260,10 +260,13 @@ struct BulkAddView: View {
                 .onChange(of: addCountText) { _, newValue in
                     let filtered = String(newValue.filter(\.isNumber).prefix(3))
                     if filtered != newValue { addCountText = filtered; return }
-                    if let value = Int(filtered) { addCount = min(max(value, 1), 100) }
+                    // An empty field falls back to 1 rather than silently keeping a stale count; the
+                    // resync below stays out of the way while the field is blank, so it can still be
+                    // cleared and retyped.
+                    addCount = filtered.isEmpty ? 1 : min(max(Int(filtered) ?? addCount, 1), 100)
                 }
                 .onChange(of: addCount) { _, newValue in
-                    if addCountText != String(newValue) { addCountText = String(newValue) }
+                    if !addCountText.isEmpty, addCountText != String(newValue) { addCountText = String(newValue) }
                 }
             #if os(macOS)
             Stepper("Cards to add", value: $addCount, in: 1...100).labelsHidden()

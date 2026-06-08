@@ -28,7 +28,7 @@ enum DeckCodec {
         // v3: card-section names within the deck + whether to show section chips in study.
         var sectionOrder: [String]?
         var showSectionsInStudy: Bool?
-        // 1.8.0: the deck's default answer mode (flip/type) for its cards. Omitted when default (flip).
+        // 1.8.0: the deck's default answer mode (flip/type) for its cards. Always written; decode treats an absent value as flip.
         var defaultAnswerMode: String?
         // Optional deck icon (SF Symbol name or themed preset id); omitted when default.
         var icon: String?

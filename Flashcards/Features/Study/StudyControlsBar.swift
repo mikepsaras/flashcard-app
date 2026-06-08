@@ -25,18 +25,11 @@ struct StudyControlsBar: View {
 
     /// One full-width grade pill (Again / Good / Easy, all label-only). A projected-interval subtitle
     /// appears beneath when `intervalFor` is set.
-    private func gradeButton(_ title: String, _ grade: Grade, symbol: String? = nil) -> some View {
+    private func gradeButton(_ title: String, _ grade: Grade) -> some View {
         let color = grade.studyColor
         return Button { onGrade(grade) } label: {
             VStack(spacing: 3) {
-                if let symbol {
-                    HStack(spacing: 8) {
-                        Image(systemName: symbol).font(.system(size: 16, weight: .bold))
-                        Text(title).font(.system(.body, design: .rounded, weight: .semibold))
-                    }
-                } else {
-                    Text(title).font(.system(.subheadline, design: .rounded, weight: .semibold))
-                }
+                Text(title).font(.system(.subheadline, design: .rounded, weight: .semibold))
                 if let intervalFor {
                     Text(intervalFor(grade))
                         .font(.system(size: 10, weight: .medium, design: .rounded))
@@ -46,7 +39,7 @@ struct StudyControlsBar: View {
             }
             .foregroundStyle(color)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, intervalFor == nil ? (symbol == nil ? 13 : 15) : 11)
+            .padding(.vertical, intervalFor == nil ? 13 : 11)
             .background(color.opacity(Theme.Opacity.fillTint), in: Capsule())
             .overlay(Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1))
         }

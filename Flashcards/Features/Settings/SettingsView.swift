@@ -192,7 +192,7 @@ struct SettingsView: View {
         } header: {
             Text("Studying")
         } footer: {
-            Text("A session cap studies the most-due cards in batches. New cards are introduced gradually, up to the daily limit, so a big import doesn’t flood your reviews. Interleaving mixes decks and sections so related cards are spread out. Grading buttons (2 or 4) are set per deck, in the deck’s editor.")
+            Text("A session cap studies the most-due cards in batches. New cards are introduced gradually, up to the daily limit, so a big import doesn’t flood your reviews. Interleaving mixes decks and sections so related cards are spread out.")
         }
     }
 
