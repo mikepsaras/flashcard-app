@@ -118,10 +118,11 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   library; `SeedData` survives only for previews/snapshots). At launch `migrateLegacyExtension`
   renames any legacy `.deck` files to `.cards` in place (write-then-delete, never destructive).
 - `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review queue,
-  search, sort, duplicate, drag-drop import), `DeckDetail` (the unified card composer
-  `BulkAddView` — its editing surface is an **`EditableFlashcard`** (the study card, edited in place:
-  front face, flip to the back, cloze on-card with a live preview; shared `StudyCardChrome`), opening
-  with one card and growing to many; + multi-select / Return-to-open / bulk delete + duplicate +
+  search, sort, duplicate, drag-drop import), `DeckDetail` (card editing is the **`EditableFlashcard`** —
+  the study card, edited in place: front face, flip to the back, cloze on-card with a live preview; shared
+  `StudyCardChrome`. **macOS** presents it in a full-window **`DeckGalleryView`** — hero card on top +
+  a filmstrip of every card + an animated "+" tile, opened from `RootView` like Study; **iOS** uses the
+  `BulkAddView` sheet. Edits are live on macOS, draft-then-save on iOS); + multi-select / Return-to-open / bulk delete + duplicate +
   move-card + Reset Progress; **JSON/CSV import/export gated behind Settings →
   Advanced** via `CSVCodec`/`CardListCodec`), `Study` (`StudySession`
   `@Observable @MainActor` state machine over `ReviewItem`s — cards in a direction —

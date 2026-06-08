@@ -31,6 +31,9 @@ struct DeckCardListView: View {
     var onAddCards: (_ section: String) -> Void
     var onNewSection: (_ cards: [Card]) -> Void
     var onRequestBulkDelete: () -> Void
+    /// Opens a card for editing. macOS routes this up to the full-window gallery; iOS ignores it and
+    /// uses the local sheet (see `open(_:)`).
+    var onOpenCard: (Card) -> Void = { _ in }
     #if os(iOS)
     @Environment(\.editMode) private var editMode
     #endif
@@ -68,9 +71,11 @@ struct DeckCardListView: View {
 
     var body: some View {
         cardList
+            #if os(iOS)
             .sheet(item: $editingCard) { card in
                 BulkAddView(deck: deck, editing: card)
             }
+            #endif
             .confirmationDialog(
                 "Delete this card?",
                 isPresented: Binding(get: { cardPendingDeletion != nil }, set: { if !$0 { cardPendingDeletion = nil } }),
@@ -87,6 +92,15 @@ struct DeckCardListView: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Rename") { if let old = sectionPendingRename { renameSection(old, to: renameSectionName) } }
             }
+    }
+
+    /// Opens a card for editing — the full-window gallery on macOS, the modal sheet on iOS.
+    private func open(_ card: Card) {
+        #if os(macOS)
+        onOpenCard(card)
+        #else
+        editingCard = card
+        #endif
     }
 
     private var cardList: some View {
@@ -149,7 +163,7 @@ struct DeckCardListView: View {
         // gesture — so it doesn't disable the native onMove drag (FB7367473).
         .onKeyPress(.return) {
             guard let card = singleSelectedCard else { return .ignored }
-            editingCard = card
+            open(card)
             return .handled
         }
         .onKeyPress(keys: ["a"]) { press in
@@ -163,7 +177,7 @@ struct DeckCardListView: View {
         .background(TableDoubleClickHandler(onDoubleClick: { row in
             let rows = flatRows
             guard rows.indices.contains(row), case .card(let card) = rows[row] else { return }
-            editingCard = card
+            open(card)
         }, onRowDrag: {
             // A drag started in the table: drop any selected-but-not-dragged card so it doesn't
             // flicker mid-drag. moveFlat re-selects the dropped card when the drag finishes.
@@ -182,7 +196,7 @@ struct DeckCardListView: View {
         if editMode?.wrappedValue.isEditing == true {
             row
         } else {
-            row.onTapGesture { editingCard = card }
+            row.onTapGesture { open(card) }
         }
         #else
         // macOS: NO tap gesture of ANY kind — even a *simultaneous* double-tap makes SwiftUI route
@@ -200,7 +214,7 @@ struct DeckCardListView: View {
     /// "New Section…" stay available so you can build out a deck that has no cards yet.
     @ViewBuilder private func cardMenu(for card: Card?) -> some View {
         let targets = card.map { contextTargets($0) } ?? []
-        Button { if let card { editingCard = card } } label: { Label("Edit", systemImage: "pencil") }
+        Button { if let card { open(card) } } label: { Label("Edit", systemImage: "pencil") }
             .disabled(card == nil)
         Button { duplicate(targets) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
             .disabled(card == nil)

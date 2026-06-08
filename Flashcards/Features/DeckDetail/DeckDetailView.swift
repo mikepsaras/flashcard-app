@@ -9,6 +9,9 @@ struct DeckDetailView: View {
     @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
     var onStudy: () -> Void
     var onCram: () -> Void = {}
+    /// Opens the full-window gallery editor on the given card (nil ⇒ "New Card"). Used on macOS; iOS
+    /// falls back to the modal composer sheet, which doesn't suit a phone-sized filmstrip.
+    var onEditCards: (Card?) -> Void = { _ in }
 
     private var otherDecks: [Deck] { allDecks.filter { $0.id != deck.id } }
 
@@ -167,7 +170,8 @@ struct DeckDetailView: View {
                 otherDecks: otherDecks,
                 onAddCards: { openComposer(section: $0) },
                 onNewSection: { startNewSection(assigning: $0) },
-                onRequestBulkDelete: { showingBulkDeleteConfirm = true }
+                onRequestBulkDelete: { showingBulkDeleteConfirm = true },
+                onOpenCard: { onEditCards($0) }   // macOS: open the gallery on this card (iOS uses its own sheet)
             )
         }
         .background(Theme.groupedBackground)
@@ -203,9 +207,12 @@ struct DeckDetailView: View {
         .sheet(isPresented: $showingAI) {
             AIGenerationView(target: .existing(deck))
         }
+        #if os(iOS)
+        // iOS keeps the modal composer; macOS opens the full-window gallery editor instead.
         .sheet(isPresented: $showingBulkAdd) {
             BulkAddView(deck: deck, section: bulkAddSection)
         }
+        #endif
         .fileExporter(
             isPresented: $showingExporter,
             document: CSVDocument(text: exportText),
@@ -288,8 +295,12 @@ struct DeckDetailView: View {
     /// Opens the unified card composer (BulkAddView) in `section`. It opens with one card and grows
     /// via its own "Add Card" — so there's a single way to add cards, whether one or many.
     private func openComposer(section: String = "") {
+        #if os(macOS)
+        onEditCards(nil)   // full-window gallery editor, on a fresh "New Card"
+        #else
         bulkAddSection = section
         showingBulkAdd = true
+        #endif
     }
 
     private func resetProgress() {

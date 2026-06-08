@@ -175,6 +175,20 @@ the `DeckCodec` v4 round-trip, the unified add/edit `editing:` path, and multi-f
 answer-mode menu, section, and elaboration stay as a **minimal surround**. Snapshot `33_editable_card`;
 312 tests green; verified live in all three modes. **Phase 5 (release) complete — shipped as v1.8.0 / build 20.**
 
+**EDITOR VISION v3 — full-window GALLERY (2026-06-08, post-1.8.0, on `main`, UNRELEASED):** after seeing
+the in-place card *in a sheet*, the user refined the vision again to a **full-window deck gallery** (à la
+Finder/Photos): the selected card fills the top as the editable study card (the `EditableFlashcard` hero,
+reused), a **filmstrip** of every card runs along the bottom (scrub with ← / → or click a thumbnail), and a
+hover-animated **"+" tile** swooshes a fresh card into the deck. New `DeckGalleryView` (macOS), presented
+full-window from `RootView` exactly like Study (`editorTarget`, watcher paused + reconcile-suppressed while
+open). Edits go **live** to the cards (no draft/Save); persists on navigate/add/delete/close; blank "New
+Card"s are pruned on close. **macOS uses the gallery; iOS keeps the `BulkAddView` sheet** (a filmstrip
+doesn't fit a phone). All plumbing still unchanged (AnswerMode, cloze, DeckCodec v4, multi-folder). Entry
+points route via `DeckDetailView.onEditCards` / `DeckCardListView.onOpenCard` (macOS → gallery; iOS → sheet).
+Snapshot `34_gallery_editor` (chrome only — the filmstrip/editor are ImageRenderer-blank); verified live
+(hero edit, flip, +/swoosh, thumbnails, ← / →, delete, close). 313 tests green. **Awaiting the user's
+eyeball; release is the next step once they sign off** (then bump + Release build + /Applications + GitHub).
+
 ---
 
 ## Cross-cutting foundations (apply to every epic)

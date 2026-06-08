@@ -8,6 +8,15 @@ enum SidebarItem: Hashable {
     case deck(PersistentIdentifier)
 }
 
+#if os(macOS)
+/// What the full-window gallery editor opens on: a deck, and optionally a specific card to start on
+/// (a double-clicked card). A nil card means "New Card" — the gallery adds a blank one to edit.
+struct EditorTarget {
+    let deck: Deck
+    let cardID: UUID?
+}
+#endif
+
 /// Adaptive root: sidebar (Today + decks) + detail on macOS/iPad, collapsing to a
 /// stack on iPhone. Study is presented over everything via a `StudyPlan`.
 struct RootView: View {
@@ -18,6 +27,20 @@ struct RootView: View {
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @State private var studyPlan: StudyPlan?
     @State private var watcher = DeckFolderWatcher()
+    #if os(macOS)
+    /// The deck being edited in the full-window gallery editor (macOS), with the card to open on.
+    @State private var editorTarget: EditorTarget?
+    #endif
+
+    /// Study or the gallery editor takes over the window; both pause the folder watcher and suppress
+    /// reconcile so a mid-session reload can't replace the cards being edited/reviewed.
+    private var isTakingOverWindow: Bool {
+        #if os(macOS)
+        return studyPlan != nil || editorTarget != nil
+        #else
+        return studyPlan != nil
+        #endif
+    }
 
     // Auto-select Today on macOS; start at the list on iPhone. macOS uses a Set so the sidebar can
     // multi-select decks for deletion; iOS stays single-selection (taps drive navigation).
@@ -49,8 +72,8 @@ struct RootView: View {
         let failure = persistenceMonitor.failure
         content
             .task {
-                // Reflect external edits to the .deck files live; pause while studying.
-                watcher.isPaused = studyPlan != nil
+                // Reflect external edits to the .deck files live; pause while studying or editing.
+                watcher.isPaused = isTakingOverWindow
                 watcher.start(folders: DeckStore.libraryURLs()) { DeckStore.shared.reconcileFolders(into: context) }
             }
             .onChange(of: decks.count) { _, _ in
@@ -68,9 +91,17 @@ struct RootView: View {
                 #endif
             }
             .onChange(of: studyPlan != nil) { _, studying in
-                watcher.isPaused = studying
+                watcher.isPaused = isTakingOverWindow
                 if !studying { DeckStore.shared.reconcileFolders(into: context) }
             }
+            #if os(macOS)
+            .onChange(of: editorTarget != nil) { _, editing in
+                // Same guard as Study: the gallery edits cards live, so pause the watcher while open
+                // and reconcile once on close (a mid-edit reload would replace the edited cards).
+                watcher.isPaused = isTakingOverWindow
+                if !editing { DeckStore.shared.reconcileFolders(into: context) }
+            }
+            #endif
             .onChange(of: AppActions.shared.wipeTick) { _, _ in
                 // A destructive library action from the Settings window. Deselect any open deck FIRST,
                 // then delete — in one transaction, so the detail pane never renders a deleted deck
@@ -93,10 +124,10 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
-                    // Not while studying: a reconcile can delete cards the live
-                    // StudySession still references (the watcher is paused for the same
-                    // reason). The study-end handler above reconciles when it finishes.
-                    if studyPlan == nil { DeckStore.shared.reconcileFolders(into: context) }
+                    // Not while studying or editing: a reconcile can delete cards the live
+                    // StudySession / gallery still references (the watcher is paused for the same
+                    // reason). The study/edit-end handlers above reconcile when they finish.
+                    if !isTakingOverWindow { DeckStore.shared.reconcileFolders(into: context) }
                 } else {
                     DeckStore.shared.persist(context)
                 }
@@ -141,11 +172,15 @@ struct RootView: View {
                 // starts a fresh session (matches the iOS fullScreenCover(item:) identity).
                 StudySessionView(plan: plan, onClose: { studyPlan = nil })
                     .id(plan.id)
+            } else if let target = editorTarget {
+                // The gallery editor fills the window like Study (replaces the split view).
+                DeckGalleryView(deck: target.deck, initialCardID: target.cardID, onClose: { editorTarget = nil })
+                    .id(target.deck.persistentModelID)
             } else {
                 splitView
             }
         }
-        .background(WindowConfigurator(fullSizeContent: studyPlan != nil))
+        .background(WindowConfigurator(fullSizeContent: isTakingOverWindow))
         #else
         splitView
             .fullScreenCover(item: $studyPlan) { plan in
@@ -189,8 +224,17 @@ struct RootView: View {
             StatsView(onStudy: { studyPlan = $0 })
         case .deck:
             if let deck = selectedDeck {
-                DeckDetailView(deck: deck, onStudy: { studyPlan = deckPlan(deck) }, onCram: { studyPlan = cramPlan(deck) })
-                    .id(deck.persistentModelID)
+                DeckDetailView(
+                    deck: deck,
+                    onStudy: { studyPlan = deckPlan(deck) },
+                    onCram: { studyPlan = cramPlan(deck) },
+                    onEditCards: { card in
+                        #if os(macOS)
+                        editorTarget = EditorTarget(deck: deck, cardID: card?.id)
+                        #endif
+                    }
+                )
+                .id(deck.persistentModelID)
             } else {
                 placeholder
             }

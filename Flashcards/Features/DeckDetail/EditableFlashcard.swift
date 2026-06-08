@@ -5,8 +5,9 @@ import AppKit
 
 /// Which editable region of a card has focus. File-scoped (not nested in a view) so the composer and
 /// the editable card can share one `@FocusState` — the composer drives focus to a specific card's
-/// front/back (e.g. after "Add Card" or a paste), and a flip moves focus to the newly-shown side.
-enum CardEditorField: Hashable { case front(UUID), back(UUID) }
+/// front/back (e.g. after "Add Card" or a paste), and a flip moves focus to the newly-shown side. The
+/// gallery editor adds the per-card elaboration field to the same focus space.
+enum CardEditorField: Hashable { case front(UUID), back(UUID), elaboration(UUID) }
 
 /// The card **editor** surface — the very same elevated study card the learner sees
 /// (`StudyCardBackground` + `StudyCardLabel` + `StudyCardSectionChip`, shared with `FlashcardView`),

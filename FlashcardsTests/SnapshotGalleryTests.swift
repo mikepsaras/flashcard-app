@@ -461,6 +461,20 @@ struct SnapshotGalleryTests {
             size: CGSize(width: 1180, height: 380), name: "33_editable_card")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/33_editable_card.png"))
     }
+
+    /// The full-window gallery editor: hero editable card on top, the filmstrip of every card along
+    /// the bottom, and the "+" tile. The hero's text region is an AppKit editor (blank under
+    /// ImageRenderer), but the chrome, top bar, filmstrip thumbnails, and add tile all render — the
+    /// gallery shell this rebuild is about.
+    @Test func renderGalleryEditor() throws {
+        let (container, deck, _) = try makeContext()
+        let firstID = deck.sectionGroups.flatMap(\.cards).first?.id
+        try Snapshot.write(
+            DeckGalleryView(deck: deck, initialCardID: firstID, onClose: {})
+                .modelContainer(container),
+            size: CGSize(width: 1120, height: 760), name: "34_gallery_editor")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/34_gallery_editor.png"))
+    }
 }
 
 /// Hosts an `EditableFlashcard` for snapshots — it needs a `@FocusState` and `@State` bindings, which
