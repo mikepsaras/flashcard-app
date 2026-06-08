@@ -27,6 +27,8 @@ foundations) · 3 (ambitious / optional)
 1. **Scheduler: adopt FSRS, retire SM-2 as the default.** FSRS subsumes four gaps at
    once (learning steps, lapse handling, grading-signal, algorithm efficiency). SM-2
    stays as a selectable conformer for back-compat and A/B.
+   **⚠️ SUPERSEDED (2026-06-09): SM-2 is being dropped ENTIRELY** — FSRS is the only
+   scheduler; no per-deck choice, no SM-2 algorithm. See "Post-1.8.2" below.
 2. **Cloze first via interim `type` enum on `Card`**, expanded into multiple
    `ReviewItem`s (reusing the forward/reverse expansion pattern). The full `Note`-above-
    `Card` refactor is deferred to Phase 3 once cloze demand is validated.
@@ -69,6 +71,64 @@ foundations) · 3 (ambitious / optional)
     `direction` so per-deck/per-tag slicing still works. Device-local; a launch migration
     relocates any log an earlier build left in the library folder. _(Revised from "library
     folder" after hand-testing flagged the clutter.)_
+
+---
+
+## Post-1.8.2 — Comprehensive review + new items (2026-06-09)
+
+A whole-codebase multi-agent review ran (54 agents; **34 confirmed findings** after adversarial
+verification — nothing critical/high survived; mostly cross-screen count mismatches, stale UI state,
+and edge-case data that doesn't round-trip). Plus four items the user added directly. Working order:
+**quick safe wins → real bugs → SM-2 removal.**
+
+### ★ DECISION (2026-06-09): Drop SM-2 ENTIRELY — FSRS is the only scheduler.
+Supersedes Decision-log #1. No per-deck scheduler choice, no SM-2 algorithm.
+- **Touches:** delete `SM2.swift` / `SM2Scheduler` / `SchedulerKind`; `Deck.resolvedScheduler` always
+  FSRS; remove `Deck.schedulerKind`/`schedulerRaw` (codec stops reading/writing `scheduler`, stays
+  tolerant of old files); drop the deck-editor scheduler picker (`DeckEditorView` :30/49/64/210-211/366/382/392);
+  fix the `?? SM2Scheduler()` deck==nil fallbacks (`StudySession:216`, `StudySessionView:411`) → FSRS;
+  relocate `defaultEaseFactor`(2.5)/`minimumEaseFactor`(1.3) out of the deleted `SM2` enum (still
+  referenced by `FSRS.seededDifficulty` + `DeckCodec` reverseEaseFactor default).
+- **Keep** the FSRS S/D seeding from existing `interval`/`ease` so existing cards' progress survives —
+  the Card SM-2 *state fields* stay as legacy seed data (a deeper field/format migration is an optional
+  later step, not required for the drop).
+- **Docs:** update CLAUDE.md headline (SM-2→FSRS) + "format v2"→v4 WITH this commit.
+- Delete `SM2Tests`; update `StudySessionTests:139`, `DeckStoreTests:173/178`; rename the FSRS-seeding test.
+- Resolves review-finding #1 (scheduler-default inconsistency); **moots** #4 (SM-2 interval==0 floor).
+
+### New items from the user (2026-06-09)
+- **FEATURE — colored text in markdown.** A markdown shortcut in edit mode that renders text in a
+  different color in study. Touches: `Markdown.swift` inline parser (a new color-span syntax) + an
+  edit-mode toolbar/shortcut + the `AttributedString`/`Text` build. Choose a syntax that won't collide
+  with existing markdown / LaTeX `$…$` / cloze `{{…}}`.
+- **BUG — last-card "Again" feels stuck.** On the last card (or within `requeueSpacing`=3 of the end),
+  the in-session learning-step requeue (`StudySession.grade` → `buriedRequeueIndex`) clamps re-insertion
+  to the queue end, so the card reappears IMMEDIATELY with no spacing, repeating up to
+  `maxRequeuesPerItem`=3× back-to-back. Not infinite, but reads as a loop. Fix: skip the in-session
+  requeue when it can't actually space the card (at/near the queue end) — it's already rescheduled for a
+  future day — or end the session and let it come due normally.
+- **FEATURE — review by Subject.** Study all cards across decks under a common Subject (`Deck.section`).
+  Insights already aggregate by Subject (`StudyInsights.byCategory`); add a subject-scoped study entry
+  point (a `StudyPlan` filtered to a Subject's decks, like the cross-deck Today queue). Fits the
+  Subject→Deck→Section hierarchy (decision #9).
+- **UX/COPY — "0 reviews so far" under Spaced Repetition is confusing.** Working as designed:
+  `SettingsView:241` shows `FSRSOptimizer.scoredReviewCount` = *gradeable-for-tuning* reviews (excludes
+  first-sights + same-day repeats), so a fresh new-card session legitimately scores 0 even though the
+  reviews WERE logged. Clarify the copy (show total-studied separately, or reword so it doesn't read as
+  "your session didn't count").
+
+### Review-fix plan (each fix verified valid against code, 2026-06-09 — see session report)
+- **Quick wins (pure logic + unit tests):** cloze due-count guard (`StudyInsights:266`), `absorb()`
+  display-order, FocusInsights/Elo tie-breaks, linter `isCircular`/`looksLikeList`.
+- **Copy / dead code:** Settings grading footer (`:195`), dead `symbol` param (`StudyControlsBar`),
+  retention axis label, codec comment, the two cleared-numeric-field stale-value spots.
+- **Real bugs:** undo-type-in controls (`StudySessionView` onChange reset), `AIGenerationView.generate()`
+  Task guard, `extra` round-trip on import/export, cloze elaboration in gallery (`DeckGalleryView:169`),
+  bare-array JSON metadata gate (`CardListCodec:44`), TodayDetail count-vs-throttle, optimizer
+  elapsed-days floor (`FSRSOptimizer:57`), section delete/merge `sortOrder`, iOS edit-mode selection
+  clear, multi-folder launch-migration + transient bookmark drop, **library-folder watcher clobber**
+  (`RootView:138` — needs the guard AND the Settings folder handlers at `SettingsView:649/655`),
+  StatsView per-render log read.
 
 ---
 
