@@ -139,6 +139,15 @@ retired). 306 tests green. **NEXT: Phase 4** (multiple library folders, macOS �
 folder set; **folder-scoped prune** is the data-safety crux; new-deck destination; Settings → Folders
 UI), then **Phase 5** (release: bump 1.8.0/19).
 
+**STATUS (2026-06-08, cont'd): Phase 4 (multi-folder, macOS) core + UI DONE.** `cc1a1c7` (LibraryLocation
+folder set + bookmark migration), `2960c70` (DeckStore multi-folder load/persist/reconcile + the
+folder-scoped prune, with a prune-scoping safety test), `a51a0b5` (Settings → Folders add/remove UI +
+`deleteAllDecksEverywhere`). 309 tests green. **Remaining:** **4c** — the folder watcher still watches
+only the primary, so live external edits to *secondary* folders are reflected on scene-activate (via
+`reconcileFolders`), not instantly (an enhancement). **Phase 5 (release)** is the last step and needs a
+human: eyeball 1.8.0 + explicit go (it publishes a GitHub release, and first launch trips the one-time
+clean-slate wipe).
+
 ---
 
 ## Cross-cutting foundations (apply to every epic)
