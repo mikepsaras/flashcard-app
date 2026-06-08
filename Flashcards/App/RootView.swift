@@ -51,7 +51,7 @@ struct RootView: View {
             .task {
                 // Reflect external edits to the .deck files live; pause while studying.
                 watcher.isPaused = studyPlan != nil
-                watcher.start { DeckStore.shared.reconcileFolders(into: context) }
+                watcher.start(folders: DeckStore.libraryURLs()) { DeckStore.shared.reconcileFolders(into: context) }
             }
             .onChange(of: decks.count) { _, _ in
                 // Drop any selected deck that vanished (delete / Delete All / external removal) so the
@@ -101,11 +101,11 @@ struct RootView: View {
                     DeckStore.shared.persist(context)
                 }
             }
-            .onChange(of: LibraryLocation.shared.current) { _, _ in
-                // The library folder changed (in Settings): re-point the watcher and reload.
+            .onChange(of: LibraryLocation.shared.folders) { _, _ in
+                // The library folders changed (Settings add/remove/switch): re-point the watcher + reload.
                 watcher.stop()
                 watcher.isPaused = studyPlan != nil
-                watcher.start { DeckStore.shared.reconcileFolders(into: context) }
+                watcher.start(folders: DeckStore.libraryURLs()) { DeckStore.shared.reconcileFolders(into: context) }
                 if studyPlan == nil { DeckStore.shared.reconcileFolders(into: context) }
             }
             #if os(macOS)
