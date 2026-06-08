@@ -5,13 +5,15 @@ import SwiftData
 /// and grows via "Add Card"; a single card shows no "Card N" header so it reads like a plain editor.
 /// Front is single-line (so pasting a list splits it into cards, and Return adds the next); Back is
 /// the rich multi-line field. The Add-Card split button's menu reuses the previous card's front/back
-/// for shared-side batches, and the counter adds several at once. (Editing one existing card stays in
-/// `CardEditorView`.)
+/// for shared-side batches, and the counter adds several at once. Pass `editing:` to edit one existing
+/// card instead — Front/Back become multi-line, with Elaboration + card-health, and Save writes it back.
 struct BulkAddView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
     let deck: Deck
+    /// When non-nil, the composer edits this existing card instead of adding new ones (1.8.0 unify).
+    let editing: Card?
 
     private struct Row: Identifiable, Equatable {
         let id = UUID()
@@ -30,34 +32,51 @@ struct BulkAddView: View {
     @State private var section: String
     /// The answer mode for the whole batch (flip / type / cloze), defaulting to the deck's default.
     @State private var answerMode: AnswerMode
+    /// Elaboration text — edit-mode only (the batch-add flow doesn't set it).
+    @State private var extra: String
     @State private var addCount = 1
     @State private var addCountText = "1"
     @State private var sharedSide: SharedSide?
     @State private var sharedValue = ""
     @FocusState private var focused: Field?
 
-    init(deck: Deck, section: String = "", startCount: Int = 1) {
+    init(deck: Deck, section: String = "", startCount: Int = 1, editing: Card? = nil) {
         self.deck = deck
-        _rows = State(initialValue: (0..<max(startCount, 1)).map { _ in Row() })
-        _section = State(initialValue: section)
-        _answerMode = State(initialValue: deck.defaultAnswerMode)
+        self.editing = editing
+        if let card = editing {
+            _rows = State(initialValue: [Row(front: card.term, back: card.definition)])
+            _section = State(initialValue: card.section)
+            _answerMode = State(initialValue: card.resolvedAnswerMode(deckDefault: deck.defaultAnswerMode))
+            _extra = State(initialValue: card.extra)
+        } else {
+            _rows = State(initialValue: (0..<max(startCount, 1)).map { _ in Row() })
+            _section = State(initialValue: section)
+            _answerMode = State(initialValue: deck.defaultAnswerMode)
+            _extra = State(initialValue: "")
+        }
     }
 
     private func isFilled(_ row: Row) -> Bool {
         !row.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     private var filledCount: Int { rows.filter(isFilled).count }
+    private var isEditing: Bool { editing != nil }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     modeRow
-                    if !deck.sectionOrder.isEmpty { sectionRow }
+                    if !isEditing, !deck.sectionOrder.isEmpty { sectionRow }
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, _ in
                         cardRow(index, $rows[index])
                     }
-                    addControls
+                    if isEditing {
+                        elaborationField
+                        if let card = editing, card.lapses > 0 || card.suspended { cardHealthSection(card) }
+                    } else {
+                        addControls
+                    }
                     Text(hintText)
                         .font(.caption).foregroundStyle(.secondary).padding(.top, 2)
                 }
@@ -65,14 +84,18 @@ struct BulkAddView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Theme.groupedBackground)
-            .navigationTitle(rows.count == 1 ? "New Card" : "Add Cards")
+            .navigationTitle(isEditing ? "Edit Card" : (rows.count == 1 ? "New Card" : "Add Cards"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add \(filledCount)") { addAll() }.disabled(filledCount == 0)
+                    if isEditing {
+                        Button("Save") { saveEdit() }.disabled(filledCount == 0)
+                    } else {
+                        Button("Add \(filledCount)") { addAll() }.disabled(filledCount == 0)
+                    }
                 }
             }
             .alert(sharedSide?.title ?? "", isPresented: Binding(get: { sharedSide != nil }, set: { if !$0 { sharedSide = nil } }), presenting: sharedSide) { side in
@@ -152,7 +175,11 @@ struct BulkAddView: View {
             }
             if isCloze {
                 // Cloze is one field — the markup carries both the prompt (blanked) and the answer.
-                MultilineField(label: "Cloze text", placeholder: "The {{c1::sun}} is a star.", text: row.front, minHeight: 64)
+                MultilineField(label: "Cloze text", placeholder: "The {{c1::sun}} is a star.", text: row.front, minHeight: isEditing ? 120 : 64)
+            } else if isEditing {
+                // Editing one card: plain multi-line Front/Back (no rapid-add paste-split).
+                MultilineField(label: "Front", placeholder: "Front of the card", text: row.front, minHeight: 56)
+                MultilineField(label: answerMode == .type ? "Answer" : "Back", placeholder: "Back of the card", text: row.back, minHeight: 120)
             } else {
                 bulkField("Front") {
                     // Vertical axis so a long front WRAPS instead of scrolling sideways; on macOS this
@@ -340,5 +367,81 @@ struct BulkAddView: View {
         }
         if added > 0 { context.saveAndPersist(touching: deck) }
         dismiss()
+    }
+
+    // MARK: Edit mode (1.8.0 unify — folds in the former CardEditorView)
+
+    private var elaborationField: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            MultilineField(label: "Elaboration", placeholder: "Optional — a “why”, a worked example, or a source.", text: $extra, minHeight: 72)
+            Text("Shown beneath the answer while studying. Supports Markdown & LaTeX.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Writes the single row back onto the card being edited (vs `addAll`, which inserts new cards).
+    private func saveEdit() {
+        guard let card = editing, let row = rows.first else { return }
+        card.term = row.front.trimmingCharacters(in: .whitespacesAndNewlines)
+        card.definition = isCloze ? "" : row.back
+        card.extra = extra.trimmingCharacters(in: .whitespacesAndNewlines)
+        card.answerModeRaw = answerMode == deck.defaultAnswerMode ? "" : answerMode.rawValue
+        card.modifiedAt = .now
+        context.saveAndPersist(touching: deck)
+        dismiss()
+    }
+
+    /// Leech / card-health controls (S7.4): lapse count + Suspend / Reset Lapses. These act immediately
+    /// (distinct from Save), so toggling suspension doesn't depend on also saving text edits.
+    private func cardHealthSection(_ card: Card) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: card.isLeech ? "exclamationmark.triangle.fill" : "stethoscope")
+                    .foregroundStyle(card.isLeech ? .orange : .secondary)
+                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.isLeech ? "Leech" : "Card Health")
+                        .font(.system(.subheadline, weight: .semibold))
+                    Text(healthSubtitle(card))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    card.suspended.toggle()
+                    persistHealthChange(card)
+                } label: {
+                    Label(card.suspended ? "Resume" : "Suspend", systemImage: card.suspended ? "play.circle" : "pause.circle")
+                }
+                Button {
+                    card.lapses = 0
+                    persistHealthChange(card)
+                } label: {
+                    Label("Reset Lapses", systemImage: "arrow.counterclockwise")
+                }
+                .disabled(card.lapses == 0)
+                Spacer(minLength: 0)
+            }
+            .buttonStyle(.bordered)
+            .font(Typography.callout)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fieldBox()
+    }
+
+    private func healthSubtitle(_ card: Card) -> String {
+        let lapseText = card.lapses == 1 ? "Failed once" : "Failed \(card.lapses) times"
+        if card.suspended {
+            return card.lapses == 0 ? "Held out of study." : "\(lapseText) · held out of study."
+        }
+        if card.isLeech { return "\(lapseText) — consider reformulating or suspending it." }
+        return lapseText + "."
+    }
+
+    private func persistHealthChange(_ card: Card) {
+        card.modifiedAt = .now
+        context.saveAndPersist(touching: deck)
     }
 }

@@ -69,7 +69,7 @@ struct DeckCardListView: View {
     var body: some View {
         cardList
             .sheet(item: $editingCard) { card in
-                CardEditorView(deck: deck, card: card)
+                BulkAddView(deck: deck, editing: card)
             }
             .confirmationDialog(
                 "Delete this card?",
