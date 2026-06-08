@@ -144,8 +144,9 @@ struct EditableFlashcard: View {
 /// One editable text region living on a card face: the card's text, in place, with a native-style
 /// placeholder that clears on focus. Transparent so the card surface shows through; centered for a
 /// term/definition, leading for cloze. In rapid-add the front uses a commit-on-Return field (Return
-/// adds the next card); everywhere else it's a full multi-line editor (Markdown + LaTeX).
-private struct CardEditorText: View {
+/// adds the next card); everywhere else it's a full multi-line editor (Markdown + LaTeX). Shared by
+/// the iOS composer (`EditableFlashcard`) and the macOS gallery card (`EditableStudyCard`).
+struct CardEditorText: View {
     @Binding var text: String
     var placeholder: String
     var centered: Bool
@@ -209,7 +210,7 @@ private struct CardEditorText: View {
 /// scroller — the editor is content-sized (it grows with the text; the composer page scrolls if needed),
 /// so a scrollbar would only ever be a stray artifact. Mirrors `TextEditorConfigurator` (reusing its
 /// geometry-targeted scroll-view lookup) but drops the field-box background.
-private struct CardEditorConfigurator: NSViewRepresentable {
+struct CardEditorConfigurator: NSViewRepresentable {
     var centered: Bool
 
     func makeNSView(context: Context) -> Probe { Probe() }

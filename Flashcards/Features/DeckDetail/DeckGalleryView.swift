@@ -40,7 +40,6 @@ struct DeckGalleryView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar
-            Divider()
             Group {
                 if let card = selectedCard {
                     heroArea(card)
@@ -53,6 +52,8 @@ struct DeckGalleryView: View {
         }
         .background(Theme.windowBackground)
         .background(navigationKeys)
+        // Esc is two-stage: finish editing (commit → re-render) if a face is being edited, else close.
+        .onExitCommand { if cardFocus != nil { cardFocus = nil } else { close() } }
         .onAppear(perform: openInitial)
         .onChange(of: selectedID) { _, _ in showingBack = false }
     }
@@ -65,7 +66,6 @@ struct DeckGalleryView: View {
                 Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
             .help("Done editing")
             .accessibilityLabel("Done")
 
@@ -75,7 +75,7 @@ struct DeckGalleryView: View {
             }
             Spacer(minLength: 8)
             if let card = selectedCard {
-                modePicker(card)
+                modeChip(card)
                 cardMenu(card)
             }
         }
@@ -93,14 +93,34 @@ struct DeckGalleryView: View {
         return "\(cards.count) card\(cards.count == 1 ? "" : "s")"
     }
 
-    private func modePicker(_ card: Card) -> some View {
-        Picker("Answer mode", selection: modeBinding(card)) {
-            ForEach(AnswerMode.allCases) { Text($0.title).tag($0) }
+    /// A compact mode "chip" (icon + one-word mode + chevron) that opens a checkmarked list of the three
+    /// answer modes with icons — nicer than a bare menu picker, and NOT a segmented control (the user
+    /// reads those as tabs).
+    private func modeChip(_ card: Card) -> some View {
+        let current = card.resolvedAnswerMode(deckDefault: deck.defaultAnswerMode)
+        return Menu {
+            Picker("Answer mode", selection: modeBinding(card)) {
+                ForEach(AnswerMode.allCases) { mode in
+                    Label(mode.title, systemImage: mode.symbolName).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: current.symbolName).font(.system(size: 11, weight: .semibold))
+                Text(current.shortTitle).font(.system(size: 12, weight: .semibold, design: .rounded))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.06), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10)))
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityLabel("Answer mode")
+        .accessibilityLabel("Answer mode: \(current.shortTitle)")
     }
 
     private func cardMenu(_ card: Card) -> some View {
@@ -127,30 +147,35 @@ struct DeckGalleryView: View {
     // MARK: Hero card
 
     private func heroArea(_ card: Card) -> some View {
-        GeometryReader { geo in
-            let cardWidth = min(geo.size.width * 0.74, 860)
-            VStack(spacing: 16) {
-                EditableFlashcard(
-                    id: card.id,
-                    front: frontBinding(card),
-                    back: backBinding(card),
-                    showingBack: $showingBack,
-                    mode: card.resolvedAnswerMode(deckDefault: deck.defaultAnswerMode),
-                    backLabel: deck.backLabel,
-                    section: card.section.isEmpty ? nil : card.section,
-                    accent: accent,
-                    minHeight: max(geo.size.height * 0.58, 280),
-                    focus: $cardFocus
-                )
-                .frame(maxWidth: cardWidth)
-
-                elaborationField(card)
-                    .frame(maxWidth: cardWidth)
-            }
+        VStack(spacing: 14) {
+            EditableStudyCard(
+                id: card.id,
+                front: frontBinding(card),
+                back: backBinding(card),
+                showingBack: $showingBack,
+                mode: card.resolvedAnswerMode(deckDefault: deck.defaultAnswerMode),
+                backLabel: deck.backLabel,
+                section: card.section.isEmpty ? nil : card.section,
+                accent: accent,
+                focus: $cardFocus
+            )
+            .id(card.id)   // fresh per card, so its onAppear (auto-edit-if-empty) fires on each switch
+            // Same framing as the study card: a 1.25 landscape card that fills the space, centered.
+            .aspectRatio(1.25, contentMode: .fit)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 36)
-            .padding(.vertical, 24)
+            .padding(.horizontal, Theme.Spacing.xl)
+
+            // Elaboration appears only on the back — mirroring study, where the "why" shows under the answer.
+            if showingBack {
+                elaborationField(card)
+                    .frame(maxWidth: 720)
+                    .padding(.horizontal, Theme.Spacing.xl)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, Theme.Spacing.m)
+        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: showingBack)
     }
 
     /// A quiet elaboration field below the card — the "why / worked example / source" shown under the
@@ -173,7 +198,7 @@ struct DeckGalleryView: View {
         VStack(spacing: 14) {
             Image(systemName: "rectangle.on.rectangle.slash").font(.system(size: 44)).foregroundStyle(.secondary)
             Text("No cards yet").font(Typography.title)
-            Button { addCard(focus: true) } label: { Label("Add a Card", systemImage: "plus") }
+            Button { addCard() } label: { Label("Add a Card", systemImage: "plus") }
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -205,7 +230,7 @@ struct DeckGalleryView: View {
     private var stripContent: some View {
         HStack(spacing: 12) {
             ForEach(orderedCards) { card in thumb(card) }
-            GalleryAddTile(accent: accent) { addCard(focus: true) }
+            GalleryAddTile(accent: accent) { addCard() }
                 .id(Self.addTileID)
         }
     }
@@ -240,7 +265,7 @@ struct DeckGalleryView: View {
             selectedID = initialCardID
         } else if !didAutoOpen && initialCardID == nil {
             didAutoOpen = true
-            addCard(focus: true)   // "New Card": land on a fresh card ready to type
+            addCard()   // "New Card": land on a fresh card ready to type
         } else {
             selectedID = selectedID ?? orderedCards.first?.id
         }
@@ -261,16 +286,16 @@ struct DeckGalleryView: View {
 
     // MARK: Mutations (live — edits land on the cards directly)
 
-    private func addCard(focus: Bool) {
+    private func addCard() {
         let order = deck.nextSortOrder(inSection: "")
         let card = Card(term: "", definition: "", deck: deck, section: "", sortOrder: order)
+        cardFocus = nil   // commit any in-progress edit; the new (empty) card auto-enters edit on appear
         // Insert inside the animation so the new thumbnail swooshes into the strip (ForEach transition).
         withAnimation(.snappy) {
             context.insert(card)
             selectedID = card.id
             showingBack = false
         }
-        if focus { cardFocus = .front(card.id) }
         persist()
     }
 

@@ -219,6 +219,21 @@ The user compared the gallery editor to study and wants them visually/functional
 - Known trade-off: a small size "pop" entering/leaving edit (comfortable editing size → study-scaled size);
   tune it. Add a faint "click to edit" cue for discoverability. iOS keeps the `BulkAddView` sheet.
 
+**✅ BUILT (2026-06-09, on `main`, UNRELEASED).** New `EditableStudyCard` (gallery hero) renders at rest via
+the shared `StudyCardText` + `StudyCardBackground` (extracted from `FlashcardView`, which now uses them too
+— `studyCardFontSize` is the shared scale formula) → the at-rest card is pixel-identical to study (verified:
+snapshot `34_gallery_editor` shows "User Stories" big/centered like `01_card_front`). Click a face → edit in
+place (centered, content-sized editor); flip = button-only with **⌘↵** shown on it (3D flip, animated from
+both rest and edit via a deferred toggle). Top bar: **X moved to the left in study too** (`StudySessionView`);
+gallery divider removed; mode picker → a `modeChip` (icon + Flip/Type/Cloze menu, `AnswerMode.shortTitle`/
+`symbolName`); elaboration shows only on the back. Cloze: masked (`Cloze.front`) at rest, raw `{{…}}` while
+editing. **KEY GOTCHA:** a `TextEditor` inside a `rotation3DEffect` (even at 0°) can't take first-responder
+focus, and setting `@FocusState` before the field is mounted reverts — so editing renders the active face
+**flat** (no rotation) and an explicit `editingSide` @State mounts the editor, then focuses it via
+`DispatchQueue.main.async`. 314 tests green; iOS `BulkAddView` untouched. **Known rough edges (eyeball):** a
+faint stray scroller knob can show while editing (fragile AppKit scroll-view introspection); the size pop on
+commit; cloze answer hidden at rest. **Awaiting the user's eyeball before release.**
+
 ---
 
 ## Cross-cutting foundations (apply to every epic)

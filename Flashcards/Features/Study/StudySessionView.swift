@@ -82,6 +82,7 @@ struct StudySessionView: View {
 
     private func topBar(compact: Bool) -> some View {
         HStack(spacing: 12) {
+            closeButton   // top-left, matching the gallery editor
             VStack(alignment: .leading, spacing: 2) {
                 Text(plan.title)
                     .font(Typography.headline)
@@ -99,7 +100,6 @@ struct StudySessionView: View {
                 if !compact { dueChip }   // iPhone keeps only the streak
                 overflowMenu
             }
-            closeButton
         }
         .padding(.leading, topBarLeadingInset)
         .padding(.trailing, Theme.Spacing.m)

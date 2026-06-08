@@ -20,6 +20,22 @@ enum AnswerMode: String, CaseIterable, Identifiable, Sendable {
         case .cloze: "Cloze deletion"
         }
     }
+    /// A one-word label for compact controls (the editor's mode chip).
+    var shortTitle: String {
+        switch self {
+        case .flip:  "Flip"
+        case .type:  "Type"
+        case .cloze: "Cloze"
+        }
+    }
+    /// SF Symbol representing the mode (the mode chip + filmstrip badge).
+    var symbolName: String {
+        switch self {
+        case .flip:  "arrow.2.circlepath"
+        case .type:  "keyboard"
+        case .cloze: "curlybraces"
+        }
+    }
     /// The modes a deck may use as its default. Cloze is per-card only — it needs `{{…}}` markup.
     static var deckDefaults: [AnswerMode] { [.flip, .type] }
 }

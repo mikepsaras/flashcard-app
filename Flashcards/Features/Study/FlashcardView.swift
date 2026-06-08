@@ -21,9 +21,7 @@ struct FlashcardView: View {
 
     var body: some View {
         GeometryReader { geo in
-            // ≈40pt at the ~615pt baseline width, scaling up with the card; never below the
-            // Dynamic-Type baseline so it stays legible on small windows / large text settings.
-            let fontSize = max(geo.size.width * 0.065, termSize)
+            let fontSize = studyCardFontSize(width: geo.size.width, floor: termSize)
             ZStack {
                 face(text: term, label: nil, showHint: showFlipHint, fontSize: fontSize)
                     .opacity(isShowingDefinition ? 0 : 1)
@@ -50,47 +48,13 @@ struct FlashcardView: View {
 
             VStack(spacing: 14) {
                 if let label { StudyCardLabel(label: label, accent: accent) }
-                cardText(text, fontSize: fontSize)
+                StudyCardText(text: text, fontSize: fontSize)
             }
             .padding(40)
         }
         .overlay(alignment: .top) { StudyCardSectionChip(section: section, accent: accent) }
         .overlay(alignment: .bottom) { if showHint { flipHint } }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// The card's main text, shrunk to fit the fixed-size card so a long back (e.g. a bullet list)
-    /// scales DOWN instead of overflowing the card onto the grading buttons. Both faces share the
-    /// card size, so a long back simply renders at a smaller size than a short front — the card never
-    /// resizes. `minimumScaleFactor` alone can't do this: it shrinks a single `Text`, not the
-    /// multi-line `VStack` that bullet lists need, so we step the font down until the whole block fits.
-    @ViewBuilder private func cardText(_ text: String, fontSize: CGFloat) -> some View {
-        if text.isEmpty {
-            cardTextBody(text, fontSize)
-        } else {
-            ViewThatFits(in: .vertical) {
-                cardTextBody(text, fontSize)
-                cardTextBody(text, fontSize * 0.85)
-                cardTextBody(text, fontSize * 0.72)
-                cardTextBody(text, fontSize * 0.60)
-                cardTextBody(text, fontSize * 0.50)
-                cardTextBody(text, fontSize * 0.40)
-            }
-        }
-    }
-
-    @ViewBuilder private func cardTextBody(_ text: String, _ size: CGFloat) -> some View {
-        Group {
-            if text.isEmpty {
-                Text("—")
-                    .font(.system(size: size, weight: .semibold, design: .rounded))
-                    .multilineTextAlignment(.center)
-            } else {
-                // Full markdown + LaTeX; centers a plain term, left-aligns structural content.
-                MarkdownText(text: text, baseSize: size, weight: .semibold, centered: true)
-            }
-        }
-        .foregroundStyle(.primary)
     }
 
     /// A quiet affordance for the flip gesture, shown on the front (term) face only.

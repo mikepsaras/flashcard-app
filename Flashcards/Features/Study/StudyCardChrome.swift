@@ -32,6 +32,54 @@ struct StudyCardLabel: View {
     }
 }
 
+/// A card face's main text — full Markdown + LaTeX, **shrunk to fit** the fixed card so a long answer
+/// scales DOWN (stepping the font 1.0→0.4) instead of overflowing. Both faces share the card size, so a
+/// long back simply renders smaller than a short front. `fontSize` is the unshrunk size, computed from
+/// the card's width by the caller (`studyCardFontSize`) so the text scales with the card. Shared by the
+/// study card (`FlashcardView`) and the in-place editor's rendered faces, so they read identically.
+struct StudyCardText: View {
+    let text: String
+    let fontSize: CGFloat
+
+    var body: some View {
+        if text.isEmpty {
+            body(fontSize)
+        } else {
+            // `minimumScaleFactor` shrinks a single Text, not the multi-line VStack a bullet list needs,
+            // so step the font down until the whole block fits.
+            ViewThatFits(in: .vertical) {
+                body(fontSize)
+                body(fontSize * 0.85)
+                body(fontSize * 0.72)
+                body(fontSize * 0.60)
+                body(fontSize * 0.50)
+                body(fontSize * 0.40)
+            }
+        }
+    }
+
+    @ViewBuilder private func body(_ size: CGFloat) -> some View {
+        Group {
+            if text.isEmpty {
+                Text("—")
+                    .font(.system(size: size, weight: .semibold, design: .rounded))
+                    .multilineTextAlignment(.center)
+            } else {
+                // Centers a plain term, left-aligns structural content (lists/headings).
+                MarkdownText(text: text, baseSize: size, weight: .semibold, centered: true)
+            }
+        }
+        .foregroundStyle(.primary)
+    }
+}
+
+/// The unshrunk card-text size for a card of the given width: ≈40pt at the ~615pt baseline width,
+/// scaling up with the card, never below `floor` (the Dynamic-Type baseline). One formula so the study
+/// card and the editor scale their text the same way.
+func studyCardFontSize(width: CGFloat, floor: CGFloat) -> CGFloat {
+    max(width * 0.065, floor)
+}
+
 /// The section chip pinned to the top of a card — an outlined accent capsule with the section name.
 /// Renders nothing when the section is nil/empty.
 struct StudyCardSectionChip: View {
