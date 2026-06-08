@@ -100,8 +100,12 @@ session; this is the committed set.
 - **Clean `.cards` format:** fresh `formatVersion`, all fields non-optional with defaults, no
   conditional stamping / no legacy reads. The runtime perf/equality machinery (the `modifiedAt`
   persist gate, byte-skip, reconcile content-equality) is **kept**.
-- **First launch:** move any old `.cards`/`.deck` files into a `Pre-1.8 Backup/` subfolder
-  (non-destructive), start with an empty library, and **reset history** (review log + StudyStats).
+- **First launch = fully clean slate, NO converter.** 1.8.0 reads only the new format (fresh
+  `formatVersion`); old-format files are **ignored** by the loader (never read or pruned — safe),
+  so the library starts empty. A one-time first-launch reset clears the review log + StudyStats
+  (no streaks/history carried). **No legacy reader / converter ships** — the user has externally
+  backed up their `.cards` files and will convert them in a future ground-up rebuild. (Reverses
+  the brief converter idea — keep *nothing*: no cards, no progress, no history.)
 - **Import/export: untouched** — deferred to a separate future engine revamp (confirmed it
   references none of the changing fields). AI generation of the new modes also deferred.
 
