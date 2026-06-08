@@ -25,6 +25,10 @@ final class Deck {
     /// Which scheduling algorithm this deck studies with (a `SchedulerKind` raw value). Empty ⇒ the
     /// default, SM-2; `"fsrs"` opts the deck into FSRS. Defaulted ⇒ CloudKit-safe.
     var schedulerRaw: String = ""
+    /// The deck's **default** answer mode for its cards (an `AnswerMode` raw value — `flip`/`type`).
+    /// Cards with an empty `answerModeRaw` inherit this; cloze is per-card only. Defaulted ⇒
+    /// CloudKit-safe. (1.8.0 replacement for `typeToAnswer` + `gradingMode`; removed at cutover.)
+    var defaultAnswerModeRaw: String = AnswerMode.flip.rawValue
     /// The single **Subject** this deck belongs to (the library groups decks by it). Named `section`
     /// internally for historical reasons — distinct from a card's within-deck `section`. Empty ⇒
     /// "No Subject". CloudKit-safe: defaulted.
@@ -182,6 +186,12 @@ extension Deck {
     }
     /// The `Scheduler` instance for this deck's chosen algorithm.
     var resolvedScheduler: Scheduler { schedulerKind.scheduler }
+
+    /// The deck's default answer mode (flip/type), backed by `defaultAnswerModeRaw` (1.8.0).
+    var defaultAnswerMode: AnswerMode {
+        get { AnswerMode(rawValue: defaultAnswerModeRaw) ?? .flip }
+        set { defaultAnswerModeRaw = newValue.rawValue }
+    }
 
     /// Every review unit this deck offers: forward for each card, plus a reverse unit
     /// per card when reverse study is enabled. Suspended (leech) cards are held out of study
