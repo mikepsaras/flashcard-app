@@ -309,9 +309,9 @@ struct StudySessionView: View {
     }
 
     /// Bottom controls for a type-in card. Before the reveal: just Undo. After a *correct* answer:
-    /// Hard / Good / Easy pills (Good is the Enter default) — the objective pass floor with the same
-    /// 4-level granularity FSRS wants, so the learner refines only the upside. After a *wrong* answer:
-    /// Continue (Again) with an "I actually knew it" escape hatch for typos.
+    /// Good / Easy pills (Good is the Enter default) — the objective pass floor; the learner refines
+    /// only the upside. After a *wrong* answer: Continue (Again) with an "I actually knew it" escape
+    /// hatch for typos.
     @ViewBuilder private var typeInControls: some View {
         let correct = typedResult ?? false
         VStack(spacing: 12) {
@@ -355,8 +355,8 @@ struct StudySessionView: View {
         }
     }
 
-    /// One pill in the type-in "you got it — how hard was it?" refinement. `primary` (Good) gets a
-    /// solid fill so it reads as the default; Hard/Easy are tinted, matching the 4-button pills.
+    /// One pill in the type-in "you got it — how well?" refinement. `primary` (Good) gets a solid fill
+    /// so it reads as the default; Easy is tinted, matching the grade pills.
     private func refineButton(_ title: String, _ grade: Grade, primary: Bool = false) -> some View {
         let color = grade.studyColor
         let fill: Color = primary ? color : color.opacity(Theme.Opacity.fillTint)
@@ -584,11 +584,10 @@ struct StudySessionView: View {
     // MARK: Keyboard
 
     /// Hardware-keyboard shortcuts for the study loop (chiefly macOS): Space flips,
-    /// ←/→ or 1/2 grade in two-button mode, 1–4 grade in four-button mode, S shuffles,
-    /// ⌘Z undoes. Rendered as zero-size hidden buttons so the shortcuts register without
-    /// affecting layout.
+    /// 1/2/3 → Again/Good/Easy (← Again, → Good), S shuffles, ⌘Z undoes. Rendered as
+    /// zero-size hidden buttons so the shortcuts register without affecting layout.
     @ViewBuilder private var keyboardControls: some View {
-        // Suppressed for type-in cards (B3): before the reveal so Space / S / 1–4 / arrows type into
+        // Suppressed for type-in cards (B3): before the reveal so Space / S / 1–3 / arrows type into
         // the field, and after it because the grade is inferred via Continue (Return) — the flip-mode
         // shortcuts would otherwise grade or flip the answer back.
         if !session.isFinished && !typeInCard {

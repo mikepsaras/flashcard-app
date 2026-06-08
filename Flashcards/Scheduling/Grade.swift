@@ -1,8 +1,7 @@
 import Foundation
 
-/// A SuperMemo-2 quality grade (0–5). The study UI ships the two-button mapping
-/// (✕ → `.again`, ✓ → `.good`); the full four-button set is kept for a future
-/// "advanced grading" mode.
+/// A SuperMemo-2 quality grade (0–5). The study UI emits **Again / Good / Easy** (the 1.8.0 3-button
+/// set); `.hard` stays in the enum because the SM-2/FSRS schedulers map it, but no UI path produces it.
 enum Grade: Int, CaseIterable, Identifiable {
     case again = 0   // didn't know it / blackout
     case hard  = 3
@@ -11,7 +10,7 @@ enum Grade: Int, CaseIterable, Identifiable {
 
     var id: Int { rawValue }
 
-    /// Two-button study mapping.
+    /// Known/unknown convenience mapping (used by tests and known-only callers).
     static func from(known: Bool) -> Grade { known ? .good : .again }
 
     /// SM-2 treats q >= 3 as a successful recall.

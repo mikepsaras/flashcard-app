@@ -343,7 +343,13 @@ struct DeckLibraryView: View {
         context.insert(copy)
         copy.defaultAnswerMode = deck.defaultAnswerMode
         for card in deck.cardArray.sorted(by: { $0.createdAt < $1.createdAt }) {
-            context.insert(Card(term: card.term, definition: card.definition, deck: copy))
+            // Faithful content copy (fresh schedule): preserve section/order + the per-card answer mode
+            // and elaboration, so duplicating a deck doesn't quietly turn cloze cards into blank flips.
+            let copyCard = Card(term: card.term, definition: card.definition, deck: copy,
+                                section: card.section, sortOrder: card.sortOrder)
+            copyCard.answerModeRaw = card.answerModeRaw
+            copyCard.extra = card.extra
+            context.insert(copyCard)
         }
         context.saveAndPersist()
         select(.deck(copy.persistentModelID))

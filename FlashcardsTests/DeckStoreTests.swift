@@ -409,6 +409,19 @@ import SwiftData
         #expect((try context.fetch(FetchDescriptor<Deck>())).map(\.name).sorted() == ["Alpha"])
     }
 
+    @Test func runOnceRunsWorkExactlyOnce() {
+        // The first-launch clean-slate gate: the reset runs once, then is suppressed on every
+        // subsequent launch (it must never wipe stats repeatedly, and must never fail to run once).
+        let suite = "test-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var count = 0
+        #expect(DeckStore.runOnce("didCleanSlate1.8", defaults: defaults) { count += 1 } == true)
+        #expect(DeckStore.runOnce("didCleanSlate1.8", defaults: defaults) { count += 1 } == false)
+        #expect(DeckStore.runOnce("didCleanSlate1.8", defaults: defaults) { count += 1 } == false)
+        #expect(count == 1)
+    }
+
     private func deckFilenames(_ dir: URL) throws -> [String] {
         try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
             .filter { DeckStore.isDeckFile($0) }

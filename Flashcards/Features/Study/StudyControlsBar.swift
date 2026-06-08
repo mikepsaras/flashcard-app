@@ -23,8 +23,8 @@ struct StudyControlsBar: View {
         }
     }
 
-    /// One full-width grade pill. `symbol` (the 2-button row) prefixes an icon; the 4-button row is
-    /// label-only. A projected-interval subtitle appears beneath when `intervalFor` is set.
+    /// One full-width grade pill (Again / Good / Easy, all label-only). A projected-interval subtitle
+    /// appears beneath when `intervalFor` is set.
     private func gradeButton(_ title: String, _ grade: Grade, symbol: String? = nil) -> some View {
         let color = grade.studyColor
         return Button { onGrade(grade) } label: {

@@ -31,9 +31,9 @@ final class PersistenceMonitor {
     }
 }
 
-/// Persists decks as individual `.deck` JSON files in a visible folder
-/// (`Documents/Flashcards`). The on-disk files are the source of truth; the app
-/// keeps an in-memory SwiftData working copy that's rebuilt from the files at launch.
+/// Persists decks as individual `.cards` JSON files (one per deck) in the library folder set. The
+/// on-disk files are the source of truth; the app keeps an in-memory SwiftData working copy rebuilt
+/// from them at launch. Reads/writes/prunes span all `LibraryLocation.folders` (1.8.0 multi-folder).
 @MainActor
 final class DeckStore {
     /// The app's shared store instance, holding the on-disk caches (`urlByDeckID`,
@@ -123,6 +123,17 @@ final class DeckStore {
     /// All library folders (primary first). New decks go to the primary; load/persist/reconcile span
     /// all of them (1.8.0 multi-folder, macOS — a single-element set on iOS).
     static func libraryURLs() -> [URL] { LibraryLocation.shared.folders }
+
+    /// Runs `work` **exactly once** across launches, gated on `key` in `defaults`; returns whether it
+    /// ran. Backs the 1.8.0 first-launch clean slate (resets StudyStats + ReviewLog once). A pure gate
+    /// with injectable `defaults` so the run-once behavior is unit-testable apart from the App entry.
+    @discardableResult
+    static func runOnce(_ key: String, defaults: UserDefaults = .standard, _ work: () -> Void) -> Bool {
+        guard !defaults.bool(forKey: key) else { return false }
+        work()
+        defaults.set(true, forKey: key)
+        return true
+    }
 
     // MARK: Folder migration
 

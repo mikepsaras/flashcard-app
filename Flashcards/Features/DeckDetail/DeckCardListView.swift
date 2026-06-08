@@ -344,8 +344,13 @@ struct DeckCardListView: View {
         for card in cards {
             let order = nextOrder[card.section] ?? deck.nextSortOrder(inSection: card.section)
             nextOrder[card.section] = order + 1
-            context.insert(Card(term: card.term, definition: card.definition, deck: deck,
-                                section: card.section, sortOrder: order))
+            // Preserve the per-card answer mode + elaboration on a duplicate (fresh schedule), so a
+            // cloze/type card stays itself rather than reverting to the deck default.
+            let copyCard = Card(term: card.term, definition: card.definition, deck: deck,
+                                section: card.section, sortOrder: order)
+            copyCard.answerModeRaw = card.answerModeRaw
+            copyCard.extra = card.extra
+            context.insert(copyCard)
         }
         context.saveAndPersist(touching: deck)
     }

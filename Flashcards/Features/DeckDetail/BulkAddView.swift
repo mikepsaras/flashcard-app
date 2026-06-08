@@ -192,7 +192,10 @@ struct BulkAddView: View {
                 }
                 MultilineField(label: answerMode == .type ? "Answer" : "Back", placeholder: "", text: row.back, minHeight: 64)
             }
-            if hasFormatting(row.wrappedValue.front) || hasFormatting(row.wrappedValue.back) {
+            // Cloze always previews once it has text (the {{…}} blanks are exactly what you want to
+            // see); other modes preview only when there's Markdown/LaTeX to render.
+            if (isCloze && !row.wrappedValue.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                || hasFormatting(row.wrappedValue.front) || hasFormatting(row.wrappedValue.back) {
                 bulkPreview(front: row.wrappedValue.front, back: row.wrappedValue.back, cloze: isCloze)
             }
         }
@@ -358,8 +361,11 @@ struct BulkAddView: View {
         let explicitMode = answerMode == deck.defaultAnswerMode ? "" : answerMode.rawValue
         var added = 0
         for row in rows where isFilled(row) {
+            // Keep `row.back` verbatim even for cloze (a new cloze row never fills it, so it's ""; an
+            // edited card keeps its prior back) — never blank a back the user can't see, so switching
+            // a card to cloze and back doesn't lose its answer. Cloze ignores `definition` in study.
             let card = Card(term: row.front.trimmingCharacters(in: .whitespacesAndNewlines),
-                            definition: isCloze ? "" : row.back, deck: deck, section: section, sortOrder: order)
+                            definition: row.back, deck: deck, section: section, sortOrder: order)
             card.answerModeRaw = explicitMode
             context.insert(card)
             order += 1
@@ -383,7 +389,10 @@ struct BulkAddView: View {
     private func saveEdit() {
         guard let card = editing, let row = rows.first else { return }
         card.term = row.front.trimmingCharacters(in: .whitespacesAndNewlines)
-        card.definition = isCloze ? "" : row.back
+        // Don't blank the back when the mode is cloze — the Back field is hidden in cloze mode, so
+        // `row.back` still holds the card's original answer; wiping it would silently lose data on a
+        // flip→cloze switch. (Cloze ignores `definition` in study anyway.)
+        card.definition = row.back
         card.extra = extra.trimmingCharacters(in: .whitespacesAndNewlines)
         card.answerModeRaw = answerMode == deck.defaultAnswerMode ? "" : answerMode.rawValue
         card.modifiedAt = .now

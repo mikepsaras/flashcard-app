@@ -142,12 +142,14 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
 
 ## Storage (no database, no iCloud sync)
 
-Each deck is a human-readable `.cards` JSON file in `~/Documents/Flashcards` (Mac, visible in
-Finder) / the app's Files-visible Documents folder (iOS, via `UIFileSharingEnabled` +
-`LSSupportsOpeningDocumentsInPlace` in a generated `Info.plist`). There is **no on-disk
-database and no iCloud sync**. The app keeps an in-memory SwiftData working copy and persists
-to the files after each change. External edits to the files (Finder, an editor, a sync service)
-are picked up live by `DeckFolderWatcher` and merged via `DeckStore.reconcile`. Open `.deck`
-files via the library **+** menu or by dropping them on the window; share a deck's file from its
-**•••** menu. The file format is **v2** (adds reverse-direction scheduling + `studyReversed`);
-v1 files still load. (Models keep a CloudKit-safe shape, but CloudKit isn't wired.)
+Each deck is a human-readable `.cards` JSON file. On **macOS** the library aggregates a **set** of
+folders (`LibraryLocation.folders`, primary first; managed in Settings → Storage); **iOS** uses a
+single folder (default `~/Documents/Flashcards`, Files-visible via `UIFileSharingEnabled` +
+`LSSupportsOpeningDocumentsInPlace`). There is **no on-disk database and no iCloud sync**. The app
+keeps an in-memory SwiftData working copy and persists to the files after each change; load / persist /
+reconcile span all folders, and `persist`'s prune is **folder-scoped** (a deck in one folder is never
+deleted because another folder is registered). External edits are picked up live by `DeckFolderWatcher`
+(one vnode source per folder) and merged via `DeckStore.reconcileFolders`. Share a deck's file from its
+**•••** menu. The file format is **v4** — a clean break: old `.cards` files (v1–v3) are **ignored**
+(rejected by the decoder, never read or deleted), and first launch resets history for a clean slate.
+(Models keep a CloudKit-safe shape, but CloudKit isn't wired.)

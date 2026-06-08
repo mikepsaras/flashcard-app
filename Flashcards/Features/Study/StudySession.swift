@@ -176,12 +176,12 @@ final class StudySession {
         }
     }
 
-    /// Two-button convenience: ✓ ⇒ good, ✕ ⇒ again.
+    /// Convenience: ✓ ⇒ good, ✕ ⇒ again (used by tests / known-only callers).
     func grade(known: Bool, now: Date = .now) {
         grade(.from(known: known), now: now)
     }
 
-    /// Grade the current item with an explicit SM-2 grade (used by 4-button mode).
+    /// Grade the current item with an explicit grade (the study controls emit Again / Good / Easy).
     func grade(_ grade: Grade, now: Date = .now) {
         guard let item = current else { return }
         let card = item.card

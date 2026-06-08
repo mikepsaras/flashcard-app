@@ -20,11 +20,9 @@ struct FlashcardsApp: App {
             // 1.8.0 clean break: one-time reset of history/streaks on the first launch of this version.
             // The user keeps no cards/progress/history; old-format `.cards` files are ignored by the
             // loader (so the library starts empty), and this clears the streak / heatmap / accuracy log.
-            let cleanSlateKey = "didCleanSlate1.8"
-            if !UserDefaults.standard.bool(forKey: cleanSlateKey) {
+            DeckStore.runOnce("didCleanSlate1.8") {
                 StudyStats.reset()
                 ReviewLog.reset(at: ReviewLog.defaultURL)
-                UserDefaults.standard.set(true, forKey: cleanSlateKey)
             }
             // Load whatever deck files exist, converting any legacy `.deck` to `.cards` first.
             // The library is never auto-seeded and the old SwiftData store is never imported,

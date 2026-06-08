@@ -1,19 +1,15 @@
 import Foundation
 import SwiftData
 
-/// Codable representation of a deck for `.deck` files. `@Model` types can't be
-/// encoded directly, so we map through these DTOs.
+/// Codable representation of a deck for `.cards` files. `@Model` types can't be encoded directly, so
+/// we map through these DTOs.
 ///
-/// Format v2 adds reverse-direction scheduling + `studyReversed`, plus — added later, the same
-/// way grading mode was — optional per-card `section` and the deck's `sectionOrder` +
-/// `showSectionsInStudy`. Format v3 adds optional per-card FSRS state (`stability`/`difficulty`,
-/// forward + reverse), `tags`, `extra`, and leech-detection state (`lapses`/`suspended`). All of these
-/// are optional and omitted when empty/default,
-/// so files not using them re-encode identically (no phantom edits) — and the version line only
-/// advances to 3 when a card actually uses a v3 feature (`encode` stamps 2 otherwise), so existing
-/// v2 files stay byte-for-byte unchanged. Manual card order rides in the order of the `cards` array
-/// (unsectioned first, then by section), not an explicit field. v1 + v2 files still decode
-/// (missing ⇒ defaults).
+/// **1.8.0 clean break — format v4 only.** `encode` always stamps `formatVersion = 4`; `decodeDTO`
+/// rejects any other version, so old files (v1–v3) are ignored by the loader (never read or deleted).
+/// Optional fields are still omitted when empty/default and defaulted when absent, so a v4 file that
+/// doesn't use a feature re-encodes identically (no phantom edits) and the watcher's content compare
+/// stays a no-op. Manual card order rides in the order of the `cards` array (unsectioned first, then
+/// by section), not an explicit field.
 enum DeckCodec {
     /// The current format version (1.8.0 clean break). `encode` always stamps this; `decodeDTO`
     /// rejects any other version, so old-format files (v1–v3) are ignored by the loader.
@@ -63,8 +59,8 @@ enum DeckCodec {
         var reverseRepetitions: Int?
         var reverseDueDate: Date?
         var reverseLastReviewedAt: Date?
-        // v3: FSRS state (forward + reverse), topic tags, and answer elaboration — all optional and
-        // omitted when default, so v1/v2 files (and cards not using them) re-encode unchanged.
+        // FSRS state (forward + reverse) + answer elaboration — all optional and omitted when default,
+        // so cards not using them re-encode unchanged.
         var stability: Double?
         var difficulty: Double?
         var reverseStability: Double?
@@ -256,7 +252,7 @@ enum DeckCodec {
         card.reverseRepetitions = dto.reverseRepetitions ?? 0
         card.reverseDueDate = dto.reverseDueDate ?? dto.createdAt
         card.reverseLastReviewedAt = dto.reverseLastReviewedAt
-        // v3 fields — default when absent (v1/v2 files, or cards that don't use them).
+        // Optional fields — default when absent (cards that don't use them).
         card.stability = dto.stability ?? 0
         card.difficulty = dto.difficulty ?? 0
         card.reverseStability = dto.reverseStability ?? 0
