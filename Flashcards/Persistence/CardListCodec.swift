@@ -65,16 +65,19 @@ enum CardListCodec {
 
     // MARK: Export
 
-    /// Encodes cards as pretty-printed JSON — `{"name":…,"cards":[{"term","definition"}]}` —
-    /// which round-trips back through `parse`. `name` is omitted when nil/empty.
-    static func exportJSON(_ cards: [Card], name: String? = nil) -> String {
+    /// Encodes cards as pretty-printed JSON — `{"cards":[{"front":…,"back":…,"source":…}]}` —
+    /// which round-trips back through `parse`. `source` carries a card's within-deck section and is
+    /// omitted when empty. (No top-level deck name: this format is a bare card list, so a re-import
+    /// takes its deck name from the filename.)
+    static func exportJSON(_ cards: [Card]) -> String {
         let envelope = Envelope(
-            name: clean(name),
-            cards: cards.map { Envelope.Item(term: $0.term, definition: $0.definition,
-                                             section: $0.section.isEmpty ? nil : $0.section) }
+            cards: cards.map { Envelope.Item(front: $0.term, back: $0.definition,
+                                             source: $0.section.isEmpty ? nil : $0.section) }
         )
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        // No `.sortedKeys`: synthesized Codable encodes in declaration order, so each card reads
+        // naturally front → back → source (matching the import format).
+        encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
         return (try? encoder.encode(envelope)).flatMap { String(data: $0, encoding: .utf8) }
             ?? #"{"cards":[]}"#
     }
@@ -93,10 +96,9 @@ enum CardListCodec {
     }
 
     private struct Envelope: Encodable {
-        var name: String?
         var cards: [Item]
-        // `section` is omitted when nil (synthesized Encodable uses encodeIfPresent for optionals).
-        struct Item: Encodable { var term: String; var definition: String; var section: String? }
+        // `source` (the card's section) is omitted when nil (Encodable uses encodeIfPresent for optionals).
+        struct Item: Encodable { var front: String; var back: String; var source: String? }
     }
 }
 

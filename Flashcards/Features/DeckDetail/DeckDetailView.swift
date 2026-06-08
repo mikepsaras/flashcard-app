@@ -139,7 +139,7 @@ struct DeckDetailView: View {
                 showingExporter = true
             } label: { Label("CSV", systemImage: "tablecells") }
             Button {
-                exportText = CardListCodec.exportJSON(cardsToExport, name: deck.name)
+                exportText = CardListCodec.exportJSON(cardsToExport)
                 showingJSONExporter = true
             } label: { Label("JSON", systemImage: "curlybraces") }
         } label: {

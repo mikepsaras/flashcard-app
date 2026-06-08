@@ -15,7 +15,9 @@ enum CardJSON {
     /// of each is the canonical name the app writes on export. Shared by the JSON and CSV parsers.
     static let frontKeys = ["term", "front", "question", "q", "prompt", "word"]
     static let backKeys = ["definition", "back", "answer", "a", "def", "meaning", "translation"]
-    static let sectionKeys = ["section", "category", "group", "topic"]
+    // `source` is the grouping key in the app's JSON import/export format — it carries a card's
+    // within-deck section (e.g. a lesson/topic), so it's read as a section here.
+    static let sectionKeys = ["section", "source", "category", "group", "topic"]
     /// Accepted spellings for a card's optional elaboration (B2 "Test understanding" intent).
     static let extraKeys = ["extra", "explanation", "why", "rationale", "note"]
 

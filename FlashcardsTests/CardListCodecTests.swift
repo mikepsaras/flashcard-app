@@ -67,19 +67,21 @@ import Foundation
         let c2 = Card(term: "c", definition: "d, with comma", deck: deck)
         container.mainContext.insert(c1); container.mainContext.insert(c2)
 
-        let parsed = CardListCodec.parse(CardListCodec.exportJSON([c1, c2], name: "Round"))
-        #expect(parsed.name == "Round")
+        let parsed = CardListCodec.parse(CardListCodec.exportJSON([c1, c2]))
         #expect(parsed.cards.map(\.term) == ["a", "c"])
         #expect(parsed.cards[1].definition == "d, with comma")   // commas survive JSON round-trip
     }
 
-    @Test func exportOmitsNameWhenNil() {
+    @Test func exportUsesFrontBackSourceFormat() {
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "X"); container.mainContext.insert(deck)
         let card = Card(term: "Set", definition: "Written as {1, 2, 3}", deck: deck)
         container.mainContext.insert(card)
         let json = CardListCodec.exportJSON([card])
-        #expect(!json.contains("\"name\""))
+        #expect(json.contains("\"front\""))
+        #expect(json.contains("\"back\""))
+        #expect(!json.contains("\"term\""))     // old keys are gone from the output
+        #expect(!json.contains("\"name\""))     // a bare card list carries no deck name
         // Braces inside a value don't confuse the round-trip.
         #expect(CardListCodec.parse(json).cards.first?.definition == "Written as {1, 2, 3}")
     }
@@ -93,10 +95,24 @@ import Foundation
         let c2 = Card(term: "hola", definition: "hello", deck: deck)   // unsectioned
         container.mainContext.insert(c1); container.mainContext.insert(c2)
 
-        let parsed = CardListCodec.parse(CardListCodec.exportJSON([c1, c2], name: "S"))
+        let json = CardListCodec.exportJSON([c1, c2])
+        #expect(json.contains("\"source\""))                    // a card's section is written as `source`
+        let parsed = CardListCodec.parse(json)
         #expect(parsed.cards.first?.section == "Verbs")
         #expect(parsed.cards.last?.section == nil)               // unsectioned card omits the key
         #expect(CardListCodec.orderedSections(parsed.cards) == ["Verbs"])
+    }
+
+    /// The app's JSON import format (the uploaded file's shape): front / back / source, where
+    /// `source` is a card's within-deck section.
+    @Test func parsesFrontBackSourceFormat() {
+        let json = #"{"cards":[{"front":"Capital of France","back":"Paris","source":"Geography"},{"front":"Capital of Japan","back":"Tokyo","source":"Geography"}]}"#
+        let parsed = CardListCodec.parse(json)
+        #expect(parsed.cards.count == 2)
+        #expect(parsed.cards[0].term == "Capital of France")
+        #expect(parsed.cards[0].definition == "Paris")
+        #expect(parsed.cards[0].section == "Geography")
+        #expect(CardListCodec.orderedSections(parsed.cards) == ["Geography"])
     }
 
     @Test func csvSectionImportThroughCardList() {

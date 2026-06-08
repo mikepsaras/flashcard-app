@@ -189,6 +189,16 @@ Snapshot `34_gallery_editor` (chrome only — the filmstrip/editor are ImageRend
 (hero edit, flip, +/swoosh, thumbnails, ← / →, delete, close). 313 tests green. **Awaiting the user's
 eyeball; release is the next step once they sign off** (then bump + Release build + /Applications + GitHub).
 
+**JSON import/export format switched (2026-06-08, on `main`, UNRELEASED).** Per the user, the JSON
+import/export format is now a bare card list **`{"cards":[{"front":…,"back":…,"source":…}]}`** (supersedes
+the old `{"name":…,"cards":[{"term","definition","section"}]}`). `front`↔`term`, `back`↔`definition`,
+**`source`↔`Card.section`** (the file's "source" values group cards into within-deck sections — added
+`source` to `CardJSON.sectionKeys`). Export (`CardListCodec.exportJSON`) drops the top-level `name` (a
+re-import takes its deck name from the filename) and writes front/back/source (source omitted when empty);
+**import stays tolerant** of the old `term`/`definition`/`section` + `question`/`answer` keys. The format
+has no field for a card's elaboration or answer mode, so those don't round-trip through JSON. **CSV is
+untouched.** 314 tests (`parsesFrontBackSourceFormat` added; export tests updated).
+
 ---
 
 ## Cross-cutting foundations (apply to every epic)
