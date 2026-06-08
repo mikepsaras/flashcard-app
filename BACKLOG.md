@@ -186,10 +186,11 @@ Card"s are pruned on close. **macOS uses the gallery; iOS keeps the `BulkAddView
 doesn't fit a phone). All plumbing still unchanged (AnswerMode, cloze, DeckCodec v4, multi-folder). Entry
 points route via `DeckDetailView.onEditCards` / `DeckCardListView.onOpenCard` (macOS → gallery; iOS → sheet).
 Snapshot `34_gallery_editor` (chrome only — the filmstrip/editor are ImageRenderer-blank); verified live
-(hero edit, flip, +/swoosh, thumbnails, ← / →, delete, close). 313 tests green. **Awaiting the user's
-eyeball; release is the next step once they sign off** (then bump + Release build + /Applications + GitHub).
+(hero edit, flip, +/swoosh, thumbnails, ← / →, delete, close). 313 tests green. **RELEASED as v1.8.1 /
+build 21** (2026-06-08) — shipped as-is; a **harmonization pass** (make the editor card render exactly like
+the study card — see "EDITOR HARMONIZATION" below) is the next iteration on top of it.
 
-**JSON import/export format switched (2026-06-08, on `main`, UNRELEASED).** Per the user, the JSON
+**JSON import/export format switched (2026-06-08, RELEASED v1.8.1).** Per the user, the JSON
 import/export format is now a bare card list **`{"cards":[{"front":…,"back":…,"source":…}]}`** (supersedes
 the old `{"name":…,"cards":[{"term","definition","section"}]}`). `front`↔`term`, `back`↔`definition`,
 **`source`↔`Card.section`** (the file's "source" values group cards into within-deck sections — added
@@ -198,6 +199,25 @@ re-import takes its deck name from the filename) and writes front/back/source (s
 **import stays tolerant** of the old `term`/`definition`/`section` + `question`/`answer` keys. The format
 has no field for a card's elaboration or answer mode, so those don't round-trip through JSON. **CSV is
 untouched.** 314 tests (`parsesFrontBackSourceFormat` added; export tests updated).
+
+**EDITOR HARMONIZATION — make the gallery card render exactly like the study card (NEXT, post-1.8.1).**
+The user compared the gallery editor to study and wants them visually/functionally identical. Locked plan
+(decisions made with the user):
+- **The editor card IS the study card.** Render `FlashcardView` as the resting state of each face (same
+  scaled font, **shrink-to-fit**, Markdown/LaTeX, section chip) instead of the separate `EditableFlashcard`
+  text styling. Editing = a text-editor overlay on the *resting, un-rotated* face only (so the real **3D
+  flip** can return — a rotated NSTextView mis-places its caret, but the editor only shows at net-0°).
+- **Click a face → edit it (Obsidian "live preview" / source mode).** **Finish on click-away / Esc / Tab**
+  → re-renders. Space/Return are just text. **No click-to-flip, no Space-to-flip in the editor.**
+- **Flip = the button only**, kept at the **card's bottom**, redesigned (quiet/beautiful), with the
+  shortcut **⌘↵** shown on it (NOT ⌘Space — that's the system Spotlight hotkey; the OS eats it).
+- **Esc is two-stage:** exit edit if editing, else close the gallery.
+- **Shared top bar** for study + gallery: **X on the left** for both, balanced, no dead space. **No divider**
+  under the editor's bar. Mode picker → a **mode chip** with icons (Flip/Type/Cloze) — **not** segmented.
+- **Elaboration only on the back** (render as study's `ElaborationPanel` when present; quiet "add" affordance
+  when empty). Harmonize **size/aspect/padding** with study. ••• menu + chevron already match (leave as is).
+- Known trade-off: a small size "pop" entering/leaving edit (comfortable editing size → study-scaled size);
+  tune it. Add a faint "click to edit" cue for discoverability. iOS keeps the `BulkAddView` sheet.
 
 ---
 
