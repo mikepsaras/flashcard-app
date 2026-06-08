@@ -1,40 +1,38 @@
 import Foundation
 import Observation
 
-/// The folder where `.deck` files are saved and loaded. Defaults to `~/Documents/Flashcards`;
-/// the user can point it elsewhere in Settings. A custom folder is remembered as a
-/// security-scoped bookmark — resolved and access-started at launch — so it survives relaunches
-/// and works for folders outside the app's container (required on iOS; harmless on unsandboxed
-/// macOS). `RootView` observes `current` to re-point the file watcher; `DeckStore` reads it for
-/// all file I/O.
+/// The library folders where `.cards` files live. Defaults to `~/Documents/Flashcards`. On macOS the
+/// user can aggregate **several** folders (each remembered as a security-scoped bookmark, resolved and
+/// access-started at launch); the first is the **primary** — where new decks are created. iOS uses a
+/// single folder. `DeckStore` reads `folders` for all file I/O; `current` is the primary.
 @Observable
 @MainActor
 final class LibraryLocation {
     static let shared = LibraryLocation()
 
-    private static let bookmarkKey = "libraryFolderBookmark"
+    private static let bookmarksKey = "libraryFolderBookmarks"      // [Data] — the folder set (1.8.0)
+    private static let legacyBookmarkKey = "libraryFolderBookmark"  // pre-1.8 single-folder bookmark (migrated)
 
-    /// The active library folder.
-    private(set) var current: URL
-    /// Whether a custom (non-default) folder is in use.
-    private(set) var isCustom: Bool
+    /// All library folders; `folders[0]` is the **primary** (default for new decks). Never empty.
+    private(set) var folders: [URL]
 
-    /// The security-scoped URL we currently hold access to (a custom folder), tracked so we can
-    /// release it before switching to another — otherwise repeatedly changing the library folder
-    /// leaks an access scope each time (matters on iOS; a no-op on unsandboxed macOS). nil when the
-    /// default in-container folder is active, which isn't security-scoped.
-    private var accessedURL: URL?
+    /// Security-scoped URLs we hold access to (released on remove / reset). Stopping access on a
+    /// non-scoped folder (the in-container default) is harmless, so we track all of them uniformly.
+    private var accessed: [URL] = []
 
     private init() {
-        if let url = Self.resolveStoredBookmark() {
-            current = url
-            isCustom = true
-            accessedURL = url   // resolveStoredBookmark already started access on it
-        } else {
-            current = Self.defaultFolder()
-            isCustom = false
-        }
-        Self.ensureExists(current)
+        folders = Self.resolveStoredFolders()
+        if folders.isEmpty { folders = [Self.defaultFolder()] }
+        accessed = folders   // resolveStoredFolders already started access on each resolved bookmark
+        folders.forEach(Self.ensureExists)
+    }
+
+    /// The primary folder (where new decks land). Back-compatible accessor.
+    var current: URL { folders.first ?? Self.defaultFolder() }
+
+    /// Whether the library is anything other than the single default folder.
+    var isCustom: Bool {
+        !(folders.count == 1 && folders[0].standardizedFileURL == Self.defaultFolder().standardizedFileURL)
     }
 
     /// `~/Documents/Flashcards`.
@@ -45,51 +43,85 @@ final class LibraryLocation {
         return documents.appendingPathComponent("Flashcards", isDirectory: true)
     }
 
-    /// Point the library at `url` (called after the user picks a folder). Stores a bookmark and
-    /// keeps security-scoped access open for the session. Returns whether it stuck.
+    /// Replace the entire library with a single folder (the legacy "choose folder" action).
     @discardableResult
     func setCustom(_ url: URL) -> Bool {
-        let accessing = url.startAccessingSecurityScopedResource()
-        guard let data = try? url.bookmarkData() else {
-            if accessing { url.stopAccessingSecurityScopedResource() }   // don't leak on failure
-            return false
-        }
-        UserDefaults.standard.set(data, forKey: Self.bookmarkKey)
+        guard (try? url.bookmarkData()) != nil else { return false }   // must be rememberable
+        releaseAll()
+        _ = url.startAccessingSecurityScopedResource()
+        folders = [url]
+        accessed = [url]
         Self.ensureExists(url)
-        // Release the previously-held scope before switching, so changing the library folder
-        // repeatedly doesn't accumulate leaked access scopes.
-        releaseAccess()
-        current = url
-        isCustom = true
-        accessedURL = accessing ? url : nil
-        return true   // access is kept open for the session (the library folder stays in use)
+        persistBookmarks()
+        return true
     }
 
-    /// Return to `~/Documents/Flashcards`.
+    /// Add another folder to the set (macOS multi-folder). No-op if already present.
+    @discardableResult
+    func addFolder(_ url: URL) -> Bool {
+        if folders.contains(where: { $0.standardizedFileURL == url.standardizedFileURL }) { return true }
+        guard (try? url.bookmarkData()) != nil else { return false }
+        _ = url.startAccessingSecurityScopedResource()
+        folders.append(url)
+        accessed.append(url)
+        Self.ensureExists(url)
+        persistBookmarks()
+        return true
+    }
+
+    /// Remove a folder from the set (non-destructive — its files stay on disk). Won't remove the last.
+    func removeFolder(_ url: URL) {
+        guard folders.count > 1 else { return }
+        let std = url.standardizedFileURL
+        folders.removeAll { $0.standardizedFileURL == std }
+        if let i = accessed.firstIndex(where: { $0.standardizedFileURL == std }) {
+            accessed[i].stopAccessingSecurityScopedResource()
+            accessed.remove(at: i)
+        }
+        persistBookmarks()
+    }
+
+    /// Return to the single default folder.
     func resetToDefault() {
-        UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
-        releaseAccess()   // drop the custom folder's security scope before leaving it
+        releaseAll()
+        UserDefaults.standard.removeObject(forKey: Self.bookmarksKey)
+        UserDefaults.standard.removeObject(forKey: Self.legacyBookmarkKey)
         let url = Self.defaultFolder()
         Self.ensureExists(url)
-        current = url
-        isCustom = false
+        folders = [url]
+        accessed = []
     }
 
-    /// Stops security-scoped access on the currently-held custom folder, if any.
-    private func releaseAccess() {
-        accessedURL?.stopAccessingSecurityScopedResource()
-        accessedURL = nil
+    // MARK: Internals
+
+    private func releaseAll() {
+        accessed.forEach { $0.stopAccessingSecurityScopedResource() }
+        accessed = []
     }
 
-    private static func resolveStoredBookmark() -> URL? {
-        guard let data = UserDefaults.standard.data(forKey: bookmarkKey) else { return nil }
+    private func persistBookmarks() {
+        let datas = folders.compactMap { try? $0.bookmarkData() }
+        UserDefaults.standard.set(datas, forKey: Self.bookmarksKey)
+        UserDefaults.standard.removeObject(forKey: Self.legacyBookmarkKey)
+    }
+
+    private static func resolveStoredFolders() -> [URL] {
+        let defaults = UserDefaults.standard
+        if let datas = defaults.array(forKey: bookmarksKey) as? [Data] {
+            return datas.compactMap(resolveBookmark)
+        }
+        // Migrate the pre-1.8 single-folder bookmark into the set.
+        if let data = defaults.data(forKey: legacyBookmarkKey), let url = resolveBookmark(data) {
+            return [url]
+        }
+        return []
+    }
+
+    private static func resolveBookmark(_ data: Data) -> URL? {
         var stale = false
         guard let url = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
         else { return nil }
         _ = url.startAccessingSecurityScopedResource()
-        if stale, let fresh = try? url.bookmarkData() {
-            UserDefaults.standard.set(fresh, forKey: bookmarkKey)
-        }
         return url
     }
 
