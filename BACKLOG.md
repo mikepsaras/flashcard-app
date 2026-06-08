@@ -150,6 +150,18 @@ live external edits to secondary folders reflect instantly. **Phase 4 is COMPLET
 
 ---
 
+**EDITOR VISION — CORRECTED (2026-06-08, after the user eyeballed 1.8.0):** the "graphical editor" shipped
+as a **structured form** (answer-mode menu + labeled Front/Back/Elaboration fields). The user **rejected**
+it on sight — *"I wanted a graphical UI for editing cards, instead I'm looking at a menu."* **The real
+vision:** the editor surface **is the study card** — render the `FlashcardView` exactly as in study, and
+edit the content **in place on the card** (WYSIWYG: front face → edit front; flip → edit back; cloze → edit
+on-card with the blanks visible), with a **fixed layout** (the user must NOT move/drag parts — no canvas).
+**Supersedes** the earlier structured-form decision. Next iteration: rebuild `BulkAddView`'s editing
+*surface* as an editable `FlashcardView`; keep all existing plumbing (AnswerMode resolution, cloze, DeckCodec
+v4, the unified add/edit path, multi-folder). Contained swap — only the editing UI changes. (Memory: `editor-vision`.)
+
+---
+
 ## Cross-cutting foundations (apply to every epic)
 
 - **CloudKit-safe invariants** (unchanged): every scalar defaulted, relationships
