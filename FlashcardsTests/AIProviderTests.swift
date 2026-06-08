@@ -281,4 +281,16 @@ import Foundation
         let cards = [GeneratedCard(term: "HTML", definition: "HyperText Markup Language (HTML)")]
         #expect(CardQualityLinter.warnings(for: cards)[cards[0].id]?.contains(.circular) != true)
     }
+
+    @Test func linterDoesNotFlagTermInsideALongerWordAsCircular() {
+        // "state" must not match "statement" — whole-token, not raw substring.
+        let cards = [GeneratedCard(term: "State", definition: "A statement of intent.")]
+        #expect(CardQualityLinter.warnings(for: cards)[cards[0].id]?.contains(.circular) != true)
+    }
+
+    @Test func linterFlagsMultiDigitNumberedLists() {
+        // All two-digit markers — the old first-two-characters check counted none of these.
+        let cards = [GeneratedCard(term: "Noble gases", definition: "10. Neon\n11. Sodium\n12. Argon")]
+        #expect(CardQualityLinter.warnings(for: cards)[cards[0].id]?.contains(.enumeration) == true)
+    }
 }

@@ -48,8 +48,13 @@ enum Elo {
     /// a run drills what you're most likely to miss. Unrated units use the initial rating. Pure.
     static func adaptiveOrder(_ units: [ReviewItem], ratings: Ratings) -> [ReviewItem] {
         units.sorted {
-            (ratings.difficulty[unitKey(card: $0.card.id, direction: $0.direction)] ?? initialRating)
-                > (ratings.difficulty[unitKey(card: $1.card.id, direction: $1.direction)] ?? initialRating)
+            let lk = unitKey(card: $0.card.id, direction: $0.direction)
+            let rk = unitKey(card: $1.card.id, direction: $1.direction)
+            let ld = ratings.difficulty[lk] ?? initialRating
+            let rd = ratings.difficulty[rk] ?? initialRating
+            // Hardest first; break ties on the unit key so the order (and the practice `prefix` cut) is
+            // reproducible rather than dependent on the unstable sort over equal difficulties.
+            return ld == rd ? lk < rk : ld > rd
         }
     }
 

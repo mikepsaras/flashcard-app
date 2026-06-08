@@ -263,7 +263,11 @@ struct StudyInsights: Equatable {
                 else { insights.learningCount += 1; stat.learningCount += 1 }
 
                 var cardDue = 0
-                for unit in 0..<(reversed ? 2 : 1) {
+                // Cloze cards are forward-only (mirrors Deck.allReviewItems), so a reversed deck must not
+                // count a phantom reverse unit for them — keeps dueNow / dueThisWeek / forecast in step
+                // with the study engine and the Today screen.
+                let countsReverse = reversed && !card.isClozeMode
+                for unit in 0..<(countsReverse ? 2 : 1) {
                     let due = unit == 0 ? fDue : rDue
                     let last = unit == 0 ? fLast : rLast
                     let unitInterval = unit == 0 ? fInterval : rInterval

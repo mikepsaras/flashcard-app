@@ -56,4 +56,24 @@ import Foundation
         #expect(items.first?.card.id == hard.id)   // weakest (highest Elo difficulty) leads
         #expect(items.count == 2)
     }
+
+    @Test func tiedWeakCardsOrderDeterministicallyById() throws {
+        let container = DeckStore.makeContainer()   // retained: the context is invalid if the container deallocs
+        let ctx = container.mainContext
+        // Two decks, one card each, identical fail histories ⇒ identical successRate AND games (a tie).
+        let d1 = Deck(name: "D1"); ctx.insert(d1)
+        let d2 = Deck(name: "D2"); ctx.insert(d2)
+        let c1 = Card(term: "C1", definition: "x", deck: d1); ctx.insert(c1)
+        let c2 = Card(term: "C2", definition: "y", deck: d2); ctx.insert(c2)
+        try ctx.save()
+
+        var records: [ReviewLog.Record] = []
+        for _ in 0..<8 { records.append(record(deck: d1.id, card: c1.id, correct: false)) }
+        for _ in 0..<8 { records.append(record(deck: d2.id, card: c2.id, correct: false)) }
+
+        let focus = FocusInsights.make(decks: [d1, d2], records: records)
+        #expect(focus.weakCards.count == 2)
+        let ids = focus.weakCards.map(\.id)
+        #expect(ids == ids.sorted())   // tie resolved by the stable id key, not unordered dict iteration
+    }
 }

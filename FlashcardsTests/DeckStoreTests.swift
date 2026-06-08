@@ -1032,4 +1032,22 @@ import SwiftData
             #expect(order(target, "OnlyInSource") == ["s2"])                   // carried-over section intact
         }
     }
+
+    @Test func absorbPreservesWithinSectionOrderBySortOrder() {
+        let container = DeckStore.makeContainer()
+        let context = container.mainContext
+        let target = Deck(name: "Target"); context.insert(target)
+        let source = Deck(name: "Source")
+        source.sectionOrder = ["S"]
+        context.insert(source)
+        // Inserted in REVERSE of their sortOrder, so iterating the raw relationship order would scramble
+        // them; absorb must lay them out by sortOrder.
+        context.insert(Card(term: "second", definition: "", deck: source, section: "S", sortOrder: 1))
+        context.insert(Card(term: "first",  definition: "", deck: source, section: "S", sortOrder: 0))
+
+        withExtendedLifetime(container) {
+            target.absorb(source)
+            #expect(order(target, "S") == ["first", "second"])   // sortOrder, not insertion order
+        }
+    }
 }

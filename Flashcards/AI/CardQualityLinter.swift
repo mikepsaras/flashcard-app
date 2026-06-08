@@ -73,13 +73,20 @@ enum CardQualityLinter {
     static func looksLikeList(_ card: GeneratedCard) -> Bool {
         let lines = card.definition.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         let bulletLines = lines.filter { line in
-            line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ")
-                || (line.first?.isNumber == true && (line.dropFirst().first == "." || line.dropFirst().first == ")"))
+            line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ") || isOrderedListItem(line)
         }
         if bulletLines.count >= 3 { return true }
         let t = card.term.lowercased()
         return t.hasPrefix("list ") || t.contains("list of ") || t.contains("what are the ")
             || t.contains("name the ") || t.contains("give examples")
+    }
+
+    /// A leading ordered-list marker — one or more digits then "." or ")", e.g. "1." or "10)". Matching
+    /// only the first two characters would miss two-digit markers ("10."), under-counting long lists.
+    private static func isOrderedListItem(_ line: String) -> Bool {
+        guard line.first?.isNumber == true else { return false }
+        let afterDigits = line.drop(while: \.isNumber)
+        return afterDigits.first == "." || afterDigits.first == ")"
     }
 
     /// The answer restates the term. Skips short all-caps acronyms (which legitimately appear in
@@ -89,6 +96,9 @@ enum CardQualityLinter {
         if trimmed == trimmed.uppercased() && trimmed.count <= 6 { return false }
         let normalizedTerm = normalize(term)
         guard normalizedTerm.count >= circularMinTermLength else { return false }
-        return normalize(answer).contains(normalizedTerm)
+        // Whole-token match, not raw substring, so "state" doesn't fire on "statement". `normalize`
+        // already collapses to single-space-separated lowercased tokens, so padding both sides with a
+        // space matches the term only at token boundaries.
+        return " \(normalize(answer)) ".contains(" \(normalizedTerm) ")
     }
 }

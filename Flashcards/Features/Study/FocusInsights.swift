@@ -51,8 +51,9 @@ struct FocusInsights: Equatable {
                 games: games
             ))
         }
-        // Weakest first; among ties, the unit with more reviews (stronger evidence) ranks higher.
-        weak.sort { ($0.successRate, -$0.games) < ($1.successRate, -$1.games) }
+        // Weakest first; among ties, more reviews (stronger evidence) ranks higher, then the unit id as a
+        // stable final key so the order (and the `prefix` cut) doesn't shift between launches.
+        weak.sort { ($0.successRate, -$0.games, $0.id) < ($1.successRate, -$1.games, $1.id) }
         return FocusInsights(weakCards: Array(weak.prefix(limit)))
     }
 

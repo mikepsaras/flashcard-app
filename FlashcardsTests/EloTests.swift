@@ -52,6 +52,20 @@ final class EloTests {
         #expect(ordered.last?.card.id == easy.id)
     }
 
+    @Test func adaptiveOrderBreaksTiesDeterministically() {
+        let context = container.mainContext
+        let deck = Deck(name: "D"); context.insert(deck)
+        let a = Card(term: "a", definition: "x", deck: deck)
+        let b = Card(term: "b", definition: "y", deck: deck)
+        context.insert(a); context.insert(b)
+        let units = [ReviewItem(card: a, direction: .forward), ReviewItem(card: b, direction: .forward)]
+        // No ratings ⇒ both share initialRating (a tie). Order must be stable and independent of input
+        // order; the unstable sort would otherwise just echo whatever order it was handed.
+        let forward = Elo.adaptiveOrder(units, ratings: Elo.Ratings()).map(\.card.id)
+        let backward = Elo.adaptiveOrder(units.reversed(), ratings: Elo.Ratings()).map(\.card.id)
+        #expect(forward == backward)
+    }
+
     @Test func masteryRisesWithConsistentSuccess() {
         let deck = UUID()
         let cards = (0..<5).map { _ in UUID() }

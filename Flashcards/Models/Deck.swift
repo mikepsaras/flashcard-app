@@ -137,7 +137,9 @@ extension Deck {
         for name in other.sectionOrder where !sectionOrder.contains(name) { sectionOrder.append(name) }
         var nextOrder: [String: Int] = [:]
         for card in cardArray { nextOrder[card.section] = max(nextOrder[card.section] ?? 0, card.sortOrder + 1) }
-        for card in other.cardArray {   // value-type snapshot, so reassigning `deck` mid-loop is safe
+        // Iterate in display order (sortOrder, then createdAt) — NOT the raw relationship order, which
+        // SwiftData doesn't guarantee — so carried-over cards keep their within-section sequence.
+        for card in other.sectionGroups.flatMap(\.cards) {   // snapshot array, so reassigning `deck` mid-loop is safe
             let order = nextOrder[card.section, default: 0]
             nextOrder[card.section] = order + 1
             card.deck = self

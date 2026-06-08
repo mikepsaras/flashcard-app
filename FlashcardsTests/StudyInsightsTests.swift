@@ -96,6 +96,18 @@ final class StudyInsightsTests {
         #expect(s.matureCount == 1)
     }
 
+    @Test func clozeInReversedDeckIsNotDoubleCountedAsDue() {
+        // Cloze cards are forward-only (Deck.allReviewItems), so Insights must not count a phantom
+        // reverse unit for one in a reversed deck — dueNow has to match the engine's dueCount.
+        let deck = makeDeck(studyReversed: true)
+        let card = addCard(to: deck, reviewed: false)        // new ⇒ forward unit due now
+        card.answerModeRaw = AnswerMode.cloze.rawValue
+        card.reverseDueDate = now                            // a freshly-created card's reverse "due" date
+        let s = StudyInsights.make(decks: [deck], reviewsByDay: [:], correctByDay: [:], now: now, calendar: cal)
+        #expect(deck.dueCount == 1)   // engine: cloze is forward-only
+        #expect(s.dueNow == 1)        // Insights agrees (was 2 before the cloze guard)
+    }
+
     @Test func accuracyIsCorrectOverReviewsAndNilWhenEmpty() {
         let deck = makeDeck()
         let reviews = [key(0): 2, key(-1): 2]   // 4 total
