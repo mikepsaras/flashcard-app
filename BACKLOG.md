@@ -123,6 +123,15 @@ session; this is the committed set.
 to `type`**; **typed single-blank cloze**; commit-before-reveal; response-latency signal;
 calibration-driven honesty nudges; **iOS multi-folder**.
 
+**STATUS (2026-06-08): Phase 1 (Foundation) DONE — on `main`, app + 307 tests green.** Commits:
+`e463184` (docs), `4d4f38b` (1a — additive `AnswerMode`), `a02d319` (clean-slate decision),
+`adf3632` (1b/c/d — delete `cardType`/`typeToAnswer`/`gradingMode`/`GradingMode`; clean **v4** codec
+with a `decodeDTO` version guard so old files are ignored; **3-button** grading (Again/Good/Easy);
+per-card type-in resolution; first-launch `StudyStats`+`ReviewLog` reset; tests remapped). Most of
+**Phase 2** (study per-card mode + 3-button) landed with the cutover. **NEXT: Phase 3** (graphical
+editor rebuild — `CardEditorView` got only a minimal compile-fix; `DeckEditorView` has the flip/type
+default picker), then **Phase 4** (multi-folder macOS), then **Phase 5** (release: bump 1.8.0/19).
+
 ---
 
 ## Cross-cutting foundations (apply to every epic)
