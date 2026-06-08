@@ -56,15 +56,22 @@ import SwiftData
         #expect(rebuilt.backLabel == "")
     }
 
-    @Test func oldFormatFilesAreRejected() throws {
-        // 1.8.0 clean break: pre-v4 files must NOT decode, so loadAll / reconcile / prune ignore them.
-        for version in [1, 2, 3] {
+    @Test func oldFormatFilesAreRejectedAndCurrentAccepted() throws {
+        // 1.8.0 clean break: ONLY formatVersion == 4 decodes; every other version is rejected so
+        // loadAll / reconcile / prune ignore those files entirely (never read, never deleted).
+        for version in [1, 2, 3, 5] {
             let json = """
             {"formatVersion":\(version),"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
             "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
             """
             #expect(throws: (any Error).self) { try DeckCodec.decodeDTO(Data(json.utf8)) }
         }
+        // A real current-format (v4) file decodes fine — guards against an over-strict version check.
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "Current"); container.mainContext.insert(deck)
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.formatVersion == DeckCodec.formatVersion)
+        #expect(DeckCodec.formatVersion == 4)
     }
 
     @Test func plainDeckStampsCurrentVersionAndOmitsOptionalKeys() throws {
@@ -420,6 +427,20 @@ import SwiftData
         #expect(DeckStore.runOnce("didCleanSlate1.8", defaults: defaults) { count += 1 } == false)
         #expect(DeckStore.runOnce("didCleanSlate1.8", defaults: defaults) { count += 1 } == false)
         #expect(count == 1)
+    }
+
+    @Test func loadAllSkipsOldVersionFiles() throws {
+        // A folder holding only a pre-v4 file loads NOTHING — the clean break ignores old files (never
+        // migrated or partially read), so the library starts empty after an upgrade.
+        let dir = try tempDir()
+        let json = """
+        {"formatVersion":3,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
+        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
+        """
+        try Data(json.utf8).write(to: dir.appendingPathComponent("Old.cards"))
+        let container = DeckStore.makeContainer()
+        #expect(store.loadAll(into: container.mainContext, from: dir) == 0)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 0)
     }
 
     private func deckFilenames(_ dir: URL) throws -> [String] {
