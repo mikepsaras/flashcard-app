@@ -232,7 +232,23 @@ focus, and setting `@FocusState` before the field is mounted reverts — so edit
 **flat** (no rotation) and an explicit `editingSide` @State mounts the editor, then focuses it via
 `DispatchQueue.main.async`. 314 tests green; iOS `BulkAddView` untouched. **Known rough edges (eyeball):** a
 faint stray scroller knob can show while editing (fragile AppKit scroll-view introspection); the size pop on
-commit; cloze answer hidden at rest. **Awaiting the user's eyeball before release.**
+commit; cloze answer hidden at rest. **RELEASED in v1.8.2 / build 22** (2026-06-09) — shipped with the three
+follow-ups below deferred at the user's call.
+
+**EDITOR FOLLOW-UPS (tracked 2026-06-09; deferred past 1.8.2 — to work on next).**
+1. **Stray scroller knob while editing.** A faint scroller can show at the card's right edge when a face
+   editor is focused (`GalleryCardEditor` in `EditableStudyCard.swift`). The editor is content-sized so it
+   shouldn't scroll — suspect SwiftUI re-managing the backing NSScrollView's scroller after
+   `GalleryEditorConfigurator.configure()` runs (the same fragile AppKit-introspection class as
+   `TableDoubleClickHandler`/`OverlayScroller`). Try forcing the scroller hidden post-layout, or a
+   content-sizing that avoids a scroll view entirely.
+2. **Text resizing on edit (the size "pop").** Entering/leaving edit shifts the font between the comfortable
+   editing size (`editSize`, capped ~34) and the full study-scaled rendered size. Make it seamless — edit at
+   the rendered size, animate the size change, or measure the shrink-to-fit size and edit at it.
+3. **Esc should close the editor when no text box is active.** The gallery uses `.onExitCommand { if
+   cardFocus != nil { cardFocus = nil } else { close() } }`; verify Esc reliably **closes** the gallery in
+   the not-editing state (it may not be firing — `.onExitCommand` can be swallowed). Ensure Esc closes when
+   nothing is focused (and still just exits edit when a face is being edited).
 
 ---
 
