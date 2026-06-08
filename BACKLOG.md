@@ -132,6 +132,13 @@ per-card type-in resolution; first-launch `StudyStats`+`ReviewLog` reset; tests 
 editor rebuild — `CardEditorView` got only a minimal compile-fix; `DeckEditorView` has the flip/type
 default picker), then **Phase 4** (multi-folder macOS), then **Phase 5** (release: bump 1.8.0/19).
 
+**STATUS (2026-06-08, cont'd): Phase 3 (editor) DONE.** `533820d` (3a — mode-aware composer: per-batch
+flip/type/cloze picker, cloze field swaps in, mode-aware preview; pruned `PlaceholderTests`) and
+`a309df0` (3b — unified add+edit into one composer via `BulkAddView(editing:)`; `CardEditorView`
+retired). 306 tests green. **NEXT: Phase 4** (multiple library folders, macOS — `LibraryLocation` →
+folder set; **folder-scoped prune** is the data-safety crux; new-deck destination; Settings → Folders
+UI), then **Phase 5** (release: bump 1.8.0/19).
+
 ---
 
 ## Cross-cutting foundations (apply to every epic)
