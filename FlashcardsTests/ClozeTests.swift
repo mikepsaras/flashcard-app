@@ -43,7 +43,7 @@ final class ClozeTests {
         let context = container.mainContext
         let deck = Deck(name: "C"); context.insert(deck)
         let card = Card(term: "The {{c1::mitochondria}} is the powerhouse.", definition: "", deck: deck)
-        card.cardType = .cloze
+        card.answerModeRaw = AnswerMode.cloze.rawValue
         context.insert(card)
 
         let item = ReviewItem(card: card, direction: .forward)
@@ -55,7 +55,7 @@ final class ClozeTests {
     @Test func clozeCardsAreNeverReversed() {
         let context = container.mainContext
         let deck = Deck(name: "C", studyReversed: true); context.insert(deck)
-        let cloze = Card(term: "{{c1::x}}", definition: "y", deck: deck); cloze.cardType = .cloze
+        let cloze = Card(term: "{{c1::x}}", definition: "y", deck: deck); cloze.answerModeRaw = AnswerMode.cloze.rawValue
         context.insert(cloze)
 
         // Despite studyReversed, the cloze card yields exactly one (forward) unit.

@@ -15,9 +15,9 @@ import SwiftData
 /// (unsectioned first, then by section), not an explicit field. v1 + v2 files still decode
 /// (missing ⇒ defaults).
 enum DeckCodec {
-    /// The current (max) format version. `encode` stamps a file with the lowest version that can
-    /// represent its content — 3 only when a v3 feature is in use — to avoid churning v2 files.
-    static let formatVersion = 3
+    /// The current format version (1.8.0 clean break). `encode` always stamps this; `decodeDTO`
+    /// rejects any other version, so old-format files (v1–v3) are ignored by the loader.
+    static let formatVersion = 4
 
     struct DeckDTO: Codable, Equatable {
         var formatVersion: Int = DeckCodec.formatVersion
@@ -28,13 +28,12 @@ enum DeckCodec {
         // Optional so `.deck` files written before this field still decode (→ nil).
         var backLabel: String?
         var studyReversed: Bool?
-        var gradingMode: String?
         var section: String?
         // v3: card-section names within the deck + whether to show section chips in study.
         var sectionOrder: [String]?
         var showSectionsInStudy: Bool?
-        // v3: prompt the learner to type the answer (active recall); omitted when off (the default).
-        var typeToAnswer: Bool?
+        // 1.8.0: the deck's default answer mode (flip/type) for its cards. Omitted when default (flip).
+        var defaultAnswerMode: String?
         // Optional deck icon (SF Symbol name or themed preset id); omitted when default.
         var icon: String?
         // v3: scheduling algorithm (a SchedulerKind raw value); omitted when default (SM-2).
@@ -71,7 +70,8 @@ enum DeckCodec {
         var reverseStability: Double?
         var reverseDifficulty: Double?
         var extra: String?
-        var type: String?
+        // 1.8.0: the card's answer mode (flip/type/cloze); empty/omitted ⇒ inherit the deck default.
+        var answerMode: String?
         // v3: leech detection (S7.4) — whole-card lapse count + suspended flag. Optional and omitted
         // when 0/false, so cards that never lapsed re-encode byte-identically (no phantom edits).
         var lapses: Int?
@@ -93,32 +93,21 @@ enum DeckCodec {
 
     @MainActor
     static func encode(_ deck: Deck) throws -> Data {
-        // Stamp v3 only when a card actually uses a v3 feature (FSRS state, tags, or extra); otherwise
-        // keep v2 so a deck that predates v3 re-encodes byte-identically (the watcher sees no edit).
-        let usesV3 = !deck.schedulerRaw.isEmpty || deck.typeToAnswer || deck.cardArray.contains { card in
-            card.stability != 0 || card.difficulty != 0 || card.reverseStability != 0
-                || card.reverseDifficulty != 0 || !card.extra.isEmpty || !card.typeRaw.isEmpty
-                || card.lapses != 0 || card.suspended
-        }
         let dto = DeckDTO(
-            formatVersion: usesV3 ? 3 : 2,
+            formatVersion: formatVersion,
             id: deck.id,
             name: deck.name,
             deckDescription: deck.deckDescription,
             colorHex: deck.colorHex,
             backLabel: deck.backLabel,
             studyReversed: deck.studyReversed,
-            // Omit the key when not explicitly chosen, so files written before this setting
-            // re-encode unchanged (the watcher's content comparison sees no phantom edit).
-            gradingMode: deck.gradingModeRaw.isEmpty ? nil : deck.gradingModeRaw,
-            // Omit when empty so unsectioned decks re-encode identically (no phantom edit),
-            // exactly like gradingMode above.
+            // Omit when empty so unsectioned decks re-encode identically (no phantom edit).
             section: deck.section.isEmpty ? nil : deck.section,
             // Omit when empty/default so decks not using card sections re-encode without noise.
             sectionOrder: deck.sectionOrder.isEmpty ? nil : deck.sectionOrder,
             showSectionsInStudy: deck.showSectionsInStudy ? nil : false,
-            // Omit when off (the default) so decks not using type-in re-encode unchanged.
-            typeToAnswer: deck.typeToAnswer ? true : nil,
+            // The deck's default answer mode (1.8.0).
+            defaultAnswerMode: deck.defaultAnswerModeRaw,
             // Omit when default so decks using the standard icon re-encode without noise.
             icon: deck.icon.isEmpty ? nil : deck.icon,
             // Omit when default (SM-2) so SM-2 decks re-encode unchanged.
@@ -138,7 +127,11 @@ enum DeckCodec {
     }
 
     static func decodeDTO(_ data: Data) throws -> DeckDTO {
-        try decoder.decode(DeckDTO.self, from: data)
+        let dto = try decoder.decode(DeckDTO.self, from: data)
+        // 1.8.0 clean break: read only the current format. Old-format files (v1–v3) are rejected
+        // here, so the loader / reconcile / prune simply ignore them (never read or delete them).
+        guard dto.formatVersion == formatVersion else { throw CocoaError(.coderReadCorrupt) }
+        return dto
     }
 
     /// Builds a `Deck` (with its cards) from a DTO and inserts it into the context.
@@ -149,11 +142,10 @@ enum DeckCodec {
         deck.id = dto.id
         deck.backLabel = dto.backLabel ?? "Definition"
         deck.studyReversed = dto.studyReversed ?? false
-        deck.gradingModeRaw = dto.gradingMode ?? ""
         deck.section = dto.section ?? ""
         deck.sectionOrder = dto.sectionOrder ?? []
         deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
-        deck.typeToAnswer = dto.typeToAnswer ?? false
+        deck.defaultAnswerModeRaw = dto.defaultAnswerMode ?? AnswerMode.flip.rawValue
         deck.icon = dto.icon ?? ""
         deck.schedulerRaw = dto.scheduler ?? ""
         deck.createdAt = dto.createdAt
@@ -179,11 +171,10 @@ enum DeckCodec {
         deck.colorHex = dto.colorHex
         deck.backLabel = dto.backLabel ?? "Definition"
         deck.studyReversed = dto.studyReversed ?? false
-        deck.gradingModeRaw = dto.gradingMode ?? ""
         deck.section = dto.section ?? ""
         deck.sectionOrder = dto.sectionOrder ?? []
         deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
-        deck.typeToAnswer = dto.typeToAnswer ?? false
+        deck.defaultAnswerModeRaw = dto.defaultAnswerMode ?? AnswerMode.flip.rawValue
         deck.icon = dto.icon ?? ""
         deck.schedulerRaw = dto.scheduler ?? ""
         deck.createdAt = dto.createdAt
@@ -239,7 +230,7 @@ enum DeckCodec {
             reverseStability: card.reverseStability == 0 ? nil : card.reverseStability,
             reverseDifficulty: card.reverseDifficulty == 0 ? nil : card.reverseDifficulty,
             extra: card.extra.isEmpty ? nil : card.extra,
-            type: card.typeRaw.isEmpty ? nil : card.typeRaw,
+            answerMode: card.answerModeRaw.isEmpty ? nil : card.answerModeRaw,
             // v3 leech state — omit when default so cards that never lapsed re-encode identically.
             lapses: card.lapses == 0 ? nil : card.lapses,
             suspended: card.suspended ? true : nil
@@ -271,7 +262,7 @@ enum DeckCodec {
         card.reverseStability = dto.reverseStability ?? 0
         card.reverseDifficulty = dto.reverseDifficulty ?? 0
         card.extra = dto.extra ?? ""
-        card.typeRaw = dto.type ?? ""
+        card.answerModeRaw = dto.answerMode ?? ""
         card.lapses = dto.lapses ?? 0
         card.suspended = dto.suspended ?? false
     }

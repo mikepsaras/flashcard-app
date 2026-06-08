@@ -1,15 +1,11 @@
 import SwiftUI
 
-/// Bottom study controls — an Undo row above the grade pills. (Shuffle / Share / Reset live in the
-/// study screen's ••• menu now.)
-/// - Two-button: full-width "Don't know" / "Know" pills.
-/// - Four-button: full-width Again / Hard / Good / Easy pills.
-/// When `intervalFor` is supplied (a developer toggle), each pill shows the projected next interval
-/// beneath its label.
+/// Bottom study controls — an Undo row above the grade pills (Again / Good / Easy, the 1.8.0 3-button
+/// set). (Shuffle / Share / Reset live in the study screen's ••• menu now.) When `intervalFor` is
+/// supplied (a developer toggle), each pill shows the projected next interval beneath its label.
 struct StudyControlsBar: View {
     let canUndo: Bool
     var compact: Bool = false
-    var fourButton: Bool = false
     /// Developer diagnostic: the projected next interval for a grade, shown under its label. Hidden
     /// by default so the numbers don't bias honest grading.
     var intervalFor: ((Grade) -> String)? = nil
@@ -19,18 +15,10 @@ struct StudyControlsBar: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack { undoButton; Spacer() }
-            if fourButton {
-                HStack(spacing: 10) {
-                    gradeButton("Again", .again)
-                    gradeButton("Hard", .hard)
-                    gradeButton("Good", .good)
-                    gradeButton("Easy", .easy)
-                }
-            } else {
-                HStack(spacing: 14) {
-                    gradeButton("Don't know", .again, symbol: "xmark")
-                    gradeButton("Know", .good, symbol: "checkmark")
-                }
+            HStack(spacing: 10) {
+                gradeButton("Again", .again)
+                gradeButton("Good", .good)
+                gradeButton("Easy", .easy)
             }
         }
     }
@@ -99,12 +87,7 @@ extension Grade {
     }
 }
 
-#Preview("Two-button") {
+#Preview("Grade bar") {
     StudyControlsBar(canUndo: true, onUndo: {}, onGrade: { _ in })
-        .padding().frame(width: 560)
-}
-
-#Preview("Four-button") {
-    StudyControlsBar(canUndo: true, fourButton: true, onUndo: {}, onGrade: { _ in })
         .padding().frame(width: 560)
 }

@@ -56,66 +56,30 @@ import SwiftData
         #expect(rebuilt.backLabel == "")
     }
 
-    @Test func missingBackLabelDefaultsToDefinition() throws {
-        // A .deck file written before backLabel existed must still load.
-        let json = """
-        {"formatVersion":1,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
-        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
-        """
-        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
-        #expect(dto.backLabel == nil)
-        let container = DeckStore.makeContainer()
-        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
-        #expect(deck.backLabel == "Definition")
+    @Test func oldFormatFilesAreRejected() throws {
+        // 1.8.0 clean break: pre-v4 files must NOT decode, so loadAll / reconcile / prune ignore them.
+        for version in [1, 2, 3] {
+            let json = """
+            {"formatVersion":\(version),"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
+            "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
+            """
+            #expect(throws: (any Error).self) { try DeckCodec.decodeDTO(Data(json.utf8)) }
+        }
     }
 
-    @Test func gradingModeRoundTrips() throws {
+    @Test func plainDeckStampsCurrentVersionAndOmitsOptionalKeys() throws {
         let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Quiz", gradingMode: .fourButton)
+        let deck = Deck(name: "Plain")
         container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
+        try container.mainContext.save()
+
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.gradingMode == GradingMode.fourButton.rawValue)
-        let other = DeckStore.makeContainer()
-        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
-        #expect(rebuilt.gradingMode == .fourButton)
-    }
-
-    @Test func missingGradingModeInheritsLegacyGlobalDefault() throws {
-        // A deck file written before per-deck grading has no gradingMode key; it must inherit
-        // whatever the old global default was (here four-button), not snap to two-button.
-        // Isolated UserDefaults so the test never touches the app's real preferences.
-        let suite = "test-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(GradingMode.fourButton.rawValue, forKey: GradingMode.storageKey)
-
-        let json = """
-        {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
-        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
-        """
-        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
-        #expect(dto.gradingMode == nil)
-        let container = DeckStore.makeContainer()
-        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
-        #expect(deck.resolvedGradingMode(defaults: defaults) == .fourButton)
-    }
-
-    @Test func unsetGradingModeRoundTripsWithoutPhantomChange() throws {
-        // A deck file from before per-deck grading (no gradingMode key) must re-encode
-        // identically — no key appears — so the watcher's content comparison sees no edit.
-        let id = UUID().uuidString
-        let json = """
-        {"formatVersion":2,"id":"\(id)","name":"X","deckDescription":"","colorHex":"#3478F6",\
-        "backLabel":"Definition","studyReversed":false,\
-        "createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
-        """
-        let dto1 = try DeckCodec.decodeDTO(Data(json.utf8))
-        #expect(dto1.gradingMode == nil)
-        let container = DeckStore.makeContainer()
-        let deck = DeckCodec.makeDeck(from: dto1, in: container.mainContext)
-        let dto2 = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto2.gradingMode == nil)   // no key written back
-        #expect(dto1 == dto2)              // full DTO stable → reconcile stays a no-op
+        #expect(dto.formatVersion == DeckCodec.formatVersion)
+        #expect(dto.cards[0].stability == nil)
+        #expect(dto.cards[0].extra == nil)
+        #expect(dto.cards[0].answerMode == nil)   // empty ⇒ inherit the deck default
+        #expect(dto.cards[0].lapses == nil)
     }
 
     @Test func fileIsHumanReadableJSON() throws {
@@ -139,7 +103,6 @@ import SwiftData
         try container.mainContext.save()
 
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 2)   // reverse state alone is a v2 feature
         #expect(dto.studyReversed == true)
         #expect(dto.cards[0].reverseInterval == 4)
 
@@ -150,29 +113,7 @@ import SwiftData
         #expect(rebuilt.cardArray.first?.reverseRepetitions == 2)
     }
 
-    @Test func v1FileDecodesWithReverseDefaults() throws {
-        // A pre-reverse (v1) file has no studyReversed / reverse* keys; it must still load.
-        let json = """
-        {"formatVersion":1,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
-        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
-        "cards":[{"id":"\(UUID().uuidString)","term":"a","definition":"b",\
-        "createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
-        "easeFactor":2.5,"interval":0,"repetitions":0,"dueDate":"2024-01-01T00:00:00Z"}]}
-        """
-        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
-        #expect(dto.studyReversed == nil)
-        #expect(dto.cards[0].reverseEaseFactor == nil)
-
-        let container = DeckStore.makeContainer()
-        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
-        #expect(deck.studyReversed == false)
-        #expect(deck.cardArray.first?.reverseEaseFactor == 2.5)
-        #expect(deck.cardArray.first?.reverseRepetitions == 0)
-    }
-
-    // MARK: v3 — FSRS state, tags, extra
-
-    @Test func v3FieldsRoundTripAndStampVersion3() throws {
+    @Test func fsrsStateRoundTrips() throws {
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "FSRS deck", studyReversed: true)
         container.mainContext.insert(deck)
@@ -186,10 +127,7 @@ import SwiftData
         try container.mainContext.save()
 
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 3)                       // a v3 feature is in use
         #expect(dto.cards[0].stability == 12.5)
-        #expect(dto.cards[0].difficulty == 6.0)
-        #expect(dto.cards[0].reverseStability == 3.2)
         #expect(dto.cards[0].extra == "Mnemonic: ATP.")
 
         let other = DeckStore.makeContainer()
@@ -201,44 +139,7 @@ import SwiftData
         #expect(c.extra == "Mnemonic: ATP.")
     }
 
-    @Test func deckWithoutV3FeaturesStaysVersion2() throws {
-        // No FSRS/extra/type ⇒ keep the v2 version line and omit the new keys — no phantom edits.
-        let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Plain")
-        container.mainContext.insert(deck)
-        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
-        try container.mainContext.save()
-
-        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 2)
-        #expect(dto.cards[0].stability == nil)
-        #expect(dto.cards[0].extra == nil)
-    }
-
-    @Test func v2FileDecodesWithV3Defaults() throws {
-        // A v2 file (no FSRS/extra/type keys) must load with those fields defaulted.
-        let json = """
-        {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
-        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
-        "cards":[{"id":"\(UUID().uuidString)","term":"a","definition":"b",\
-        "createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z",\
-        "easeFactor":2.5,"interval":0,"repetitions":0,"dueDate":"2024-01-01T00:00:00Z"}]}
-        """
-        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
-        #expect(dto.cards[0].stability == nil)
-
-        let container = DeckStore.makeContainer()
-        let c = DeckCodec.makeDeck(from: dto, in: container.mainContext).cardArray.first!
-        #expect(c.stability == 0)
-        #expect(c.difficulty == 0)
-        #expect(c.extra == "")
-        #expect(c.lapses == 0)        // leech state absent in v2 ⇒ defaults
-        #expect(c.suspended == false)
-    }
-
-    // MARK: v3 — leech detection (S7.4)
-
-    @Test func leechStateRoundTripsAndStampsVersion3() throws {
+    @Test func leechStateRoundTrips() throws {
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "Leechy")
         container.mainContext.insert(deck)
@@ -249,7 +150,6 @@ import SwiftData
         try container.mainContext.save()
 
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 3)            // a v3 feature is in use
         #expect(dto.cards[0].lapses == 9)
         #expect(dto.cards[0].suspended == true)
 
@@ -260,93 +160,43 @@ import SwiftData
         #expect(c.isLeech)
     }
 
-    @Test func noLeechStateOmittedAndStaysVersion2() throws {
-        // A card that never lapsed and isn't suspended must omit both keys and keep the v2 line,
-        // so decks predating leech detection re-encode byte-identically (no phantom edits).
-        let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Plain")
-        container.mainContext.insert(deck)
-        container.mainContext.insert(Card(term: "a", definition: "b", deck: deck))
-        try container.mainContext.save()
-
-        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 2)
-        #expect(dto.cards[0].lapses == nil)
-        #expect(dto.cards[0].suspended == nil)
-    }
-
-    @Test func suspendedAloneStampsVersion3() throws {
-        // Suspension with zero lapses is still a v3 feature — the flag must survive and bump the line.
-        let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Parked")
-        container.mainContext.insert(deck)
-        let card = Card(term: "a", definition: "b", deck: deck)
-        card.suspended = true
-        container.mainContext.insert(card)
-        try container.mainContext.save()
-
-        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 3)
-        #expect(dto.cards[0].lapses == nil)         // 0 ⇒ omitted
-        #expect(dto.cards[0].suspended == true)
-    }
-
-    @Test func schedulerSelectionRoundTripsAndStampsVersion3() throws {
+    @Test func schedulerSelectionRoundTrips() throws {
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "FSRS deck")
         deck.schedulerKind = .fsrs
         container.mainContext.insert(deck)
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 3)            // a v3 feature is in use
         #expect(dto.scheduler == "fsrs")
         let other = DeckStore.makeContainer()
         #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).schedulerKind == .fsrs)
     }
 
-    @Test func defaultSchedulerOmittedAndStaysVersion2() throws {
-        let container = DeckStore.makeContainer()
-        let deck = Deck(name: "SM-2 deck")          // default scheduler
-        container.mainContext.insert(deck)
-        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.scheduler == nil)               // omitted → no phantom edit
-        #expect(dto.formatVersion == 2)
-        #expect(deck.schedulerKind == .sm2)
-    }
+    // MARK: Answer mode (1.8.0)
 
-    @Test func clozeTypeRoundTripsAndStampsVersion3() throws {
+    @Test func clozeAnswerModeRoundTrips() throws {
         let container = DeckStore.makeContainer()
         let deck = Deck(name: "Cloze deck")
         container.mainContext.insert(deck)
         let card = Card(term: "The {{c1::sun}} is a star.", definition: "", deck: deck)
-        card.cardType = .cloze
+        card.answerModeRaw = AnswerMode.cloze.rawValue
         container.mainContext.insert(card)
         try container.mainContext.save()
 
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 3)
-        #expect(dto.cards[0].type == "cloze")
+        #expect(dto.cards[0].answerMode == "cloze")
         let other = DeckStore.makeContainer()
-        #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).cardArray.first?.cardType == .cloze)
+        #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).cardArray.first?.isClozeMode == true)
     }
 
-    @Test func typeToAnswerRoundTripsAndStampsVersion3() throws {
+    @Test func deckDefaultAnswerModeRoundTrips() throws {
         let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Vocab", typeToAnswer: true)
+        let deck = Deck(name: "Vocab")
+        deck.defaultAnswerMode = .type
         container.mainContext.insert(deck)
         let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.formatVersion == 3)            // a v3 feature is in use
-        #expect(dto.typeToAnswer == true)
+        #expect(dto.defaultAnswerMode == AnswerMode.type.rawValue)
         let other = DeckStore.makeContainer()
-        #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).typeToAnswer)
-    }
-
-    @Test func typeToAnswerOffOmittedAndStaysVersion2() throws {
-        let container = DeckStore.makeContainer()
-        let deck = Deck(name: "Plain deck")         // type-in off (default)
-        container.mainContext.insert(deck)
-        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.typeToAnswer == nil)            // omitted → no phantom edit
-        #expect(dto.formatVersion == 2)
+        #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).defaultAnswerMode == .type)
     }
 
     // MARK: Section
@@ -361,19 +211,6 @@ import SwiftData
         let other = DeckStore.makeContainer()
         let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
         #expect(rebuilt.section == "Spanish")
-    }
-
-    @Test func missingSectionDefaultsToEmpty() throws {
-        // A file written before sections existed has no `section` key; it must still load (→ "").
-        let json = """
-        {"formatVersion":2,"id":"\(UUID().uuidString)","name":"Old","deckDescription":"",\
-        "colorHex":"#3478F6","createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[]}
-        """
-        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
-        #expect(dto.section == nil)
-        let container = DeckStore.makeContainer()
-        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
-        #expect(deck.section == "")
     }
 
     @Test func emptySectionOmitsKeyToAvoidPhantomEdit() throws {
@@ -480,24 +317,22 @@ import SwiftData
         #expect(dto1 == dto2)
     }
 
-    @Test func cardWithoutSectionKeyDefaultsToUnsectioned() throws {
-        // A file written before card sections has no `section` key → unsectioned, with order
-        // taken from the card's position in the file.
-        let id = UUID().uuidString
-        let json = """
-        {"formatVersion":2,"id":"\(id)","name":"Old","deckDescription":"","colorHex":"#3478F6",\
-        "createdAt":"2024-01-01T00:00:00Z","modifiedAt":"2024-01-01T00:00:00Z","cards":[\
-        {"id":"\(UUID().uuidString)","term":"first","definition":"1","createdAt":"2024-01-01T00:00:00Z",\
-        "modifiedAt":"2024-01-01T00:00:00Z","easeFactor":2.5,"interval":0,"repetitions":0,"dueDate":"2024-01-01T00:00:00Z"},\
-        {"id":"\(UUID().uuidString)","term":"second","definition":"2","createdAt":"2024-01-01T00:00:00Z",\
-        "modifiedAt":"2024-01-01T00:00:00Z","easeFactor":2.5,"interval":0,"repetitions":0,"dueDate":"2024-01-01T00:00:00Z"}]}
-        """
-        let dto = try DeckCodec.decodeDTO(Data(json.utf8))
-        #expect(dto.cards.first?.section == nil)
+    @Test func cardsWithoutSectionAreUnsectionedInOrder() throws {
+        // Unsectioned cards encode without a `section` key and round-trip as unsectioned, in
+        // file (display) order.
         let container = DeckStore.makeContainer()
-        let deck = DeckCodec.makeDeck(from: dto, in: container.mainContext)
-        #expect(deck.cardArray.allSatisfy { $0.section == "" })
-        #expect(deck.sectionGroups.first?.cards.map(\.term) == ["first", "second"])
+        let deck = Deck(name: "Plain")
+        container.mainContext.insert(deck)
+        container.mainContext.insert(Card(term: "first", definition: "1", deck: deck, sortOrder: 0))
+        container.mainContext.insert(Card(term: "second", definition: "2", deck: deck, sortOrder: 1))
+        try container.mainContext.save()
+
+        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
+        #expect(dto.cards.allSatisfy { $0.section == nil })
+        let other = DeckStore.makeContainer()
+        let rebuilt = DeckCodec.makeDeck(from: dto, in: other.mainContext)
+        #expect(rebuilt.cardArray.allSatisfy { $0.section == "" })
+        #expect(rebuilt.sectionGroups.first?.cards.map(\.term) == ["first", "second"])
     }
 }
 

@@ -104,7 +104,7 @@ struct TodayDetailView: View {
     }
 
     private func todayPlan() -> StudyPlan {
-        StudyPlan(id: "today", title: "Today", accent: Theme.accent, exportText: nil, fourButton: false) {
+        StudyPlan(id: "today", title: "Today", accent: Theme.accent, exportText: nil) {
             // Cross-deck due units, including reverse where enabled. Built in memory so
             // reverse due dates (a #Predicate can't reach through the relationship) count.
             let decks = (try? context.fetch(FetchDescriptor<Deck>())) ?? []

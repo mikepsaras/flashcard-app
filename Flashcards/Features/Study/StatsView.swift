@@ -69,7 +69,7 @@ struct StatsView: View {
     private func weakSpotsPlan() -> StudyPlan {
         let decks = self.decks
         return StudyPlan(id: "weak-spots", title: "Weak Spots", accent: Theme.accent,
-                         exportText: nil, fourButton: false, forcePractice: true) {
+                         exportText: nil, forcePractice: true) {
             FocusInsights.practiceItems(decks: decks, records: ReviewLog.records(from: ReviewLog.defaultURL))
         }
     }

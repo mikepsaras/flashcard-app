@@ -27,7 +27,7 @@ enum DeveloperTools {
                             colorHex: spec.colorHex, studyReversed: spec.reversed,
                             section: testSection, sectionOrder: spec.sections)
             context.insert(deck)
-            deck.typeToAnswer = spec.typeToAnswer
+            deck.defaultAnswerMode = spec.typeToAnswer ? .type : .flip
             for (i, c) in spec.cards.enumerated() {
                 let card = Card(term: c.term, definition: c.definition, deck: deck, section: c.section, sortOrder: i)
                 applyState(c.state, to: card, reversed: spec.reversed)

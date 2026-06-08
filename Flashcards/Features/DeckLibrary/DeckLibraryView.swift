@@ -338,10 +338,10 @@ struct DeckLibraryView: View {
             colorHex: deck.colorHex,
             backLabel: deck.backLabel,
             studyReversed: deck.studyReversed,
-            gradingMode: deck.gradingMode,
             section: deck.section
         )
         context.insert(copy)
+        copy.defaultAnswerMode = deck.defaultAnswerMode
         for card in deck.cardArray.sorted(by: { $0.createdAt < $1.createdAt }) {
             context.insert(Card(term: card.term, definition: card.definition, deck: copy))
         }

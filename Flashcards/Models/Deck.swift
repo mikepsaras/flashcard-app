@@ -17,11 +17,6 @@ final class Deck {
     /// When true, each card is also studied definition → term, with its own independent
     /// spaced-repetition schedule.
     var studyReversed: Bool = false
-    /// Which grading controls this deck uses while studying — 2-button (Know / Don't know)
-    /// or 4-button (Again / Hard / Good / Easy), as a `GradingMode` raw value. Empty means
-    /// "not explicitly chosen" — a deck saved before this setting existed — and inherits the
-    /// legacy default (see `gradingMode`). Decks created in-app always store a concrete value.
-    var gradingModeRaw: String = ""
     /// Which scheduling algorithm this deck studies with (a `SchedulerKind` raw value). Empty ⇒ the
     /// default, SM-2; `"fsrs"` opts the deck into FSRS. Defaulted ⇒ CloudKit-safe.
     var schedulerRaw: String = ""
@@ -39,10 +34,6 @@ final class Deck {
     var sectionOrder: [String] = []
     /// Whether each card's section appears as a chip on the study card. Per deck. CloudKit-safe.
     var showSectionsInStudy: Bool = true
-    /// When true, studying this deck prompts the learner to **type** the answer before revealing it
-    /// (active recall), checked case-insensitively (see `AnswerCheck`). Off ⇒ classic flip-to-reveal.
-    /// Per deck. Defaulted ⇒ CloudKit-safe.
-    var typeToAnswer: Bool = false
     /// The deck's icon: empty ⇒ the default glyph; an SF Symbol name ⇒ that symbol (tinted by
     /// `colorHex`); or a themed preset id like `DeckIconPreset.euFlag` (drawn, and it owns the
     /// color). Defaulted ⇒ CloudKit-safe.
@@ -59,11 +50,9 @@ final class Deck {
         colorHex: String = "#3478F6",
         backLabel: String = "Definition",
         studyReversed: Bool = false,
-        gradingMode: GradingMode = .twoButton,
         section: String = "",
         sectionOrder: [String] = [],
         showSectionsInStudy: Bool = true,
-        typeToAnswer: Bool = false,
         icon: String = ""
     ) {
         self.id = UUID()
@@ -72,11 +61,9 @@ final class Deck {
         self.colorHex = colorHex
         self.backLabel = backLabel
         self.studyReversed = studyReversed
-        self.gradingModeRaw = gradingMode.rawValue
         self.section = section
         self.sectionOrder = sectionOrder
         self.showSectionsInStudy = showSectionsInStudy
-        self.typeToAnswer = typeToAnswer
         self.icon = icon
         self.createdAt = .now
         self.modifiedAt = .now
@@ -163,21 +150,6 @@ extension Deck {
     /// "Untitled Deck" fallback the UI would otherwise repeat at every call site.
     var displayName: String { name.isEmpty ? "Untitled Deck" : name }
 
-    /// The deck's grading controls (2- or 4-button), backed by `gradingModeRaw`. An empty raw
-    /// value (a deck file predating this setting) resolves to the legacy global default, so
-    /// existing decks don't silently change.
-    var gradingMode: GradingMode {
-        get { resolvedGradingMode() }
-        set { gradingModeRaw = newValue.rawValue }
-    }
-
-    /// Resolves the grading mode; takes `defaults` so tests don't read the app's real prefs.
-    func resolvedGradingMode(defaults: UserDefaults = .standard) -> GradingMode {
-        GradingMode(rawValue: gradingModeRaw)
-            ?? GradingMode(rawValue: GradingMode.legacyDefaultRaw(defaults))
-            ?? .twoButton
-    }
-
     /// The deck's scheduling algorithm, backed by `schedulerRaw` (empty ⇒ SM-2). Setting SM-2 stores
     /// empty so the default re-encodes unchanged (no phantom edits).
     var schedulerKind: SchedulerKind {
@@ -200,7 +172,7 @@ extension Deck {
         cardArray.flatMap { card -> [ReviewItem] in
             guard !card.suspended else { return [] }
             // Cloze cards are studied one way only — reversing a fill-in-the-blank is nonsensical.
-            return (studyReversed && card.cardType != .cloze)
+            return (studyReversed && !card.isClozeMode)
                 ? [ReviewItem(card: card, direction: .forward), ReviewItem(card: card, direction: .reverse)]
                 : [ReviewItem(card: card, direction: .forward)]
         }

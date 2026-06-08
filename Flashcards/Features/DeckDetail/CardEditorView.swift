@@ -13,7 +13,7 @@ struct CardEditorView: View {
     @State private var term: String
     @State private var definition: String
     @State private var extra: String
-    @State private var cardType: CardType
+    @State private var answerModeRaw: String
 
     init(deck: Deck, card: Card) {
         self.deck = deck
@@ -21,7 +21,7 @@ struct CardEditorView: View {
         _term = State(initialValue: card.term)
         _definition = State(initialValue: card.definition)
         _extra = State(initialValue: card.extra)
-        _cardType = State(initialValue: card.cardType)
+        _answerModeRaw = State(initialValue: card.answerModeRaw)
     }
 
     private var canSave: Bool {
@@ -32,12 +32,15 @@ struct CardEditorView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    Picker("Type", selection: $cardType) {
-                        ForEach(CardType.allCases) { Text($0.title).tag($0) }
+                    Picker("Mode", selection: Binding(
+                        get: { AnswerMode(rawValue: answerModeRaw) ?? .flip },
+                        set: { answerModeRaw = $0.rawValue }
+                    )) {
+                        ForEach(AnswerMode.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
 
-                    if cardType == .cloze {
+                    if AnswerMode(rawValue: answerModeRaw) == .cloze {
                         MultilineField(label: "Cloze text", placeholder: "Use {{c1::answer}} to hide text", text: $term, minHeight: 120)
                         clozeHint.font(.caption).foregroundStyle(.secondary)
                         if Cloze.hasCloze(term) { clozePreview }
@@ -202,7 +205,7 @@ struct CardEditorView: View {
         card.term = term.trimmingCharacters(in: .whitespacesAndNewlines)
         card.definition = definition
         card.extra = extra.trimmingCharacters(in: .whitespacesAndNewlines)
-        card.cardType = cardType
+        card.answerModeRaw = answerModeRaw
         card.modifiedAt = .now
         context.saveAndPersist(touching: deck)
         dismiss()

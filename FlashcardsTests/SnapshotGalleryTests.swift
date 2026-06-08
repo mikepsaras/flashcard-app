@@ -10,14 +10,14 @@ import SwiftData
 @MainActor
 struct SnapshotGalleryTests {
 
-    private func makeContext(fourButton: Bool = false) throws -> (ModelContainer, Deck, StudyPlan) {
+    private func makeContext() throws -> (ModelContainer, Deck, StudyPlan) {
         let container = DeckStore.previewContainer(seeded: true)
         let decks = try container.mainContext.fetch(
             FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)])
         )
         let deck = decks.first { $0.name.contains("Project") } ?? decks.first!
         let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
-        let plan = StudyPlan(id: "test", title: deck.name, accent: Color(hex: deck.colorHex), exportText: nil, fourButton: fourButton) { due }
+        let plan = StudyPlan(id: "test", title: deck.name, accent: Color(hex: deck.colorHex), exportText: nil) { due }
         return (container, deck, plan)
     }
 
@@ -66,9 +66,9 @@ struct SnapshotGalleryTests {
 
         // Four-button controls
         try Snapshot.write(
-            StudyControlsBar(canUndo: true, fourButton: true, onUndo: {}, onGrade: { _ in })
+            StudyControlsBar(canUndo: true, onUndo: {}, onGrade: { _ in })
                 .padding(28).background(Theme.windowBackground),
-            size: CGSize(width: 620, height: 200), name: "07_controls_four_button")
+            size: CGSize(width: 620, height: 200), name: "07_controls_three_button")
 
         // Today detail
         try Snapshot.write(
@@ -95,10 +95,10 @@ struct SnapshotGalleryTests {
     /// Type-in study (B3): the answer field + Check button beneath the prompt card, before reveal.
     @Test func renderTypeInStudy() throws {
         let (container, deck, _) = try makeContext()
-        deck.typeToAnswer = true   // type-in is resolved per card from its deck now (Today honors it)
+        deck.defaultAnswerMode = .type   // type-in is resolved per card from its deck now (Today honors it)
         let due = deck.dueReviewItems.sorted { $0.dueDate < $1.dueDate }
         let plan = StudyPlan(id: "typein", title: deck.name, accent: Color(hex: deck.colorHex),
-                             exportText: nil, fourButton: false, typeToAnswer: true) { due }
+                             exportText: nil) { due }
         try Snapshot.write(
             StudySessionView(plan: plan, onClose: {}).modelContainer(container),
             size: CGSize(width: 960, height: 720), name: "09_type_in_study")
@@ -254,7 +254,7 @@ struct SnapshotGalleryTests {
     }
 
     @Test func renderFourButtonStudyScreen() throws {
-        let (container, _, plan) = try makeContext(fourButton: true)
+        let (container, _, plan) = try makeContext()
         try Snapshot.write(
             StudySessionView(plan: plan, onClose: {}).modelContainer(container),
             size: CGSize(width: 960, height: 720), name: "10_study_four_button_mac")

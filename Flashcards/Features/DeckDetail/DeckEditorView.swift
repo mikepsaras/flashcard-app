@@ -26,11 +26,10 @@ struct DeckEditorView: View {
     @State private var backLabel: String
     @State private var showLabel: Bool
     @State private var studyReversed: Bool
-    @State private var gradingMode: GradingMode
+    @State private var defaultAnswerMode: AnswerMode
     @State private var schedulerKind: SchedulerKind
     @State private var section: String
     @State private var showSectionsInStudy: Bool
-    @State private var typeToAnswer: Bool
     @State private var showingAI = false
     @State private var showingIconPicker = false
     @State private var showAdvanced: Bool
@@ -46,11 +45,10 @@ struct DeckEditorView: View {
             _backLabel = State(initialValue: "Definition")
             _showLabel = State(initialValue: true)
             _studyReversed = State(initialValue: false)
-            _gradingMode = State(initialValue: .twoButton)
+            _defaultAnswerMode = State(initialValue: .flip)
             _schedulerKind = State(initialValue: .fsrs)   // new decks default to FSRS (validated)
             _section = State(initialValue: "")
             _showSectionsInStudy = State(initialValue: true)
-            _typeToAnswer = State(initialValue: false)
             _showAdvanced = State(initialValue: false)
         case .edit(let deck):
             _name = State(initialValue: deck.name)
@@ -62,11 +60,10 @@ struct DeckEditorView: View {
             _backLabel = State(initialValue: deck.backLabel.isEmpty ? "Definition" : deck.backLabel)
             _showLabel = State(initialValue: !deck.backLabel.isEmpty)
             _studyReversed = State(initialValue: deck.studyReversed)
-            _gradingMode = State(initialValue: deck.gradingMode)
+            _defaultAnswerMode = State(initialValue: deck.defaultAnswerMode)
             _schedulerKind = State(initialValue: deck.schedulerKind)
             _section = State(initialValue: deck.section)
             _showSectionsInStudy = State(initialValue: deck.showSectionsInStudy)
-            _typeToAnswer = State(initialValue: deck.typeToAnswer)
             _showAdvanced = State(initialValue: true)
         }
     }
@@ -180,31 +177,14 @@ struct DeckEditorView: View {
         #endif
     }
 
-    /// How you answer this deck, as one flat 3-way choice — the two flip-and-self-grade button counts
-    /// plus type-in. Backed by `gradingMode` + `typeToAnswer`, so it needs no new model field.
-    private enum AnswerMode: Hashable { case twoButton, fourButton, typeIn }
-
-    private var answerMode: Binding<AnswerMode> {
-        Binding(
-            get: { typeToAnswer ? .typeIn : (gradingMode == .fourButton ? .fourButton : .twoButton) },
-            set: { mode in
-                switch mode {
-                case .twoButton:  typeToAnswer = false; gradingMode = .twoButton
-                case .fourButton: typeToAnswer = false; gradingMode = .fourButton
-                case .typeIn:     typeToAnswer = true
-                }
-            }
-        )
-    }
-
+    /// The deck's **default** answer mode for its cards (flip vs type). Cards inherit this unless they
+    /// pin their own; cloze is per-card only. (1.8.0 — replaces the old grading/type-in picker.)
     private var answerModeRow: some View {
         HStack {
-            Text("Answer mode").font(Typography.body)
+            Text("Default answer mode").font(Typography.body)
             Spacer(minLength: 8)
-            Picker("", selection: answerMode.animation()) {
-                Text("Flip — 2 buttons").tag(AnswerMode.twoButton)
-                Text("Flip — 4 buttons").tag(AnswerMode.fourButton)
-                Text("Type the answer").tag(AnswerMode.typeIn)
+            Picker("", selection: $defaultAnswerMode.animation()) {
+                ForEach(AnswerMode.deckDefaults) { Text($0.title).tag($0) }
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -216,10 +196,10 @@ struct DeckEditorView: View {
     }
 
     private var answerModeCaption: String {
-        switch answerMode.wrappedValue {
-        case .twoButton:  "Flip the card and mark it Known or Not — a simple right/wrong signal."
-        case .fourButton: "Flip and grade Again / Hard / Good / Easy — the finest-grained signal you can give the scheduler."
-        case .typeIn:     "Type the answer (checked case-insensitively); the grade is set objectively from whether you got it right — the most honest signal, and stronger recall. Cloze cards keep their fill-in style."
+        switch defaultAnswerMode {
+        case .flip:  "Flip the card and grade Again / Good / Easy — you decide whether you recalled it."
+        case .type:  "Type the answer (checked case-insensitively); whether you got it right sets the pass/fail objectively — the most honest signal, and stronger recall."
+        case .cloze: ""
         }
     }
 
@@ -382,8 +362,9 @@ struct DeckEditorView: View {
         let trimmedSection = String(section.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
         let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
-        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, typeToAnswer: typeToAnswer, icon: icon)
+        let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
         deck.schedulerKind = schedulerKind
+        deck.defaultAnswerMode = defaultAnswerMode
         context.insert(deck)
         return deck
     }
@@ -397,8 +378,9 @@ struct DeckEditorView: View {
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         switch mode {
         case .new:
-            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, gradingMode: gradingMode, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, typeToAnswer: typeToAnswer, icon: icon)
+            let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
             deck.schedulerKind = schedulerKind
+            deck.defaultAnswerMode = defaultAnswerMode
             context.insert(deck)
         case .edit(let deck):
             deck.name = trimmed
@@ -406,11 +388,10 @@ struct DeckEditorView: View {
             deck.colorHex = colorHex
             deck.backLabel = label
             deck.studyReversed = studyReversed
-            deck.gradingMode = gradingMode
+            deck.defaultAnswerMode = defaultAnswerMode
             deck.schedulerKind = schedulerKind
             deck.section = trimmedSection
             deck.showSectionsInStudy = showSectionsInStudy
-            deck.typeToAnswer = typeToAnswer
             deck.icon = icon
             deck.modifiedAt = .now
         }

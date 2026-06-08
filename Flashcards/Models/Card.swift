@@ -49,14 +49,10 @@ final class Card {
     /// Optional elaboration shown alongside the answer — a worked example, a "why", a source.
     /// Empty ⇒ none. Defaulted ⇒ CloudKit-safe.
     var extra: String = ""
-    /// Card kind (a `CardType` raw value). Empty/"basic" ⇒ a normal front↔back card; "cloze" ⇒
-    /// `term` holds cloze text (`{{c1::…}}`) studied with the deletions hidden. Defaulted ⇒ CloudKit-safe.
-    var typeRaw: String = ""
-
     // MARK: Answer mode (1.8.0) — per-card {flip, type, cloze}
     /// The card's answer mode (an `AnswerMode` raw value). **Empty ⇒ inherit `Deck.defaultAnswerMode`**,
     /// so a deck's flip/type default flows to its cards; a cloze card pins `"cloze"`. Defaulted ⇒
-    /// CloudKit-safe. (1.8.0 replacement for `typeRaw`/`CardType`; the old field is removed at cutover.)
+    /// CloudKit-safe.
     var answerModeRaw: String = ""
 
     // MARK: Card health — leech detection (S7.4)
@@ -108,13 +104,6 @@ extension Card {
     /// a suspended card is still a leech by count; suspension just parks it out of study.
     var isLeech: Bool { lapses >= Card.leechThreshold }
 
-    /// The card's kind, backed by `typeRaw` (empty ⇒ basic). Setting basic stores empty so basic
-    /// cards re-encode unchanged.
-    var cardType: CardType {
-        get { CardType(rawValue: typeRaw) ?? .basic }
-        set { typeRaw = newValue == .basic ? "" : newValue.rawValue }
-    }
-
     /// The card's effective answer mode: its own if pinned, otherwise the deck's default (1.8.0).
     func resolvedAnswerMode(deckDefault: AnswerMode) -> AnswerMode {
         AnswerMode(rawValue: answerModeRaw) ?? deckDefault
@@ -122,17 +111,4 @@ extension Card {
     /// Whether this is a cloze card. Cloze is pinned on the card (never inherited), so this reads the
     /// raw value directly — no deck needed.
     var isClozeMode: Bool { answerModeRaw == AnswerMode.cloze.rawValue }
-}
-
-/// A card's kind. v1: a normal front↔back card, or a cloze card (deletions in `term`, hidden when
-/// studied). Per-cloze independent scheduling is deferred — a cloze card uses one whole-card schedule.
-enum CardType: String, CaseIterable, Identifiable, Sendable {
-    case basic, cloze
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .basic: "Basic"
-        case .cloze: "Cloze"
-        }
-    }
 }

@@ -32,18 +32,11 @@ struct StudySessionView: View {
 
     private var accent: Color { plan.accent }
 
-    /// Grading style for the CURRENT card, resolved from its own deck — so the cross-deck Today queue
-    /// honors each card's Answer mode as it crosses decks. Single-deck runs share one deck, so this
-    /// matches the plan; the plan flag is only the fallback for a (deckless) card.
-    private var fourButton: Bool {
-        if let deck = session.current?.card.deck { return deck.gradingMode == .fourButton }
-        return plan.fourButton
-    }
-    /// This card is answered by typing — its own deck opted in, and it's a basic card (cloze keeps its
-    /// fill-in style). Per-card, for the same reason as `fourButton`.
+    /// This card is answered by typing — its resolved answer mode is `type`. Resolved per card from
+    /// its own deck's default, so the cross-deck Today queue honors each card as it crosses decks.
     private var typeInCard: Bool {
-        guard let card = session.current?.card, card.cardType == .basic else { return false }
-        return card.deck?.typeToAnswer ?? plan.typeToAnswer
+        guard let card = session.current?.card else { return false }
+        return card.resolvedAnswerMode(deckDefault: card.deck?.defaultAnswerMode ?? .flip) == .type
     }
 
     /// Extra leading space on macOS so the title clears the overlaid traffic lights
@@ -226,7 +219,6 @@ struct StudySessionView: View {
                     StudyControlsBar(
                         canUndo: session.canUndo,
                         compact: compact,
-                        fourButton: fourButton,
                         intervalFor: intervalProvider,
                         onUndo: { performUndo() },
                         onGrade: { performGrade($0) }
@@ -340,7 +332,6 @@ struct StudySessionView: View {
             if session.isShowingDefinition {
                 if correct {
                     HStack(spacing: 10) {
-                        refineButton("Hard", .hard)
                         refineButton("Good", .good, primary: true)
                             .keyboardShortcut(.return, modifiers: [])
                         refineButton("Easy", .easy)
@@ -608,17 +599,11 @@ struct StudySessionView: View {
                     .keyboardShortcut("s", modifiers: [])
                 Button("Undo") { performUndo() }
                     .keyboardShortcut("z", modifiers: .command)
-                if fourButton {
-                    Button("Again") { performGrade(.again) }.keyboardShortcut("1", modifiers: [])
-                    Button("Hard")  { performGrade(.hard) }.keyboardShortcut("2", modifiers: [])
-                    Button("Good")  { performGrade(.good) }.keyboardShortcut("3", modifiers: [])
-                    Button("Easy")  { performGrade(.easy) }.keyboardShortcut("4", modifiers: [])
-                } else {
-                    Button("Wrong") { performGrade(.again) }.keyboardShortcut(.leftArrow, modifiers: [])
-                    Button("Right") { performGrade(.good) }.keyboardShortcut(.rightArrow, modifiers: [])
-                    Button("Wrong 1") { performGrade(.again) }.keyboardShortcut("1", modifiers: [])
-                    Button("Right 2") { performGrade(.good) }.keyboardShortcut("2", modifiers: [])
-                }
+                Button("Again") { performGrade(.again) }.keyboardShortcut("1", modifiers: [])
+                Button("Good")  { performGrade(.good) }.keyboardShortcut("2", modifiers: [])
+                Button("Easy")  { performGrade(.easy) }.keyboardShortcut("3", modifiers: [])
+                Button("Again ←") { performGrade(.again) }.keyboardShortcut(.leftArrow, modifiers: [])
+                Button("Good →")  { performGrade(.good) }.keyboardShortcut(.rightArrow, modifiers: [])
             }
             .frame(width: 0, height: 0)
             .opacity(0)
