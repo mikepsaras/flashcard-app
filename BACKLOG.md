@@ -72,6 +72,55 @@ foundations) · 3 (ambitious / optional)
 
 ---
 
+## 1.8.0 — Editor & Answer-Mode rework (clean break, in progress)
+
+A ground-up rework of card answer modes + a new graphical editor, shipping as **1.8.0**
+(build 19). **Clean break: old `.cards` files are NOT supported** — supersedes the additive
+"format v3 / never reset" posture (decision #5) for this release. Locked over a long design
+session; this is the committed set.
+
+**Locked decisions (supersede earlier forks where noted):**
+- **Answer mode is per-card** — a single enum `Card.answerMode {flip, type, cloze}`.
+  `Card.cardType` / `typeRaw` and the `CardType` enum are **deleted**; cloze is now an answer
+  mode, not a card type. The deck holds a **default** (`Deck.defaultAnswerMode`, `flip`/`type`);
+  cards inherit or override. **Supersedes the interim `type` enum (#2, #12)** — folded into `answerMode`.
+- **Grading: 2-button permanently deleted → always 3-button (Again / Good / Easy).** Hard dropped
+  from the UI. `GradingMode`, `Deck.gradingMode` / `gradingModeRaw` **deleted**; no grading-style
+  axis. **Supersedes #7.** Grade source follows the mode: flip & cloze self-grade; type is
+  app-checked (wrong → Again, correct → Good/Easy). `Grade.hard` stays in the enum for the
+  schedulers but is never emitted by the UI.
+- **Whole-card scheduling** unchanged (one schedule per card/direction); SM-2/FSRS untouched.
+  Reverse only for single flip/type cards; cloze stays forward-only (extends #8).
+- **Multiple-choice, multi-answer, and answer synonyms: dropped** (considered and cut).
+- **Editor: one unified, graphical, structured (NOT WYSIWYG) mode-aware composer**; Markdown/
+  LaTeX stay as text + live preview. Replaces `CardEditorView` + the bulk composer.
+- **Multiple library folders (macOS):** the library aggregates a persisted set of folders;
+  `LibraryLocation` → folder set; persist/prune **folder-scoped**; removal non-destructive; new
+  decks land in a default folder. **iOS stays single-folder (deferred).**
+- **Clean `.cards` format:** fresh `formatVersion`, all fields non-optional with defaults, no
+  conditional stamping / no legacy reads. The runtime perf/equality machinery (the `modifiedAt`
+  persist gate, byte-skip, reconcile content-equality) is **kept**.
+- **First launch:** move any old `.cards`/`.deck` files into a `Pre-1.8 Backup/` subfolder
+  (non-destructive), start with an empty library, and **reset history** (review log + StudyStats).
+- **Import/export: untouched** — deferred to a separate future engine revamp (confirmed it
+  references none of the changing fields). AI generation of the new modes also deferred.
+
+**Phase plan:**
+1. **Foundation** — model (`AnswerMode`; delete `cardType`/`typeToAnswer`/`GradingMode`) + clean
+   `DeckCodec` + first-launch move-aside/reset. Codec tests rewritten.
+2. **Study** — per-card answer-mode resolution; 3-button grading (type keeps its check flow).
+3. **Editor rebuild** — the unified graphical composer.
+4. **Multi-folder (macOS)** — folder set + folder-scoped prune + Settings folders UI.
+5. **Sweep + release** — green suite, snapshots, bump 1.8.0/19, Release build, /Applications, GitHub.
+
+**Deferred to the NEXT iteration (post-1.8.0, NOT this release):** honest-grading polish
+(retrieval-framed prompt, de-emphasized in-session scoreboard); type-in **near-miss
+(edit-distance) tolerance** replacing the blanket "I actually knew it" escape; **default new decks
+to `type`**; **typed single-blank cloze**; commit-before-reveal; response-latency signal;
+calibration-driven honesty nudges; **iOS multi-folder**.
+
+---
+
 ## Cross-cutting foundations (apply to every epic)
 
 - **CloudKit-safe invariants** (unchanged): every scalar defaulted, relationships

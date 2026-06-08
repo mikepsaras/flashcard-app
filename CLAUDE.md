@@ -4,6 +4,24 @@ An ultra-clean native flashcard app for **macOS and iPhone**, built as a single
 SwiftUI multiplatform codebase. SM-2 spaced repetition, AI card generation, and
 **file-based local storage** — each deck is its own `.cards` file.
 
+## 🚧 1.8.0 rework in progress (read before touching models / study / persistence)
+
+A **clean-break** rework is underway — full plan in `BACKLOG.md` → "1.8.0 — Editor &
+Answer-Mode rework". The Architecture notes below will lag reality until each phase lands.
+Key changes:
+- **Answer mode is per-card** — `Card.answerMode` (`flip` / `type` / `cloze`). `Card.cardType` /
+  `typeRaw` and the `CardType` enum are being **deleted** (cloze becomes an answer mode). The
+  deck carries a default (`Deck.defaultAnswerMode`); cards inherit or override.
+- **Grading is 3-button only — Again / Good / Easy.** The 2-button system, `GradingMode`, and
+  `Deck.gradingMode` are **deleted**. (`Grade.hard` stays in the enum for the schedulers; the UI
+  never emits it.)
+- **Old `.cards` files are NOT supported** — fresh `formatVersion`, no compat machinery; first
+  launch moves old files into `Pre-1.8 Backup/` and resets history (review log + StudyStats).
+- **Multiple library folders (macOS)** — `LibraryLocation` becomes a folder set; persist/prune
+  go folder-scoped. iOS stays single-folder.
+- **Dropped from scope:** multiple-choice, multi-answer, answer synonyms. **Import/export is
+  untouched** (a separate future engine revamp).
+
 ## Git & syncing (read first — more than one agent works in this folder)
 
 This is a solo project, but multiple AI agents/sessions edit this same folder, and
