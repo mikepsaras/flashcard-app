@@ -348,6 +348,67 @@ import SwiftData
         return dir
     }
 
+    /// Seeds a `.cards` file named after the deck into `folder`, returning the deck's id.
+    @discardableResult
+    private func seedDeckFile(named name: String, in folder: URL) throws -> UUID {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: name)
+        container.mainContext.insert(deck)
+        try DeckCodec.encode(deck).write(to: folder.appendingPathComponent("\(name).cards"))
+        return deck.id
+    }
+
+    // MARK: Multi-folder (1.8.0, macOS)
+
+    @Test func loadAllFoldersLoadsEveryFolderDedupingByID() throws {
+        let folderA = try tempDir(), folderB = try tempDir()
+        try seedDeckFile(named: "Alpha", in: folderA)
+        let betaID = try seedDeckFile(named: "Beta", in: folderB)
+        // A copy of Beta also sits in folderA — first-seen folder wins, so it must NOT load twice.
+        let dup = DeckStore.makeContainer()
+        let beta = Deck(name: "Beta"); beta.id = betaID; dup.mainContext.insert(beta)
+        try DeckCodec.encode(beta).write(to: folderA.appendingPathComponent("Beta copy.cards"))
+
+        let container = DeckStore.makeContainer()
+        let n = store.loadAllFolders(into: container.mainContext, from: [folderA, folderB])
+        #expect(n == 2)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<Deck>()) == 2)
+    }
+
+    @Test func persistKeepsEachDeckInItsOwnFolder() throws {
+        // The multi-folder safety invariant: a deck living in folder B must NOT be pruned just because
+        // we persist with folder A as the primary.
+        let folderA = try tempDir(), folderB = try tempDir()
+        try seedDeckFile(named: "Alpha", in: folderA)
+        try seedDeckFile(named: "Beta", in: folderB)
+
+        let container = DeckStore.makeContainer()
+        let context = container.mainContext
+        store.loadAll(into: context, from: folderA)   // records Alpha → folderA
+        store.loadAll(into: context, from: folderB)   // records Beta  → folderB
+        #expect(try context.fetchCount(FetchDescriptor<Deck>()) == 2)
+
+        store.persist(context, to: folderA)            // primary = folderA
+        #expect(FileManager.default.fileExists(atPath: folderA.appendingPathComponent("Alpha.cards").path))
+        #expect(FileManager.default.fileExists(atPath: folderB.appendingPathComponent("Beta.cards").path))  // survives
+    }
+
+    @Test func reconcileFoldersDeletesOnlyWhenAbsentFromEveryFolder() throws {
+        let folderA = try tempDir(), folderB = try tempDir()
+        try seedDeckFile(named: "Alpha", in: folderA)
+        try seedDeckFile(named: "Beta", in: folderB)
+
+        let container = DeckStore.makeContainer()
+        let context = container.mainContext
+        store.loadAllFolders(into: context, from: [folderA, folderB])
+        #expect(try context.fetchCount(FetchDescriptor<Deck>()) == 2)
+
+        // Beta's file vanishes from folderB → reconcile across both folders drops only Beta.
+        try FileManager.default.removeItem(at: folderB.appendingPathComponent("Beta.cards"))
+        _ = store.reconcileFolders(into: context, from: [folderA, folderB])
+        #expect((try context.fetch(FetchDescriptor<Deck>())).map(\.name).sorted() == ["Alpha"])
+    }
+
     private func deckFilenames(_ dir: URL) throws -> [String] {
         try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
             .filter { DeckStore.isDeckFile($0) }

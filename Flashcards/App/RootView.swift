@@ -51,7 +51,7 @@ struct RootView: View {
             .task {
                 // Reflect external edits to the .deck files live; pause while studying.
                 watcher.isPaused = studyPlan != nil
-                watcher.start { DeckStore.shared.reconcile(into: context) }
+                watcher.start { DeckStore.shared.reconcileFolders(into: context) }
             }
             .onChange(of: decks.count) { _, _ in
                 // Drop any selected deck that vanished (delete / Delete All / external removal) so the
@@ -69,7 +69,7 @@ struct RootView: View {
             }
             .onChange(of: studyPlan != nil) { _, studying in
                 watcher.isPaused = studying
-                if !studying { DeckStore.shared.reconcile(into: context) }
+                if !studying { DeckStore.shared.reconcileFolders(into: context) }
             }
             .onChange(of: AppActions.shared.wipeTick) { _, _ in
                 // A destructive library action from the Settings window. Deselect any open deck FIRST,
@@ -96,7 +96,7 @@ struct RootView: View {
                     // Not while studying: a reconcile can delete cards the live
                     // StudySession still references (the watcher is paused for the same
                     // reason). The study-end handler above reconciles when it finishes.
-                    if studyPlan == nil { DeckStore.shared.reconcile(into: context) }
+                    if studyPlan == nil { DeckStore.shared.reconcileFolders(into: context) }
                 } else {
                     DeckStore.shared.persist(context)
                 }
@@ -105,8 +105,8 @@ struct RootView: View {
                 // The library folder changed (in Settings): re-point the watcher and reload.
                 watcher.stop()
                 watcher.isPaused = studyPlan != nil
-                watcher.start { DeckStore.shared.reconcile(into: context) }
-                if studyPlan == nil { DeckStore.shared.reconcile(into: context) }
+                watcher.start { DeckStore.shared.reconcileFolders(into: context) }
+                if studyPlan == nil { DeckStore.shared.reconcileFolders(into: context) }
             }
             #if os(macOS)
             .onChange(of: AppActions.shared.showFormattingGuideTick) { _, _ in

@@ -113,12 +113,16 @@ final class DeckStore {
 
     // MARK: Folder
 
-    /// The active library folder (see `LibraryLocation`), created if needed.
+    /// The active library folder (the **primary**, see `LibraryLocation`), created if needed.
     static func libraryURL() -> URL {
         let directory = LibraryLocation.shared.current
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
+
+    /// All library folders (primary first). New decks go to the primary; load/persist/reconcile span
+    /// all of them (1.8.0 multi-folder, macOS — a single-element set on iOS).
+    static func libraryURLs() -> [URL] { LibraryLocation.shared.folders }
 
     // MARK: Folder migration
 
@@ -249,6 +253,30 @@ final class DeckStore {
         return loaded
     }
 
+    /// Loads decks from **all** library folders, deduping by id (first-seen folder wins, so a copy of
+    /// the same deck in a second folder is ignored). The app's launch path; `loadAll` above stays for
+    /// tests + explicit-folder use. A deck's source folder is recorded in `urlByDeckID`, so `persist`
+    /// later writes it back where it came from.
+    @discardableResult
+    func loadAllFolders(into context: ModelContext, from folders: [URL] = DeckStore.libraryURLs()) -> Int {
+        var seen = Set<UUID>()
+        var loaded = 0
+        for folder in folders {
+            for url in Self.deckFiles(in: folder) {
+                guard let data = try? Data(contentsOf: url),
+                      let dto = try? DeckCodec.decodeDTO(data),
+                      !seen.contains(dto.id)
+                else { continue }
+                seen.insert(dto.id)
+                urlByDeckID[dto.id] = url
+                let deck = DeckCodec.makeDeck(from: dto, in: context)
+                persistedModifiedAt[dto.id] = deck.modifiedAt
+                loaded += 1
+            }
+        }
+        return loaded
+    }
+
     // MARK: Reconcile (external edits)
 
     /// Merges on-disk `.deck` files into an already-loaded context: inserts decks that
@@ -315,91 +343,140 @@ final class DeckStore {
         return changed
     }
 
+    /// Multi-folder reconcile (the app path): merges external edits across **all** library folders. A
+    /// deck counts as removed only when its file is gone from *every* folder, so a deck living in a
+    /// secondary folder is never deleted just because it isn't in the primary. Mirrors `reconcile`'s
+    /// merge, collecting DTOs from the whole folder set.
+    @discardableResult
+    func reconcileFolders(into context: ModelContext, from folders: [URL] = DeckStore.libraryURLs()) -> Bool {
+        var diskDTOs: [UUID: DeckCodec.DeckDTO] = [:]
+        var order: [UUID] = []
+        for folder in folders {
+            for url in Self.deckFiles(in: folder) {
+                guard let data = try? Data(contentsOf: url),
+                      let dto = try? DeckCodec.decodeDTO(data),
+                      diskDTOs[dto.id] == nil
+                else { continue }
+                diskDTOs[dto.id] = dto
+                order.append(dto.id)
+                urlByDeckID[dto.id] = url
+            }
+        }
+
+        let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+        var byID: [UUID: Deck] = [:]
+        for deck in existing { byID[deck.id] = deck }
+        var changed = false
+
+        // Removed only when absent from EVERY folder (and not a deck whose own write just failed).
+        for deck in existing where diskDTOs[deck.id] == nil && !unsavedDeckIDs.contains(deck.id) {
+            context.delete(deck)
+            urlByDeckID[deck.id] = nil
+            persistedModifiedAt[deck.id] = nil
+            changed = true
+        }
+        for id in order {
+            guard let dto = diskDTOs[id] else { continue }
+            if let deck = byID[id] {
+                if unsavedDeckIDs.contains(id) { continue }
+                let current = (try? DeckCodec.encode(deck)).flatMap { try? DeckCodec.decodeDTO($0) }
+                if current != dto {
+                    DeckCodec.update(deck, from: dto, in: context)
+                    changed = true
+                }
+                persistedModifiedAt[id] = deck.modifiedAt
+            } else {
+                let deck = DeckCodec.makeDeck(from: dto, in: context)
+                persistedModifiedAt[id] = deck.modifiedAt
+                changed = true
+            }
+        }
+        if changed { try? context.save() }
+        return changed
+    }
+
     // MARK: Persist
 
-    /// Writes every current deck to its file and removes `.deck` files for decks
-    /// that no longer exist (covers deletes and renames). Returns which decks, if any,
-    /// failed to write and notifies `PersistenceMonitor` so the failure is surfaced.
+    /// Writes every current deck to **its own folder** and removes orphaned `.cards` files. Each deck
+    /// saves back to the folder it came from (`urlByDeckID`), or the primary `directory` if it's new —
+    /// so a multi-folder library round-trips in place. Returns which decks failed to write, surfaced
+    /// via `PersistenceMonitor`.
     @discardableResult
     func persist(_ context: ModelContext, to directory: URL = DeckStore.libraryURL()) -> PersistResult {
         let decks = (try? context.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
-        var usedNames = Set<String>()
+        let primary = directory.standardizedFileURL
+        // Filenames are unique *per folder* (two folders may each hold a "Spanish.cards"); the written
+        // set + the prune compare lowercased absolute paths (case-insensitive macOS FS, see below).
+        var usedByFolder: [URL: Set<String>] = [:]
         var written = Set<String>()
+        var pruneFolders: Set<URL> = [primary]
         var failedIDs = Set<UUID>()
         var failedNames: [String] = []
 
         for deck in decks {
-            let filename = Self.uniqueFilename(for: deck, used: &usedNames)
-            let fileURL = directory.appendingPathComponent(filename)
-            // Skip re-encoding a deck unchanged since its last successful write AND still mapped to the
-            // same file — the modifiedAt check avoids the O(cards) JSON encode (and even touching the
-            // deck's cards) for every untouched deck, the dominant cost of saving a large library on
-            // each edit. The URL check forces a rewrite when a deck's canonical filename shifts without
-            // its content changing (e.g. a sibling rename frees up the shorter name), so the rename
-            // still lands + the old file prunes.
+            let folder = deckFolder(deck, primary: primary)
+            pruneFolders.insert(folder)
+            var used = usedByFolder[folder] ?? []
+            let filename = Self.uniqueFilename(for: deck, used: &used)
+            usedByFolder[folder] = used
+            let fileURL = folder.appendingPathComponent(filename)
+            let key = fileURL.standardizedFileURL.path.lowercased()
+
+            // modifiedAt gate (avoids the O(cards) encode for untouched decks) + URL check (forces a
+            // rewrite when the canonical filename or folder shifts, so the rename/move still lands).
             if persistedModifiedAt[deck.id] == deck.modifiedAt,
-               urlByDeckID[deck.id] == fileURL,
+               urlByDeckID[deck.id]?.standardizedFileURL == fileURL.standardizedFileURL,
                FileManager.default.fileExists(atPath: fileURL.path) {
-                written.insert(filename.lowercased())
+                written.insert(key)
                 continue
             }
             guard let data = try? DeckCodec.encode(deck) else {
-                failedIDs.insert(deck.id)
-                failedNames.append(deck.displayName)
-                continue
+                failedIDs.insert(deck.id); failedNames.append(deck.displayName); continue
             }
-            // Skip the write when the file already holds identical bytes. Without this, every
-            // change rewrites *all* deck files, and each rewrite wakes the folder watcher into a
-            // full reconcile — so a one-card edit re-encodes and re-reads the entire library.
-            // The file still counts as "written" so the prune step below won't remove it.
+            // Skip the write when the bytes are identical (don't wake the watcher); still "written".
             if let existing = try? Data(contentsOf: fileURL), existing == data {
-                written.insert(filename.lowercased())
-                urlByDeckID[deck.id] = fileURL
-                persistedModifiedAt[deck.id] = deck.modifiedAt
+                written.insert(key); urlByDeckID[deck.id] = fileURL; persistedModifiedAt[deck.id] = deck.modifiedAt
                 continue
             }
-            // Only count a file as "written" after the atomic write succeeds — otherwise the
-            // prune step could delete a deck's last good file on a transient failure.
+            // Only count "written" after the atomic write succeeds, so prune can't delete a good file.
             if (try? data.write(to: fileURL, options: .atomic)) != nil {
-                written.insert(filename.lowercased())
-                urlByDeckID[deck.id] = fileURL
-                persistedModifiedAt[deck.id] = deck.modifiedAt
+                written.insert(key); urlByDeckID[deck.id] = fileURL; persistedModifiedAt[deck.id] = deck.modifiedAt
             } else {
-                failedIDs.insert(deck.id)
-                failedNames.append(deck.displayName)
+                failedIDs.insert(deck.id); failedNames.append(deck.displayName)
                 persistedModifiedAt[deck.id] = nil   // write failed → force a fresh encode next time
             }
         }
-        // Only prune files with the current extension; legacy `.deck` files are converted by
-        // `migrateLegacyExtension` (write-then-delete) and never deleted out from under an
-        // unloaded deck here.
-        // Compare names case-insensitively: on the case-insensitive macOS filesystem, a rename
-        // that only changes case leaves the file we just wrote and the old directory entry as the
-        // same physical file under two spellings — a case-sensitive check would prune the live one.
-        for url in Self.deckFiles(in: directory)
-        where url.pathExtension == Self.fileExtension && !written.contains(url.lastPathComponent.lowercased()) {
-            // Never delete a file we can't read AND decode: it isn't provably an orphan of
-            // ours — it may be corrupt, a half-finished external write, or a newer format we
-            // didn't load — and pruning it would silently lose data. Only a file that decodes
-            // to a deck no longer present (or one whose own write just failed) is handled
-            // below; anything unreadable is kept.
-            guard let data = try? Data(contentsOf: url),
-                  let dto = try? DeckCodec.decodeDTO(data) else { continue }   // unreadable → keep
-            if failedIDs.contains(dto.id) { continue }                          // write just failed → keep
-            // A decodable file whose name isn't the canonical one we just wrote is treated as an
-            // orphan and removed — this is what cleans up the old file after a deck *rename*. The
-            // trade-off: a copy of a deck file kept in the same folder (same id, different name)
-            // is removed on the next save. Duplicate a deck in-app (it gets a fresh id) instead.
-            try? FileManager.default.removeItem(at: url)
+
+        // Prune ONLY folders that hold our decks (+ the primary) — never a folder we didn't write to.
+        // This is the multi-folder safety invariant: a deck in folder A is never removed because we
+        // persisted with folder B also registered (B isn't in `pruneFolders` unless a deck lives there).
+        // Within a pruned folder, a `.cards` file is an orphan iff it decodes to a deck no longer
+        // present and isn't a failed write; anything unreadable is kept (never delete what we can't decode).
+        for folder in pruneFolders {
+            for url in Self.deckFiles(in: folder)
+            where url.pathExtension == Self.fileExtension
+                && !written.contains(url.standardizedFileURL.path.lowercased()) {
+                guard let data = try? Data(contentsOf: url),
+                      let dto = try? DeckCodec.decodeDTO(data) else { continue }   // unreadable → keep
+                if failedIDs.contains(dto.id) { continue }                          // write just failed → keep
+                try? FileManager.default.removeItem(at: url)
+            }
         }
 
-        // Track decks with unsaved changes so reconcile won't revert/delete them from the
-        // stale disk copy before a save succeeds.
         unsavedDeckIDs = failedIDs
-
         let result = PersistResult(failedDeckNames: failedNames)
         PersistenceMonitor.shared.note(result)
         return result
+    }
+
+    /// The folder a deck currently lives in — its cached file's parent if that directory still exists,
+    /// else the primary. Lets `persist` write each deck back to its own folder.
+    private func deckFolder(_ deck: Deck, primary: URL) -> URL {
+        if let parent = urlByDeckID[deck.id]?.deletingLastPathComponent().standardizedFileURL,
+           FileManager.default.fileExists(atPath: parent.path) {
+            return parent
+        }
+        return primary
     }
 
     /// Deletes every deck from the context and removes all deck files in `directory` — the

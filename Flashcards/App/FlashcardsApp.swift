@@ -33,7 +33,7 @@ struct FlashcardsApp: App {
             // Relocate a review log an earlier build left in the (visible) library folder into
             // Application Support; no-op once moved.
             ReviewLog.migrateLegacy(from: DeckStore.libraryURL())
-            DeckStore.shared.loadAll(into: context)
+            DeckStore.shared.loadAllFolders(into: context)
         }
         _container = State(initialValue: container)
     }
