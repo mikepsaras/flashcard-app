@@ -1,6 +1,6 @@
 import Foundation
 
-/// Bridges the pure SM-2 algorithm to the SwiftData `Card` model, per direction.
+/// Bridges the scheduler to the SwiftData `Card` model, per direction.
 extension Card {
     /// Current scheduling state for a direction, extracted as a pure value.
     func schedulingState(_ direction: ReviewDirection = .forward) -> SchedulingState {
@@ -26,7 +26,7 @@ extension Card {
         direction == .forward ? lastReviewedAt : reverseLastReviewedAt
     }
 
-    /// Writes an SM-2 result back onto the card for a direction.
+    /// Writes a scheduling result back onto the card for a direction.
     func apply(_ state: SchedulingState, direction: ReviewDirection = .forward, reviewedAt: Date = .now) {
         switch direction {
         case .forward:

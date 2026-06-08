@@ -128,7 +128,7 @@ enum FSRS {
     /// Seed FSRS stability from an SM-2 card's interval the first time FSRS schedules it (interval ≈ S).
     static func seededStability(interval: Int) -> Double { max(Double(interval), 0.5) }
     /// Seed FSRS difficulty from an SM-2 ease factor — lower ease (harder) ⇒ higher difficulty.
-    static func seededDifficulty(easeFactor ef: Double) -> Double { 5.0 - (ef - SM2.defaultEaseFactor) * 2.0 }
+    static func seededDifficulty(easeFactor ef: Double) -> Double { 5.0 - (ef - SchedulingState.defaultEaseFactor) * 2.0 }
 }
 
 /// `Scheduler` conformer wrapping `FSRS`, selectable per deck (S2.4).

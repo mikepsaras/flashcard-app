@@ -1,7 +1,7 @@
 # Flashcards
 
 An ultra-clean native flashcard app for **macOS and iPhone**, built as a single
-SwiftUI multiplatform codebase. SM-2 spaced repetition, AI card generation, and
+SwiftUI multiplatform codebase. FSRS spaced repetition (SM-2 retired), AI card generation, and
 **file-based local storage** — each deck is its own `.cards` file.
 
 ## ✅ 1.8.0 shipped (read before touching models / study / persistence)
@@ -84,7 +84,7 @@ SDK=$(xcrun --sdk iphoneos --show-sdk-path)
 xcrun --sdk iphoneos swiftc -typecheck -sdk "$SDK" -target arm64-apple-ios18.0 \
   -swift-version 6 $(find Flashcards -name '*.swift')
 
-# Run the test suite (SM-2, study engine, snapshot rendering) on macOS
+# Run the test suite (FSRS, study engine, snapshot rendering) on macOS
 xcodebuild -project Flashcards.xcodeproj -scheme Flashcards -destination 'platform=macOS' test
 ```
 
@@ -98,15 +98,16 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
 
 ## Architecture
 
-- `Flashcards/Models` — `Deck`, `Card` (`@Model`). SM-2 state is stored inline on
+- `Flashcards/Models` — `Deck`, `Card` (`@Model`). Scheduling state is stored inline on
   `Card`, **per direction** (forward + reverse fields) so a deck can be studied both
   ways with independent schedules (`Deck.studyReversed`). Models are **CloudKit-safe**:
   every scalar defaulted, relationship optional with an inverse, no `@Attribute(.unique)`,
   `.cascade` delete.
-- `Flashcards/Scheduling` — pure, unit-tested SM-2 (`SM2.swift`, `Grade.swift`) +
-  `Card+Scheduling` bridge (direction-aware), and `ReviewDirection`.
+- `Flashcards/Scheduling` — pure, unit-tested **FSRS** (`FSRS.swift`, `Scheduler.swift`, `Grade.swift`) +
+  `Card+Scheduling` bridge (direction-aware), and `ReviewDirection`. SM-2 was retired; FSRS is the only
+  scheduler. Cards still carry the legacy interval/ease fields, which FSRS seeds its stability/difficulty from.
 - `Flashcards/Persistence` — **file-based storage**: each deck is a `.cards` JSON file in
-  `~/Documents/Flashcards` (the source of truth, **format v2**; legacy `.deck` files still
+  `~/Documents/Flashcards` (the source of truth, **format v4**; legacy `.deck` files still
   load). `DeckStore` builds an *in-memory* `ModelContainer`, loads the deck files at launch,
   and rewrites them after every change (and on scene-background); `DeckCodec` maps `@Model`
   ⇄ Codable DTOs. `persist` returns a `PersistResult` and reports failures via

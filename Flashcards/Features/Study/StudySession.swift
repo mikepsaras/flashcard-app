@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Drives a single study run: a queue of review items (cards in a direction), a current
-/// position, flip state, running ✓/✕ tallies, and an exact undo stack. SM-2 grades are
+/// position, flip state, running ✓/✕ tallies, and an exact undo stack. Grades are
 /// applied to each item's direction only when `trackLearning` is on. A miss in a real
 /// (tracked, non-practice) run re-inserts the card later in the same queue for one more
 /// look — a lightweight learning step — so the queue can grow during the run.
@@ -211,9 +211,9 @@ final class StudySession {
         ))
 
         if trackLearning && !isPractice {
-            // Resolve the scheduler per item from its deck, so a cross-deck Today queue advances each
-            // card with its own deck's algorithm (SM-2 or FSRS).
-            let scheduler = card.deck?.resolvedScheduler ?? SM2Scheduler()
+            // Resolve the scheduler from the card's deck (every deck uses FSRS); the fallback only
+            // covers a deckless card, which a real session never has.
+            let scheduler = card.deck?.resolvedScheduler ?? FSRSScheduler()
             let updated = scheduler.schedule(current: card.schedulingState(direction), grade: grade, now: now)
             card.apply(updated, direction: direction, reviewedAt: now)
             // A failed recall (Again) is a lapse — bump the whole-card counter so cards you keep
@@ -250,7 +250,7 @@ final class StudySession {
         }
 
         // Always restore the snapshot — never gate this on the *current* `trackLearning`
-        // value. If the grade applied an SM-2 change, this reverts it; if it didn't (tracking
+        // value. If the grade applied a scheduling change, this reverts it; if it didn't (tracking
         // was off at grade time), restoring the captured state is a no-op. Reading the live
         // flag instead would leave a card advanced when tracking is toggled off after grading.
         move.item.card.restore(

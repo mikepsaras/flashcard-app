@@ -404,11 +404,11 @@ struct StudySessionView: View {
     }
 
     /// Projected next interval per grade for the CURRENT card — a developer diagnostic, returned only
-    /// when the hidden toggle is on. Runs SM-2 against the card's per-direction state for each grade.
+    /// when the hidden toggle is on. Runs the deck's scheduler against the card's per-direction state.
     private var intervalProvider: ((Grade) -> String)? {
         guard showGradeIntervals, let item = session.current else { return nil }
         let state = item.card.schedulingState(item.direction)
-        let scheduler = item.card.deck?.resolvedScheduler ?? SM2Scheduler()
+        let scheduler = item.card.deck?.resolvedScheduler ?? FSRSScheduler()
         return { grade in Self.intervalText(scheduler.schedule(current: state, grade: grade).interval) }
     }
 

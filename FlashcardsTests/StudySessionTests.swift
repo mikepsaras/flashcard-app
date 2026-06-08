@@ -133,10 +133,10 @@ final class StudySessionTests {
     }
 
     @Test func sessionUsesTheDecksScheduler() {
-        // An FSRS deck's due card gets FSRS memory state when graded — proving the session resolves
-        // the scheduler per-item from the card's deck (SM-2 would leave stability at 0).
+        // A due card gets FSRS memory state when graded — proving the session resolves the deck's
+        // scheduler and applies it (a never-scheduled card starts at stability 0).
         let context = container.mainContext
-        let deck = Deck(name: "FSRS"); deck.schedulerKind = .fsrs
+        let deck = Deck(name: "FSRS")
         context.insert(deck)
         let card = Card(term: "a", definition: "b", deck: deck)   // new + due
         context.insert(card)

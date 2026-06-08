@@ -1,7 +1,8 @@
 import Foundation
 
-/// A SuperMemo-2 quality grade (0–5). The study UI emits **Again / Good / Easy** (the 1.8.0 3-button
-/// set); `.hard` stays in the enum because the SM-2/FSRS schedulers map it, but no UI path produces it.
+/// A 0–5 quality grade (SM-2-derived raw values, kept as the scale FSRS maps from). The study UI emits
+/// **Again / Good / Easy** (the 1.8.0 3-button set); `.hard` stays in the enum because the scheduler
+/// maps it (FSRS rating 2), but no UI path produces it.
 enum Grade: Int, CaseIterable, Identifiable {
     case again = 0   // didn't know it / blackout
     case hard  = 3
@@ -13,6 +14,6 @@ enum Grade: Int, CaseIterable, Identifiable {
     /// Known/unknown convenience mapping (used by tests and known-only callers).
     static func from(known: Bool) -> Grade { known ? .good : .again }
 
-    /// SM-2 treats q >= 3 as a successful recall.
+    /// A grade of q >= 3 counts as a successful recall.
     var isCorrect: Bool { rawValue >= 3 }
 }

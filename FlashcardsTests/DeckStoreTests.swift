@@ -167,17 +167,6 @@ import SwiftData
         #expect(c.isLeech)
     }
 
-    @Test func schedulerSelectionRoundTrips() throws {
-        let container = DeckStore.makeContainer()
-        let deck = Deck(name: "FSRS deck")
-        deck.schedulerKind = .fsrs
-        container.mainContext.insert(deck)
-        let dto = try DeckCodec.decodeDTO(DeckCodec.encode(deck))
-        #expect(dto.scheduler == "fsrs")
-        let other = DeckStore.makeContainer()
-        #expect(DeckCodec.makeDeck(from: dto, in: other.mainContext).schedulerKind == .fsrs)
-    }
-
     // MARK: Answer mode (1.8.0)
 
     @Test func clozeAnswerModeRoundTrips() throws {

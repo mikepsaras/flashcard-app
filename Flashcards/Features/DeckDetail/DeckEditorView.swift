@@ -27,7 +27,6 @@ struct DeckEditorView: View {
     @State private var showLabel: Bool
     @State private var studyReversed: Bool
     @State private var defaultAnswerMode: AnswerMode
-    @State private var schedulerKind: SchedulerKind
     @State private var section: String
     @State private var showSectionsInStudy: Bool
     @State private var showingAI = false
@@ -46,7 +45,6 @@ struct DeckEditorView: View {
             _showLabel = State(initialValue: true)
             _studyReversed = State(initialValue: false)
             _defaultAnswerMode = State(initialValue: .flip)
-            _schedulerKind = State(initialValue: .fsrs)   // new decks default to FSRS (validated)
             _section = State(initialValue: "")
             _showSectionsInStudy = State(initialValue: true)
             _showAdvanced = State(initialValue: false)
@@ -61,7 +59,6 @@ struct DeckEditorView: View {
             _showLabel = State(initialValue: !deck.backLabel.isEmpty)
             _studyReversed = State(initialValue: deck.studyReversed)
             _defaultAnswerMode = State(initialValue: deck.defaultAnswerMode)
-            _schedulerKind = State(initialValue: deck.schedulerKind)
             _section = State(initialValue: deck.section)
             _showSectionsInStudy = State(initialValue: deck.showSectionsInStudy)
             _showAdvanced = State(initialValue: true)
@@ -133,11 +130,6 @@ struct DeckEditorView: View {
                                 answerModeRow
                                 caption(answerModeCaption)
                             }
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                schedulerRow
-                                caption("FSRS models memory more precisely and is the default for new decks; it seeds from your existing progress when you switch a deck. SM-2 is the classic algorithm.")
-                            }
                         }
                         .padding(.top, 12)
                     } label: {
@@ -201,22 +193,6 @@ struct DeckEditorView: View {
         case .type:  "Type the answer (checked case-insensitively); whether you got it right sets the pass/fail objectively — the most honest signal, and stronger recall."
         case .cloze: ""
         }
-    }
-
-    private var schedulerRow: some View {
-        HStack {
-            Text("Scheduler").font(Typography.body)
-            Spacer(minLength: 8)
-            Picker("", selection: $schedulerKind) {
-                ForEach(SchedulerKind.allCases) { Text($0.title).tag($0) }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .fieldBox()
     }
 
     private func toggleRow(_ title: String, _ isOn: Binding<Bool>) -> some View {
@@ -363,7 +339,6 @@ struct DeckEditorView: View {
         let trimmedLabel = backLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = !showLabel ? "" : (trimmedLabel.isEmpty ? "Definition" : trimmedLabel)
         let deck = Deck(name: trimmed.isEmpty ? "AI Deck" : trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
-        deck.schedulerKind = schedulerKind
         deck.defaultAnswerMode = defaultAnswerMode
         context.insert(deck)
         return deck
@@ -379,7 +354,6 @@ struct DeckEditorView: View {
         switch mode {
         case .new:
             let deck = Deck(name: trimmed, deckDescription: deckDescription, colorHex: colorHex, backLabel: label, studyReversed: studyReversed, section: trimmedSection, showSectionsInStudy: showSectionsInStudy, icon: icon)
-            deck.schedulerKind = schedulerKind
             deck.defaultAnswerMode = defaultAnswerMode
             context.insert(deck)
         case .edit(let deck):
@@ -389,7 +363,6 @@ struct DeckEditorView: View {
             deck.backLabel = label
             deck.studyReversed = studyReversed
             deck.defaultAnswerMode = defaultAnswerMode
-            deck.schedulerKind = schedulerKind
             deck.section = trimmedSection
             deck.showSectionsInStudy = showSectionsInStudy
             deck.icon = icon

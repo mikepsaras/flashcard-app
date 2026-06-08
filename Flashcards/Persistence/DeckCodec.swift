@@ -32,8 +32,6 @@ enum DeckCodec {
         var defaultAnswerMode: String?
         // Optional deck icon (SF Symbol name or themed preset id); omitted when default.
         var icon: String?
-        // v3: scheduling algorithm (a SchedulerKind raw value); omitted when default (SM-2).
-        var scheduler: String?
         var createdAt: Date
         var modifiedAt: Date
         var cards: [CardDTO]
@@ -106,8 +104,6 @@ enum DeckCodec {
             defaultAnswerMode: deck.defaultAnswerModeRaw,
             // Omit when default so decks using the standard icon re-encode without noise.
             icon: deck.icon.isEmpty ? nil : deck.icon,
-            // Omit when default (SM-2) so SM-2 decks re-encode unchanged.
-            scheduler: deck.schedulerRaw.isEmpty ? nil : deck.schedulerRaw,
             createdAt: deck.createdAt,
             modifiedAt: deck.modifiedAt,
             // Encode in display order — unsectioned first, then each section in `sectionOrder`,
@@ -143,7 +139,6 @@ enum DeckCodec {
         deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
         deck.defaultAnswerModeRaw = dto.defaultAnswerMode ?? AnswerMode.flip.rawValue
         deck.icon = dto.icon ?? ""
-        deck.schedulerRaw = dto.scheduler ?? ""
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
         context.insert(deck)
@@ -172,7 +167,6 @@ enum DeckCodec {
         deck.showSectionsInStudy = dto.showSectionsInStudy ?? true
         deck.defaultAnswerModeRaw = dto.defaultAnswerMode ?? AnswerMode.flip.rawValue
         deck.icon = dto.icon ?? ""
-        deck.schedulerRaw = dto.scheduler ?? ""
         deck.createdAt = dto.createdAt
         deck.modifiedAt = dto.modifiedAt
 
@@ -247,7 +241,7 @@ enum DeckCodec {
         card.lastReviewedAt = dto.lastReviewedAt
         card.section = dto.section ?? ""
         card.sortOrder = fileOrder
-        card.reverseEaseFactor = dto.reverseEaseFactor ?? SM2.defaultEaseFactor
+        card.reverseEaseFactor = dto.reverseEaseFactor ?? SchedulingState.defaultEaseFactor
         card.reverseInterval = dto.reverseInterval ?? 0
         card.reverseRepetitions = dto.reverseRepetitions ?? 0
         card.reverseDueDate = dto.reverseDueDate ?? dto.createdAt

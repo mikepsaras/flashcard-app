@@ -1,44 +1,40 @@
 import Foundation
 
-/// Abstraction over a spaced-repetition algorithm, so the study engine can swap or select schedulers
-/// (SM-2 today; FSRS in Phase 2, chosen per deck in S2.4) without changing its call sites. Pure value
-/// semantics — inject `now`/`calendar` for repeatable tests, exactly like `SM2`.
+/// Abstraction over a spaced-repetition algorithm — a thin seam so the study engine resolves a deck's
+/// scheduler without hard-coding the type. FSRS is the only conformer (`FSRSScheduler`); SM-2 was
+/// retired. Pure value semantics — inject `now`/`calendar` for repeatable tests.
 protocol Scheduler: Sendable {
     /// The next scheduling state for a card after grading it `grade` at `now`.
     func schedule(current: SchedulingState, grade: Grade, now: Date, calendar: Calendar) -> SchedulingState
 }
 
 extension Scheduler {
-    /// Convenience with the usual defaults (mirrors `SM2.schedule`'s defaulted parameters).
+    /// Convenience overload with the usual defaults.
     func schedule(current: SchedulingState, grade: Grade, now: Date = .now) -> SchedulingState {
         schedule(current: current, grade: grade, now: now, calendar: .current)
     }
 }
 
-/// The canonical SuperMemo-2 scheduler, delegating to the pure `SM2` algorithm. The default scheduler
-/// until FSRS lands; kept as a selectable conformer thereafter for back-compat and A/B.
-struct SM2Scheduler: Scheduler {
-    func schedule(current: SchedulingState, grade: Grade, now: Date, calendar: Calendar) -> SchedulingState {
-        SM2.schedule(current: current, grade: grade, now: now, calendar: calendar)
-    }
-}
+/// Mutable scheduling state for one card — a pure value type (no SwiftData), so the scheduler is
+/// trivially unit-testable. `easeFactor`/`interval`/`repetitions` are legacy SM-2-era fields the card
+/// still persists; FSRS seeds its stability/difficulty from them the first time it schedules a card.
+struct SchedulingState: Equatable {
+    /// Baseline ease for a fresh card, and the point FSRS maps to its default seeded difficulty.
+    static let defaultEaseFactor = 2.5
 
-/// Which scheduling algorithm a deck uses, backed by `Deck.schedulerRaw`. New decks default to FSRS
-/// (validated against py-fsrs 6.3.1 — see `FSRS`); existing decks stay on SM-2 until opted in.
-enum SchedulerKind: String, CaseIterable, Identifiable, Sendable {
-    case sm2, fsrs
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .sm2:  "SM-2 (classic)"
-        case .fsrs: "FSRS"
-        }
-    }
-    var scheduler: Scheduler {
-        switch self {
-        case .sm2:  SM2Scheduler()
-        case .fsrs: FSRSScheduler(weights: FSRSWeights.current())
-        }
+    var easeFactor: Double
+    var interval: Int      // days until next review
+    var repetitions: Int
+    var dueDate: Date
+    // FSRS memory state. `stability`/`difficulty` are 0 until FSRS first schedules the card;
+    // `lastReviewedAt` is the previous review time FSRS needs to compute elapsed days (populated by the
+    // `Card` bridge). All defaulted so simple constructions are unaffected.
+    var stability: Double = 0
+    var difficulty: Double = 0
+    var lastReviewedAt: Date?
+
+    static func initial(now: Date = .now) -> SchedulingState {
+        SchedulingState(easeFactor: defaultEaseFactor, interval: 0, repetitions: 0, dueDate: now)
     }
 }
 

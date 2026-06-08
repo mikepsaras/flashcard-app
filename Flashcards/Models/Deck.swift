@@ -17,9 +17,6 @@ final class Deck {
     /// When true, each card is also studied definition → term, with its own independent
     /// spaced-repetition schedule.
     var studyReversed: Bool = false
-    /// Which scheduling algorithm this deck studies with (a `SchedulerKind` raw value). Empty ⇒ the
-    /// default, SM-2; `"fsrs"` opts the deck into FSRS. Defaulted ⇒ CloudKit-safe.
-    var schedulerRaw: String = ""
     /// The deck's **default** answer mode for its cards (an `AnswerMode` raw value — `flip`/`type`).
     /// Cards with an empty `answerModeRaw` inherit this; cloze is per-card only. Defaulted ⇒
     /// CloudKit-safe. (1.8.0 replacement for `typeToAnswer` + `gradingMode`; removed at cutover.)
@@ -152,14 +149,9 @@ extension Deck {
     /// "Untitled Deck" fallback the UI would otherwise repeat at every call site.
     var displayName: String { name.isEmpty ? "Untitled Deck" : name }
 
-    /// The deck's scheduling algorithm, backed by `schedulerRaw` (empty ⇒ SM-2). Setting SM-2 stores
-    /// empty so the default re-encodes unchanged (no phantom edits).
-    var schedulerKind: SchedulerKind {
-        get { SchedulerKind(rawValue: schedulerRaw) ?? .sm2 }
-        set { schedulerRaw = newValue == .sm2 ? "" : newValue.rawValue }
-    }
-    /// The `Scheduler` instance for this deck's chosen algorithm.
-    var resolvedScheduler: Scheduler { schedulerKind.scheduler }
+    /// The scheduler this deck studies with — FSRS for every deck (SM-2 was retired), using the
+    /// learner's personalized weights when present.
+    var resolvedScheduler: Scheduler { FSRSScheduler(weights: FSRSWeights.current()) }
 
     /// The deck's default answer mode (flip/type), backed by `defaultAnswerModeRaw` (1.8.0).
     var defaultAnswerMode: AnswerMode {
