@@ -28,6 +28,8 @@ struct BulkAddView: View {
 
     @State private var rows: [Row]
     @State private var section: String
+    /// The answer mode for the whole batch (flip / type / cloze), defaulting to the deck's default.
+    @State private var answerMode: AnswerMode
     @State private var addCount = 1
     @State private var addCountText = "1"
     @State private var sharedSide: SharedSide?
@@ -38,6 +40,7 @@ struct BulkAddView: View {
         self.deck = deck
         _rows = State(initialValue: (0..<max(startCount, 1)).map { _ in Row() })
         _section = State(initialValue: section)
+        _answerMode = State(initialValue: deck.defaultAnswerMode)
     }
 
     private func isFilled(_ row: Row) -> Bool {
@@ -49,12 +52,13 @@ struct BulkAddView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    modeRow
                     if !deck.sectionOrder.isEmpty { sectionRow }
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, _ in
                         cardRow(index, $rows[index])
                     }
                     addControls
-                    Text("Front & back support Markdown and LaTeX ($…$) — a preview appears as you format.")
+                    Text(hintText)
                         .font(.caption).foregroundStyle(.secondary).padding(.top, 2)
                 }
                 .padding(20)
@@ -101,6 +105,31 @@ struct BulkAddView: View {
         .fieldBox()
     }
 
+    /// Answer mode for the whole batch (1.8.0). Set once here; per-card overrides live in the card editor.
+    private var modeRow: some View {
+        HStack {
+            Text("Answer mode").font(Typography.body)
+            Spacer(minLength: 8)
+            Picker("Answer mode", selection: $answerMode.animation()) {
+                ForEach(AnswerMode.allCases) { Text($0.title).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .fieldBox()
+    }
+
+    private var isCloze: Bool { answerMode == .cloze }
+
+    private var hintText: String {
+        isCloze
+            ? "Wrap the answer in {{c1::…}} to hide it while studying. Markdown & LaTeX ($…$) supported."
+            : "Front & back support Markdown and LaTeX ($…$) — a preview appears as you format."
+    }
+
     /// One card as a titled group ("Card N") with labeled Front/Back fields — so each Front/Back
     /// pair reads as its own card and the labels stay visible as you type (unlike placeholders).
     @ViewBuilder private func cardRow(_ index: Int, _ row: Binding<Row>) -> some View {
@@ -121,18 +150,23 @@ struct BulkAddView: View {
                     .help("Remove this card")
                 }
             }
-            bulkField("Front") {
-                // Vertical axis so a long front WRAPS instead of scrolling sideways; on macOS this
-                // still commits on Return (→ addRowIfLast) and accepts a multi-line paste (→ split).
-                TextField("", text: row.front, axis: .vertical)
-                    .lineLimit(1...4)
-                    .focused($focused, equals: .front(id))
-                    .onSubmit { addRowIfLast(id) }
-                    .onChange(of: row.wrappedValue.front) { _, v in if v.contains("\n") { paste(v, into: id) } }
+            if isCloze {
+                // Cloze is one field — the markup carries both the prompt (blanked) and the answer.
+                MultilineField(label: "Cloze text", placeholder: "The {{c1::sun}} is a star.", text: row.front, minHeight: 64)
+            } else {
+                bulkField("Front") {
+                    // Vertical axis so a long front WRAPS instead of scrolling sideways; on macOS this
+                    // still commits on Return (→ addRowIfLast) and accepts a multi-line paste (→ split).
+                    TextField("", text: row.front, axis: .vertical)
+                        .lineLimit(1...4)
+                        .focused($focused, equals: .front(id))
+                        .onSubmit { addRowIfLast(id) }
+                        .onChange(of: row.wrappedValue.front) { _, v in if v.contains("\n") { paste(v, into: id) } }
+                }
+                MultilineField(label: answerMode == .type ? "Answer" : "Back", placeholder: "", text: row.back, minHeight: 64)
             }
-            MultilineField(label: "Back", placeholder: "", text: row.back, minHeight: 64)
             if hasFormatting(row.wrappedValue.front) || hasFormatting(row.wrappedValue.back) {
-                bulkPreview(front: row.wrappedValue.front, back: row.wrappedValue.back)
+                bulkPreview(front: row.wrappedValue.front, back: row.wrappedValue.back, cloze: isCloze)
             }
         }
         .padding(14)
@@ -148,14 +182,17 @@ struct BulkAddView: View {
     }
 
     /// Live render of a formatted row, in the same markdown+LaTeX engine the card uses.
-    @ViewBuilder private func bulkPreview(front: String, back: String) -> some View {
+    @ViewBuilder private func bulkPreview(front: String, back: String, cloze: Bool) -> some View {
+        // Mirror how the card appears in study: a cloze shows the blanked prompt + the revealed answer.
+        let shownFront = cloze ? Cloze.front(front) : front
+        let shownBack = cloze ? Cloze.back(front) : back
         VStack(alignment: .leading, spacing: 6) {
             Label("Preview", systemImage: "eye")
                 .font(.system(.caption2, weight: .medium)).foregroundStyle(.tertiary)
             VStack(alignment: .leading, spacing: 6) {
-                if !front.isEmpty { MarkdownText(text: front, baseSize: 15, weight: .semibold) }
-                if !back.isEmpty {
-                    MarkdownText(text: back, baseSize: 14, mathColor: MathColor.secondary).foregroundStyle(.secondary)
+                if !shownFront.isEmpty { MarkdownText(text: shownFront, baseSize: 15, weight: .semibold) }
+                if !shownBack.isEmpty {
+                    MarkdownText(text: shownBack, baseSize: 14, mathColor: MathColor.secondary).foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -289,10 +326,15 @@ struct BulkAddView: View {
         // New cards land in the chosen section in row order, appended after any existing cards.
         if !section.isEmpty && !deck.sectionOrder.contains(section) { deck.sectionOrder.append(section) }
         var order = deck.nextSortOrder(inSection: section)
+        // Store the mode explicitly only when it differs from the deck default, so a card matching the
+        // default re-encodes without an answerMode key (inherit). Cloze (never a deck default) is always set.
+        let explicitMode = answerMode == deck.defaultAnswerMode ? "" : answerMode.rawValue
         var added = 0
         for row in rows where isFilled(row) {
-            context.insert(Card(term: row.front.trimmingCharacters(in: .whitespacesAndNewlines),
-                                definition: row.back, deck: deck, section: section, sortOrder: order))
+            let card = Card(term: row.front.trimmingCharacters(in: .whitespacesAndNewlines),
+                            definition: isCloze ? "" : row.back, deck: deck, section: section, sortOrder: order)
+            card.answerModeRaw = explicitMode
+            context.insert(card)
             order += 1
             added += 1
         }
