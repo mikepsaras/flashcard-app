@@ -444,5 +444,49 @@ struct SnapshotGalleryTests {
             size: CGSize(width: 1040, height: 820), name: "27b_card_bullets_front")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/27b_card_bullets_front.png"))
     }
+
+    /// The 1.8.0 editable study-card composer surface: the card itself is the editing field. Captures
+    /// the three faces — front, the flipped back (with its accent label), and a cloze card — on the
+    /// real study-card chrome (surface, section chip, flip pill). Text regions are AppKit-backed
+    /// editors that render blank under ImageRenderer, so the placeholders stand in for the typed text;
+    /// this verifies the layout/chrome the rebuild is about.
+    @Test func renderEditableCard() throws {
+        try Snapshot.write(
+            HStack(spacing: 20) {
+                EditableCardHost(mode: .flip, showingBack: false, section: "Biology")
+                EditableCardHost(mode: .flip, showingBack: true)
+                EditableCardHost(mode: .cloze, showingBack: false)
+            }
+            .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 1180, height: 380), name: "33_editable_card")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/33_editable_card.png"))
+    }
+}
+
+/// Hosts an `EditableFlashcard` for snapshots — it needs a `@FocusState` and `@State` bindings, which
+/// only a view can own.
+private struct EditableCardHost: View {
+    let mode: AnswerMode
+    @State var front = ""
+    @State var back = ""
+    @State var showingBack: Bool
+    var section: String? = nil
+    private let id = UUID()
+    @FocusState private var focus: CardEditorField?
+
+    init(mode: AnswerMode, showingBack: Bool, section: String? = nil) {
+        self.mode = mode
+        _showingBack = State(initialValue: showingBack)
+        self.section = section
+    }
+
+    var body: some View {
+        EditableFlashcard(
+            id: id, front: $front, back: $back, showingBack: $showingBack,
+            mode: mode, backLabel: "Definition", section: section,
+            accent: Theme.accent, minHeight: 300, focus: $focus
+        )
+        .frame(width: 360)
+    }
 }
 #endif

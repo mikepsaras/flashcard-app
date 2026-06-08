@@ -4,23 +4,23 @@ An ultra-clean native flashcard app for **macOS and iPhone**, built as a single
 SwiftUI multiplatform codebase. SM-2 spaced repetition, AI card generation, and
 **file-based local storage** — each deck is its own `.cards` file.
 
-## 🚧 1.8.0 rework in progress (read before touching models / study / persistence)
+## ✅ 1.8.0 shipped (read before touching models / study / persistence)
 
-A **clean-break** rework is underway — full plan in `BACKLOG.md` → "1.8.0 — Editor &
-Answer-Mode rework". The Architecture notes below will lag reality until each phase lands.
-Key changes:
-- **Answer mode is per-card** — `Card.answerMode` (`flip` / `type` / `cloze`). `Card.cardType` /
-  `typeRaw` and the `CardType` enum are being **deleted** (cloze becomes an answer mode). The
-  deck carries a default (`Deck.defaultAnswerMode`); cards inherit or override.
-- **Grading is 3-button only — Again / Good / Easy.** The 2-button system, `GradingMode`, and
-  `Deck.gradingMode` are **deleted**. (`Grade.hard` stays in the enum for the schedulers; the UI
-  never emits it.)
-- **Old `.cards` files are NOT supported** — fresh `formatVersion`, no compat machinery; first
-  launch moves old files into `Pre-1.8 Backup/` and resets history (review log + StudyStats).
-- **Multiple library folders (macOS)** — `LibraryLocation` becomes a folder set; persist/prune
-  go folder-scoped. iOS stays single-folder.
-- **Dropped from scope:** multiple-choice, multi-answer, answer synonyms. **Import/export is
-  untouched** (a separate future engine revamp).
+The **clean-break** rework landed and shipped as **1.8.0** — full history in `BACKLOG.md` → "1.8.0 —
+Editor & Answer-Mode rework". What it established:
+- **Answer mode is per-card** — `Card.answerModeRaw` resolves to an `AnswerMode` (`flip` / `type` /
+  `cloze`); `CardType`/`typeRaw` and the old grading-mode axis are gone (cloze is now an answer mode).
+  The deck carries a default (`Deck.defaultAnswerMode`, flip/type); cards inherit or override.
+- **Grading is 3-button only — Again / Good / Easy.** `GradingMode`/`Deck.gradingMode` are deleted.
+  (`Grade.hard` stays in the enum for the schedulers; the UI never emits it.)
+- **Clean `.cards` v4 format** — old v1–v3 files are ignored by the decoder (never read or pruned); the
+  one-time first-launch history reset already ran at the 1.7.5 v4 baseline.
+- **Multiple library folders (macOS)** — `LibraryLocation` is a folder set; persist/prune are
+  folder-scoped. iOS stays single-folder.
+- **Editable study-card editor** — `BulkAddView`'s editing surface **is the study card**
+  (`EditableFlashcard` on the shared `StudyCardChrome`): edit the front in place, flip to edit the back,
+  cloze edits the `{{…}}` markup with a live preview. Mode/section/elaboration are a minimal surround.
+- **Dropped from scope:** multiple-choice, multi-answer, answer synonyms. Import/export untouched.
 
 ## Git & syncing (read first — more than one agent works in this folder)
 
@@ -118,12 +118,14 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   library; `SeedData` survives only for previews/snapshots). At launch `migrateLegacyExtension`
   renames any legacy `.deck` files to `.cards` in place (write-then-delete, never destructive).
 - `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review queue,
-  search, sort, duplicate, drag-drop import), `DeckDetail` (CRUD editors + **bulk add**
-  (`BulkAddView` grid + "Add & Add Another") + multi-select / Return-to-open / bulk delete +
-  duplicate + move-card + Reset Progress; **JSON/CSV import/export gated behind Settings →
+  search, sort, duplicate, drag-drop import), `DeckDetail` (the unified card composer
+  `BulkAddView` — its editing surface is an **`EditableFlashcard`** (the study card, edited in place:
+  front face, flip to the back, cloze on-card with a live preview; shared `StudyCardChrome`), opening
+  with one card and growing to many; + multi-select / Return-to-open / bulk delete + duplicate +
+  move-card + Reset Progress; **JSON/CSV import/export gated behind Settings →
   Advanced** via `CSVCodec`/`CardListCodec`), `Study` (`StudySession`
   `@Observable @MainActor` state machine over `ReviewItem`s — cards in a direction —
-  full-screen UI driven by a `StudyPlan`, 2- or 4-button grading, keyboard shortcuts,
+  full-screen UI driven by a `StudyPlan`, 3-button grading (Again/Good/Easy), keyboard shortcuts,
   near-single-pass review (a miss reschedules sooner **and** earns one more look later in the
   same session — a lightweight in-session learning step, capped per card), session-size cap;
   `StudyStats` tracks the daily streak), `AI`

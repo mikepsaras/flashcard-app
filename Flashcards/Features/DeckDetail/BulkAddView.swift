@@ -19,9 +19,10 @@ struct BulkAddView: View {
         let id = UUID()
         var front = ""
         var back = ""
+        /// Which face of this card is being edited (flip/type). Cloze ignores it (single face).
+        var showingBack = false
     }
 
-    private enum Field: Hashable { case front(UUID), back(UUID) }
     private enum SharedSide {
         case front, back
         var title: String { self == .back ? "Same back" : "Same front" }
@@ -38,7 +39,10 @@ struct BulkAddView: View {
     @State private var addCountText = "1"
     @State private var sharedSide: SharedSide?
     @State private var sharedValue = ""
-    @FocusState private var focused: Field?
+    @FocusState private var focused: CardEditorField?
+
+    /// The deck's accent color — the editable card matches the study card's tint.
+    private var accent: Color { Color(hex: deck.colorHex) }
 
     init(deck: Deck, section: String = "", startCount: Int = 1, editing: Card? = nil) {
         self.deck = deck
@@ -149,16 +153,18 @@ struct BulkAddView: View {
 
     private var hintText: String {
         isCloze
-            ? "Wrap the answer in {{c1::…}} to hide it while studying. Markdown & LaTeX ($…$) supported."
-            : "Front & back support Markdown and LaTeX ($…$) — a preview appears as you format."
+            ? "Wrap answers in {{c1::…}} — the blanks show right on the card. Markdown & LaTeX ($…$) supported."
+            : "Edit the card as you'll study it — tap Flip to edit the back. Markdown & LaTeX ($…$) supported."
     }
 
-    /// One card as a titled group ("Card N") with labeled Front/Back fields — so each Front/Back
-    /// pair reads as its own card and the labels stay visible as you type (unlike placeholders).
+    /// One card, rendered as the **editable study card** itself: you edit the front right on the front
+    /// face and flip it to edit the back (cloze is one face with the blanks visible). Two-plus cards get
+    /// a small "Card N" header + remove above the card; a single card is just the card. A cloze card
+    /// shows a live "in study" preview beneath; flip/type cards are already WYSIWYG, so they preview only
+    /// when there's Markdown/LaTeX worth rendering.
     @ViewBuilder private func cardRow(_ index: Int, _ row: Binding<Row>) -> some View {
         let id = row.wrappedValue.id
         VStack(alignment: .leading, spacing: 10) {
-            // A single card reads as a clean editor (no header); 2+ get numbered headers + remove.
             if rows.count > 1 {
                 HStack {
                     Text("Card \(index + 1)")
@@ -173,35 +179,35 @@ struct BulkAddView: View {
                     .help("Remove this card")
                 }
             }
-            if isCloze {
-                // Cloze is one field — the markup carries both the prompt (blanked) and the answer.
-                MultilineField(label: "Cloze text", placeholder: "The {{c1::sun}} is a star.", text: row.front, minHeight: isEditing ? 120 : 64)
-            } else if isEditing {
-                // Editing one card: plain multi-line Front/Back (no rapid-add paste-split).
-                MultilineField(label: "Front", placeholder: "Front of the card", text: row.front, minHeight: 56)
-                MultilineField(label: answerMode == .type ? "Answer" : "Back", placeholder: "Back of the card", text: row.back, minHeight: 120)
-            } else {
-                bulkField("Front") {
-                    // Vertical axis so a long front WRAPS instead of scrolling sideways; on macOS this
-                    // still commits on Return (→ addRowIfLast) and accepts a multi-line paste (→ split).
-                    TextField("", text: row.front, axis: .vertical)
-                        .lineLimit(1...4)
-                        .focused($focused, equals: .front(id))
-                        .onSubmit { addRowIfLast(id) }
-                        .onChange(of: row.wrappedValue.front) { _, v in if v.contains("\n") { paste(v, into: id) } }
-                }
-                MultilineField(label: answerMode == .type ? "Answer" : "Back", placeholder: "", text: row.back, minHeight: 64)
+
+            EditableFlashcard(
+                id: id,
+                front: row.front,
+                back: row.back,
+                showingBack: row.showingBack,
+                mode: answerMode,
+                backLabel: deck.backLabel,
+                section: section.isEmpty ? nil : section,
+                accent: accent,
+                minHeight: isEditing ? 280 : 230,
+                rapidFront: !isEditing,
+                onFrontSubmit: { addRowIfLast(id) },
+                focus: $focused
+            )
+            // Rapid-add paste-splitting (non-cloze): a delimited multi-line paste in the front becomes
+            // one card per line. Editing one card never splits; cloze is a single field.
+            .onChange(of: row.wrappedValue.front) { _, v in
+                if !isEditing, !isCloze, v.contains("\n") { paste(v, into: id) }
             }
-            // Cloze always previews once it has text (the {{…}} blanks are exactly what you want to
-            // see); other modes preview only when there's Markdown/LaTeX to render.
-            if (isCloze && !row.wrappedValue.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                || hasFormatting(row.wrappedValue.front) || hasFormatting(row.wrappedValue.back) {
-                bulkPreview(front: row.wrappedValue.front, back: row.wrappedValue.back, cloze: isCloze)
+
+            if isCloze {
+                if !row.wrappedValue.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    bulkPreview(front: row.wrappedValue.front, back: row.wrappedValue.back, cloze: true)
+                }
+            } else if hasFormatting(row.wrappedValue.front) || hasFormatting(row.wrappedValue.back) {
+                bulkPreview(front: row.wrappedValue.front, back: row.wrappedValue.back, cloze: false)
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.cardSurface))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.06)))
     }
 
     /// Whether a field contains markdown/LaTeX worth previewing — so plain rows stay compact and only
@@ -230,21 +236,6 @@ struct BulkAddView: View {
             .background(Theme.windowBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .padding(.top, 2)
-    }
-
-    /// A captioned field box for a bulk-add row (label above, the field inside the standard box).
-    @ViewBuilder private func bulkField<Content: View>(_ label: String, @ViewBuilder _ field: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(label)
-                .font(.system(.subheadline, weight: .medium))
-                .foregroundStyle(.secondary)
-            field()
-                .textFieldStyle(.plain)
-                .font(Typography.body)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .fieldBox()
-        }
     }
 
     private var addControls: some View {
@@ -284,11 +275,12 @@ struct BulkAddView: View {
     }
 
     private func addRows(count: Int = 1, front: String = "", back: String = "") {
-        let newRows = (0..<max(count, 1)).map { _ in Row(front: front, back: back) }
+        // A shared-front batch lands you on the back face (the side still to fill); otherwise the front.
+        let showBack = !front.isEmpty
+        let newRows = (0..<max(count, 1)).map { _ in Row(front: front, back: back, showingBack: showBack) }
         rows.append(contentsOf: newRows)
         if let first = newRows.first {
-            // Focus the side still to be filled (the shared side, if any, is prefilled).
-            focused = front.isEmpty ? .front(first.id) : .back(first.id)
+            focused = showBack ? .back(first.id) : .front(first.id)
         }
     }
 

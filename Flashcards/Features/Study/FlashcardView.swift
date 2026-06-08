@@ -46,26 +46,15 @@ struct FlashcardView: View {
 
     private func face(text: String, label: String?, showHint: Bool, fontSize: CGFloat) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                .fill(Theme.cardSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.05), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.10), radius: 22, x: 0, y: 10)
+            StudyCardBackground()
 
             VStack(spacing: 14) {
-                if let label {
-                    Text(label.uppercased())
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .tracking(0.8)
-                        .foregroundStyle(accent)
-                }
+                if let label { StudyCardLabel(label: label, accent: accent) }
                 cardText(text, fontSize: fontSize)
             }
             .padding(40)
         }
-        .overlay(alignment: .top) { sectionChip }
+        .overlay(alignment: .top) { StudyCardSectionChip(section: section, accent: accent) }
         .overlay(alignment: .bottom) { if showHint { flipHint } }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -118,21 +107,6 @@ struct FlashcardView: View {
         .foregroundStyle(.tertiary)
         .padding(.bottom, 18)
         .accessibilityHidden(true)
-    }
-
-    /// The section chip pinned to the top of the card — an outlined capsule with the section name.
-    @ViewBuilder private var sectionChip: some View {
-        if let section, !section.isEmpty {
-            Text(section)
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(accent)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(accent.opacity(0.12), in: Capsule())
-                .overlay(Capsule().strokeBorder(accent.opacity(0.30), lineWidth: 1))
-                .padding(.top, 16)
-                .accessibilityLabel("Section: \(section)")
-        }
     }
 }
 

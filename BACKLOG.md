@@ -145,8 +145,12 @@ folder-scoped prune, with a prune-scoping safety test), `a51a0b5` (Settings → 
 `deleteAllDecksEverywhere`), plus **4c** — `DeckFolderWatcher` now watches **all** folders (one vnode
 source each → one debounced reconcile; `RootView` re-points when `LibraryLocation.folders` changes), so
 live external edits to secondary folders reflect instantly. **Phase 4 is COMPLETE.** 309 tests green.
-**Only Phase 5 (release) remains** — the last step, and it needs a human: eyeball 1.8.0 + explicit go
-(it publishes a GitHub release, and first launch trips the one-time clean-slate wipe).
+
+**STATUS (2026-06-08, final): ALL PHASES COMPLETE — 1.8.0 shipped.** Phase 3's editor was rebuilt per the
+corrected vision (the editable study card — see the "EDITOR VISION — CORRECTED" note above), then Phase 5
+(release) was cut: bumped to **1.8.0 / build 20**, Release built, installed to `/Applications`, GitHub
+release published. 312 tests green. (The one-time clean-slate wipe already ran at the 1.7.5 v4 baseline, so
+updating to 1.8.0 is a normal incremental update — no further reset.)
 
 ---
 
@@ -156,9 +160,20 @@ it on sight — *"I wanted a graphical UI for editing cards, instead I'm looking
 vision:** the editor surface **is the study card** — render the `FlashcardView` exactly as in study, and
 edit the content **in place on the card** (WYSIWYG: front face → edit front; flip → edit back; cloze → edit
 on-card with the blanks visible), with a **fixed layout** (the user must NOT move/drag parts — no canvas).
-**Supersedes** the earlier structured-form decision. Next iteration: rebuild `BulkAddView`'s editing
-*surface* as an editable `FlashcardView`; keep all existing plumbing (AnswerMode resolution, cloze, DeckCodec
-v4, the unified add/edit path, multi-folder). Contained swap — only the editing UI changes. (Memory: `editor-vision`.)
+**Supersedes** the earlier structured-form decision. (Memory: `editor-vision`.)
+
+**✅ DONE (2026-06-08) — the editable study-card editor shipped in 1.8.0.** `BulkAddView`'s editing surface
+is now an `EditableFlashcard`: the real study-card chrome (shared with `FlashcardView` via the extracted
+`StudyCardBackground`/`StudyCardLabel`/`StudyCardSectionChip` in `Features/Study/StudyCardChrome.swift`) with
+the text editable **in place** on the card — front face → edit front; a **Flip pill** turns the card to edit
+the back; **cloze** is a single face editing the `{{c1::…}}` markup with a live "in study" preview beneath.
+The editable text is content-sized (`.fixedSize`) so a short term sits **centered like study** and the card
+**grows** as you type (no internal scroll; zeroed text inset + a transparent macOS NSTextView). Add mode keeps
+the **rapid front** (commit-on-Return adds the next card; delimited paste still splits into rows); edit mode
+is a full multi-line editor. **All plumbing unchanged**: per-card `AnswerMode` resolution, cloze handling,
+the `DeckCodec` v4 round-trip, the unified add/edit `editing:` path, and multi-folder persistence. The
+answer-mode menu, section, and elaboration stay as a **minimal surround**. Snapshot `33_editable_card`;
+312 tests green; verified live in all three modes. **Phase 5 (release) complete — shipped as v1.8.0 / build 20.**
 
 ---
 
