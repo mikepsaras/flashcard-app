@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var model = ""
     @State private var testStatus: TestStatus = .idle
     @State private var showingFolderPicker = false
+    @State private var showingAddFolderPicker = false
     @State private var pendingFolderURL: URL?
     @State private var showingResetStats = false
     @State private var showingResetProgress = false
@@ -86,6 +87,9 @@ struct SettingsView: View {
         }
         .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder]) { result in
             handleFolderPick(result)
+        }
+        .fileImporter(isPresented: $showingAddFolderPicker, allowedContentTypes: [.folder]) { result in
+            handleAddFolderPick(result)
         }
         .confirmationDialog(
             pendingFolderURL.map { "Use “\($0.lastPathComponent)” for your decks?" } ?? "",
@@ -320,10 +324,28 @@ struct SettingsView: View {
             if LibraryLocation.shared.isCustom {
                 Button("Use Default Folder") { useDefaultFolder() }
             }
+            #if os(macOS)
+            // Additional folders aggregated into the library (1.8.0 multi-folder). The primary is the
+            // row above; these are extras the library also shows decks from.
+            ForEach(LibraryLocation.shared.folders.dropFirst(), id: \.self) { folder in
+                HStack {
+                    Text(folder.path)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Button(role: .destructive) { removeLibraryFolder(folder) } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove this folder from the library (its files are left on disk)")
+                }
+            }
+            Button("Add Folder…") { showingAddFolderPicker = true }
+            #endif
         } header: {
             Text("Storage")
         } footer: {
-            Text("Where your deck files are saved and loaded. When you choose a folder you can move your current decks into it, or just use the decks already there.")
+            Text("Where your deck files are saved and loaded. Choose a folder to point the library at it (moving your decks, or using the ones already there). On Mac you can also add more folders — the library shows decks from all of them, and new decks go to the first.")
         }
     }
 
@@ -613,6 +635,24 @@ struct SettingsView: View {
         // Revert to ~/Documents/Flashcards and load its decks (the custom folder is left intact).
         DeckStore.shared.switchFolder(to: LibraryLocation.defaultFolder(), context: context)
         LibraryLocation.shared.resetToDefault()
+    }
+
+    /// Add another folder to the library set (macOS) and pull in its decks.
+    private func handleAddFolderPick(_ result: Result<URL, Error>) {
+        guard let url = try? result.get() else { return }
+        _ = url.startAccessingSecurityScopedResource()
+        guard LibraryLocation.shared.addFolder(url) else {
+            url.stopAccessingSecurityScopedResource()
+            return
+        }
+        url.stopAccessingSecurityScopedResource()   // addFolder holds the session-long access
+        DeckStore.shared.reconcileFolders(into: context)   // load the new folder's decks
+    }
+
+    /// Remove a folder from the library set; its decks drop from view (files are left on disk).
+    private func removeLibraryFolder(_ url: URL) {
+        LibraryLocation.shared.removeFolder(url)
+        DeckStore.shared.reconcileFolders(into: context)   // drop decks now absent from every folder
     }
 
     private func testConnection() {

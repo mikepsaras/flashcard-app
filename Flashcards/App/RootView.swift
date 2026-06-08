@@ -87,7 +87,7 @@ struct RootView: View {
                     DeveloperTools.removeAllTestData(into: context)
                     context.saveAndPersist()
                 case .allDecks:
-                    DeckStore.shared.deleteAllDecks(context)
+                    DeckStore.shared.deleteAllDecksEverywhere(context)
                     StudyStats.reset()
                 }
             }

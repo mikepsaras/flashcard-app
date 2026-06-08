@@ -493,6 +493,22 @@ final class DeckStore {
         persistedModifiedAt.removeAll()
     }
 
+    /// "Delete all decks" across **every** library folder (the app's reset). Tests use the single-folder
+    /// `deleteAllDecks(_:in:)` to stay isolated from the real library.
+    func deleteAllDecksEverywhere(_ context: ModelContext) {
+        let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+        for deck in existing { context.delete(deck) }
+        try? context.save()
+        for folder in Self.libraryURLs() {
+            if let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) {
+                for url in urls where Self.isDeckFile(url) { try? FileManager.default.removeItem(at: url) }
+            }
+        }
+        urlByDeckID.removeAll()
+        unsavedDeckIDs.removeAll()
+        persistedModifiedAt.removeAll()
+    }
+
     /// Restarts the spaced-repetition schedule of every card in every deck — the global version of a
     /// deck's "Reset Progress" (due dates, maturity, and recall rings all reset; cards and decks kept).
     /// Bumps each deck's `modifiedAt` so `persist` re-writes it: the modifiedAt-gate skips decks whose
