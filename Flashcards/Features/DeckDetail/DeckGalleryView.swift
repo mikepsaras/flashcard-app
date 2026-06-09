@@ -52,8 +52,12 @@ struct DeckGalleryView: View {
         }
         .background(Theme.windowBackground)
         .background(navigationKeys)
+        #if os(macOS)
         // Esc is two-stage: finish editing (commit → re-render) if a face is being edited, else close.
+        // (`onExitCommand` is macOS-only; the gallery editor is macOS-only too, so this is never reached
+        // on iOS — but the file still compiles for the iOS target, so the modifier must be guarded.)
         .onExitCommand { if cardFocus != nil { cardFocus = nil } else { close() } }
+        #endif
         .onAppear(perform: openInitial)
         .onChange(of: selectedID) { _, _ in showingBack = false }
     }
