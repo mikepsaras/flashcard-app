@@ -169,8 +169,9 @@ struct DeckGalleryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, Theme.Spacing.xl)
 
-            // Elaboration appears only on the back — mirroring study, where the "why" shows under the answer.
-            if showingBack {
+            // Elaboration shows on the back (mirroring study) — and always for cloze, which has no back
+            // face to flip to, so its "why" would otherwise be unreachable/uneditable in the gallery.
+            if showingBack || card.isClozeMode {
                 elaborationField(card)
                     .frame(maxWidth: 720)
                     .padding(.horizontal, Theme.Spacing.xl)
@@ -240,7 +241,8 @@ struct DeckGalleryView: View {
     }
 
     private func thumb(_ card: Card) -> some View {
-        GalleryThumb(card: card, isSelected: card.id == selectedID, accent: accent)
+        GalleryThumb(card: card, isSelected: card.id == selectedID, accent: accent,
+                     mode: card.resolvedAnswerMode(deckDefault: deck.defaultAnswerMode))
             .id(card.id)
             .onTapGesture { select(card.id) }
             .transition(.scale(scale: 0.6).combined(with: .opacity))
@@ -388,6 +390,8 @@ private struct GalleryThumb: View {
     let card: Card
     let isSelected: Bool
     let accent: Color
+    /// The card's resolved answer mode (inherits the deck default), so the badge matches the hero/study.
+    let mode: AnswerMode
 
     private var front: String { card.isClozeMode ? Cloze.front(card.term) : card.term }
     private var label: String { front.isEmpty ? "Empty card" : front }
@@ -421,7 +425,7 @@ private struct GalleryThumb: View {
 
     /// A small glyph marking non-flip cards so the strip reads at a glance.
     @ViewBuilder private var modeBadge: some View {
-        let symbol: String? = card.isClozeMode ? "curlybraces" : (card.answerModeRaw == AnswerMode.type.rawValue ? "keyboard" : nil)
+        let symbol: String? = mode == .cloze ? "curlybraces" : (mode == .type ? "keyboard" : nil)
         if let symbol {
             Image(systemName: symbol)
                 .font(.system(size: 9, weight: .bold))

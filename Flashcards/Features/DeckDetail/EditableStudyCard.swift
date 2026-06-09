@@ -112,7 +112,10 @@ struct EditableStudyCard: View {
 
     private func clozeFace(fontSize: CGFloat) -> some View {
         let field: CardEditorField = .front(id)
-        let editing = editingSide != nil
+        // Only the front is editable for cloze, so gate on `.front` (not `!= nil`): a stale `.back`
+        // left over from switching a flip card to cloze mid-back-edit must NOT render the raw-markup
+        // editing state with no caret. Mounting still keys off `editingSide`, so focus bootstrapping holds.
+        let editing = editingSide == .front
         return ZStack {
             StudyCardBackground()
             VStack(spacing: 14) {
