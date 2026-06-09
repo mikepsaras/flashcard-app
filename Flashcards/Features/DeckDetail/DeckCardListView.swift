@@ -223,11 +223,11 @@ struct DeckCardListView: View {
         Button { onNewSection(targets) } label: { Label("New Section…", systemImage: "folder.badge.plus") }
         Menu("Move to Section") {
             Button("None") { moveToSection(targets, "") }
-                .disabled(card?.section.isEmpty ?? true)
+                .disabled(!targets.contains { !$0.section.isEmpty })
             if !deck.sectionOrder.isEmpty { Divider() }
             ForEach(deck.sectionOrder, id: \.self) { name in
                 Button(name) { moveToSection(targets, name) }
-                    .disabled(card?.section == name)
+                    .disabled(!targets.contains { $0.section != name })
             }
         }
         .disabled(card == nil)
@@ -425,13 +425,17 @@ struct DeckCardListView: View {
     private func renameSection(_ old: String, to rawNew: String) {
         let new = String(rawNew.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
         guard !new.isEmpty, new != old else { return }
+        // Merge into an existing section if the new name is already taken; else rename in place.
+        let merging = deck.sectionOrder.contains(new)
         if let idx = deck.sectionOrder.firstIndex(of: old) {
-            // Merge into an existing section if the new name is already taken; else rename in place.
-            if deck.sectionOrder.contains(new) { deck.sectionOrder.remove(at: idx) }
-            else { deck.sectionOrder[idx] = new }
+            if merging { deck.sectionOrder.remove(at: idx) } else { deck.sectionOrder[idx] = new }
         }
-        for card in deck.cardArray where card.section == old {
+        // A merge renumbers the moved cards to append after the destination's existing cards (else
+        // stale sortOrders collide and the cards interleave); a plain rename keeps their order.
+        var order = deck.nextSortOrder(inSection: new)
+        for card in deck.cardArray.filter({ $0.section == old }).sorted(by: { $0.sortOrder < $1.sortOrder }) {
             card.section = new
+            if merging { card.sortOrder = order; order += 1 }
             card.modifiedAt = .now
         }
         context.saveAndPersist(touching: deck)
@@ -439,8 +443,13 @@ struct DeckCardListView: View {
 
     private func deleteSection(_ name: String) {
         deck.sectionOrder.removeAll { $0 == name }
-        for card in deck.cardArray where card.section == name {
+        // Renumber as the cards move to unsectioned, appending after the existing unsectioned cards —
+        // otherwise their stale sortOrders collide and they interleave (mirrors moveToSection).
+        var order = deck.nextSortOrder(inSection: "")
+        for card in deck.cardArray.filter({ $0.section == name }).sorted(by: { $0.sortOrder < $1.sortOrder }) {
             card.section = ""
+            card.sortOrder = order
+            order += 1
             card.modifiedAt = .now
         }
         context.saveAndPersist(touching: deck)

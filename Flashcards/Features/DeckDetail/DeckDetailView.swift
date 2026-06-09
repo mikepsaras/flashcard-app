@@ -63,6 +63,13 @@ struct DeckDetailView: View {
             Color.clear
         } else {
             content
+                #if os(iOS)
+                // Leaving Edit mode (tapping Done) clears the multi-selection, so stale highlights /
+                // counts don't carry into the next Edit session.
+                .onChange(of: editMode?.wrappedValue.isEditing) { _, editing in
+                    if editing != true { selection.removeAll() }
+                }
+                #endif
         }
     }
 
