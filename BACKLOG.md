@@ -98,7 +98,7 @@ Supersedes Decision-log #1. No per-deck scheduler choice, no SM-2 algorithm.
 
 ### New items from the user (2026-06-09)
 **Status:** ✅ last-card "Again" fixed (`4616710`) · ✅ review-by-subject shipped + live-verified (`d4f0fdc`) ·
-colored text is **NEXT** (scope decided with the user: a **single accent/highlight** color, not a palette) ·
+✅ colored text shipped (`d7ea0a8`) — `==text==` → deck accent (foreground); an edit-mode wrap-selection button is deferred ·
 "0 reviews" copy still pending. (Phase 1 + Phase 2 (SM-2 removal) shipped; Phase 3's other review bugs remain
 parked in the review report / the fix-plan list below.)
 - **FEATURE — colored text in markdown.** A markdown shortcut in edit mode that renders text in a
