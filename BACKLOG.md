@@ -76,6 +76,13 @@ foundations) · 3 (ambitious / optional)
 
 ## Post-1.8.2 — Comprehensive review + new items (2026-06-09)
 
+**✅ SHIPPED as v1.9.1 / build 24 (2026-06-09):** Gallery editor polish — full keyboard flow (⌘N adds +
+focuses a card, Return-to-edit, Tab flips front↔back while editing), two-stage Esc (1st commits the face
+edit, 2nd closes the gallery), **delete the selected card with ⌫** (with a confirm; the ••• Delete now
+confirms too), and a visual-consistency sweep (shared card-flip animation + flip pill, iOS cloze centered
+to match study). Patch bump — incremental refinements to the 1.8.x gallery editor. Esc/⌫ ride
+key-equivalent buttons + an `NSTextView` `cancelOperation:` delegate (the text view eats those keys raw).
+
 **✅ SHIPPED as v1.9.0 / build 23 (2026-06-09):** FSRS-only (SM-2 removed), Review-by-Subject, colored
 text (`==…==`), all Phase 1–3 review fixes, and the iOS-build restore. Minor bump for the new features +
 scheduler removal. Still open (deferred): the colored-text wrap-selection toolbar button; an optional
