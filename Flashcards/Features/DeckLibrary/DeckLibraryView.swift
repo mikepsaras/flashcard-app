@@ -280,8 +280,14 @@ struct DeckLibraryView: View {
             Spacer(minLength: 8)
             if hasAnySections && due > 0 {
                 Button { onStudySubject(group.section ?? "") } label: {
-                    Label("Study \(due)", systemImage: "play.fill")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                    // Icon TRAILING so the play glyph aligns at the same x on every subject header — a
+                    // leading icon on a right-aligned, variable-width label ("Study 261" vs "Study 1")
+                    // would sit at a different x per row.
+                    HStack(spacing: 5) {
+                        Text("Study \(due)")
+                        Image(systemName: "play.fill")
+                    }
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.accent)
