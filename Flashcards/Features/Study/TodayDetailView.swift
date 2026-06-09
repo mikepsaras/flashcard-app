@@ -49,6 +49,7 @@ struct TodayDetailView: View {
 
     private var header: some View {
         let streak = StudyStats.currentStreak()
+        let planned = plannedItems().count
         return VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("\(totalDue)")
@@ -69,8 +70,15 @@ struct TodayDetailView: View {
                 }
             }
 
-            PrimaryButton(title: "Study \(totalDue) Due", systemImage: "play.fill") {
+            PrimaryButton(title: planned == totalDue ? "Study \(totalDue) Due" : "Study \(planned) Now",
+                          systemImage: "play.fill") {
                 onStudy(todayPlan())
+            }
+            if planned < totalDue {
+                Text("New cards are introduced gradually, so this session studies \(planned) of the \(totalDue) due.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(Theme.Spacing.m)
@@ -118,5 +126,18 @@ struct TodayDetailView: View {
                 interleaveBy: DefaultsKey.interleaveStudyValue() ? { $0.card.deck?.id.uuidString ?? "" } : nil
             )
         }
+    }
+
+    /// The cards this Today session will ACTUALLY present — due reviews plus new cards throttled to the
+    /// daily quota, then the session-size cap — so the button's count matches the session, not the raw
+    /// due total (which counts every new card). Mirrors `todayPlan`'s composition.
+    private func plannedItems() -> [ReviewItem] {
+        let due = decks.flatMap { $0.dueReviewItems }.sorted { $0.dueDate < $1.dueDate }
+        let prioritized = StudySession.prioritizingReviews(
+            due,
+            newPerDay: DefaultsKey.newCardsPerDayValue(),
+            introducedToday: StudyStats.newCardsIntroducedToday()
+        )
+        return StudySession.cap(prioritized, limit: UserDefaults.standard.integer(forKey: DefaultsKey.studySessionLimit))
     }
 }
