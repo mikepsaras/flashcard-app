@@ -20,6 +20,8 @@ struct DeckGalleryView: View {
     @FocusState private var cardFocus: CardEditorField?
     /// Guards the one-time "New Card" auto-add so re-renders don't keep inserting blanks.
     @State private var didAutoOpen = false
+    /// The card awaiting a delete confirmation (⌫ on the selected card, or the ••• "Delete Card").
+    @State private var pendingDelete: Card?
 
     private var accent: Color { Color(hex: deck.colorHex) }
 
@@ -61,6 +63,14 @@ struct DeckGalleryView: View {
         #endif
         .onAppear(perform: openInitial)
         .onChange(of: selectedID) { _, _ in showingBack = false }
+        .alert("Delete this card?",
+               isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+               presenting: pendingDelete) { card in
+            Button("Delete", role: .destructive) { delete(card) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("This can’t be undone.")
+        }
     }
 
     // MARK: Top bar
@@ -140,7 +150,7 @@ struct DeckGalleryView: View {
             }
             .disabled(deck.sectionOrder.isEmpty && card.section.isEmpty)
             Divider()
-            Button(role: .destructive) { delete(card) } label: { Label("Delete Card", systemImage: "trash") }
+            Button(role: .destructive) { pendingDelete = card } label: { Label("Delete Card", systemImage: "trash") }
         } label: {
             Image(systemName: "ellipsis.circle").font(.system(size: 17, weight: .semibold)).foregroundStyle(.secondary)
         }
@@ -251,16 +261,17 @@ struct DeckGalleryView: View {
 
     private static let addTileID = "gallery-add-tile"
 
-    /// Hidden Esc + ← / → shortcuts, present only while NOT editing a face — so a focused card editor keeps
-    /// Esc and the arrows for itself. ← / → scrub the filmstrip; **Esc closes the gallery** — the *second*
-    /// stage of the two-stage Esc (the first stage, committing a face edit, is handled at the text view by
-    /// `EscCommandDelegate`). It fires while resting — when nothing is first responder — because
-    /// `.keyboardShortcut` registers a window-wide key equivalent, unlike `.onExitCommand`, which only
-    /// receives the cancel command when its view is in the focused responder chain (hence the beep before).
+    /// Hidden browse-mode shortcuts, present only while NOT editing a face — so a focused card editor keeps
+    /// these keys for itself. ← / → scrub the filmstrip; **⌫ deletes the selected card** (with a confirm);
+    /// **Esc closes the gallery** — the *second* stage of the two-stage Esc (the first stage, committing a
+    /// face edit, is handled at the text view by `EscCommandDelegate`). Esc/⌫ fire while resting — when
+    /// nothing is first responder — because `.keyboardShortcut` registers a window-wide key equivalent,
+    /// unlike `.onExitCommand`, which only receives the cancel command when its view is in the focused chain.
     @ViewBuilder private var navigationKeys: some View {
         if !isEditingText {
             Group {
                 Button("") { close() }.keyboardShortcut(.cancelAction)
+                Button("") { if let card = selectedCard { pendingDelete = card } }.keyboardShortcut(.delete, modifiers: [])
                 Button("") { step(-1) }.keyboardShortcut(.leftArrow, modifiers: [])
                 Button("") { step(1) }.keyboardShortcut(.rightArrow, modifiers: [])
             }
