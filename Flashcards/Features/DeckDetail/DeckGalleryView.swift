@@ -251,11 +251,16 @@ struct DeckGalleryView: View {
 
     private static let addTileID = "gallery-add-tile"
 
-    /// Hidden ← / → shortcuts that move the selection through the filmstrip — only while NOT editing
-    /// text, so a focused card editor keeps the arrow keys for its caret.
+    /// Hidden Esc + ← / → shortcuts, present only while NOT editing a face — so a focused card editor keeps
+    /// Esc and the arrows for itself. ← / → scrub the filmstrip; **Esc closes the gallery** — the *second*
+    /// stage of the two-stage Esc (the first stage, committing a face edit, is handled at the text view by
+    /// `EscCommandDelegate`). It fires while resting — when nothing is first responder — because
+    /// `.keyboardShortcut` registers a window-wide key equivalent, unlike `.onExitCommand`, which only
+    /// receives the cancel command when its view is in the focused responder chain (hence the beep before).
     @ViewBuilder private var navigationKeys: some View {
         if !isEditingText {
             Group {
+                Button("") { close() }.keyboardShortcut(.cancelAction)
                 Button("") { step(-1) }.keyboardShortcut(.leftArrow, modifiers: [])
                 Button("") { step(1) }.keyboardShortcut(.rightArrow, modifiers: [])
             }
