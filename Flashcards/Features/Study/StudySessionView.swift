@@ -20,6 +20,9 @@ struct StudySessionView: View {
     /// result means "not checked" (e.g. the card was revealed by tapping instead of typing).
     @State private var typedAnswer = ""
     @State private var typedResult: Bool? = nil
+    /// Per-grade snapshots of the type-in state (answer + ✓/✗), pushed on grade and popped on undo, so
+    /// undoing a type-in grade restores its revealed result + the correct grade controls (not a blank).
+    @State private var typedHistory: [(answer: String, result: Bool?)] = []
     @FocusState private var answerFieldFocused: Bool
 
     init(plan: StudyPlan, onClose: @escaping () -> Void) {
@@ -63,9 +66,11 @@ struct StudySessionView: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .background(Theme.windowBackground)
             .background(keyboardControls)
-            // Clear the typed answer when the card changes (advance / undo / shuffle) so the next
-            // type-in card starts blank.
+            // Clear the typed answer only when ADVANCING to a fresh (not-yet-revealed) card. Undo
+            // restores a card in its revealed state and `performUndo` re-supplies its typed answer/
+            // result, so don't clobber that here.
             .onChange(of: session.current?.id) { _, _ in
+                guard !session.isShowingDefinition else { return }
                 typedAnswer = ""
                 typedResult = nil
             }
@@ -272,8 +277,10 @@ struct StudySessionView: View {
             .buttonStyle(.plain)
             .disabled(!canCheck)
         }
-        // Focus the field whenever it (re)appears for a new type-in card.
-        .onAppear { answerFieldFocused = true }
+        // Focus the field whenever it (re)appears for a new type-in card. Deferred to the next runloop:
+        // setting @FocusState synchronously in onAppear during first layout often fails to raise focus
+        // on the first type-in card (iOS) — same deferral as EditableStudyCard.
+        .onAppear { DispatchQueue.main.async { answerFieldFocused = true } }
     }
 
     @ViewBuilder private func typeResultRow(matched: Bool) -> some View {
@@ -486,6 +493,7 @@ struct StudySessionView: View {
         let wasMature = currentIsMature()
         let wasNew = currentIsNew()
         let pending = pendingReviewRecord(grade: grade)   // from the pre-grade schedule
+        typedHistory.append((answer: typedAnswer, result: typedResult))   // so undo can restore the type-in state
         session.grade(grade)
         // Practice runs (nothing due) don't advance schedules, and must not feed the daily review
         // count / accuracy / streak / review log either — otherwise "Study Again" or studying an
@@ -507,6 +515,12 @@ struct StudySessionView: View {
 
     private func performUndo() {
         guard let undone = session.undo() else { return }
+        // Restore the type-in state for the card we're returning to (its revealed answer + ✓/✗) so its
+        // grade controls match; the `.onChange` reset is gated to skip this revealed, undone card.
+        if let snap = typedHistory.popLast() {
+            typedAnswer = snap.answer
+            typedResult = snap.result
+        }
         // Mirror performGrade: only real (non-practice) reviews were recorded, so only those are
         // reversed — and with the same correctness + maturity — keeping the count / accuracy /
         // retention / streak honest. After undo, `session.current` is the restored (pre-grade)
@@ -566,6 +580,7 @@ struct StudySessionView: View {
 
     private func restart() {
         session = StudySession(items: Self.cappedItems(plan.makeItems()), trackLearning: true, forcePractice: plan.forcePractice)
+        typedHistory.removeAll()
     }
 
     /// Reset Progress (••• menu): wipe the deck's schedules via the plan's hook, then start a fresh
