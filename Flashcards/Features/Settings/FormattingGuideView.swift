@@ -11,6 +11,7 @@ struct FormattingGuideView: View {
 
                 group("Text styling") {
                     example("**bold**, *italic*, ~~strikethrough~~, and `inline code`.")
+                    example("Highlight a key phrase with ==accent color== so it stands out in study.")
                     example("A [link](https://apple.com) to somewhere.")
                 }
                 group("Headings") {

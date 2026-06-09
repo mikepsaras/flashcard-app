@@ -136,6 +136,18 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/21_deck_detail_sections.png"))
     }
 
+    /// Colored text: `==…==` renders the inner phrase in the card's accent color (study + editor share
+    /// the same renderer, so this also covers the live preview).
+    @Test func renderAccentText() throws {
+        try Snapshot.write(
+            FlashcardView(term: "The ==mitochondrion== is the cell's powerhouse",
+                          definition: "back", isShowingDefinition: false,
+                          accent: Color(hex: "#E8590C"), onTap: {})
+                .padding(28).background(Theme.windowBackground),
+            size: CGSize(width: 640, height: 560), name: "50_accent_text")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/50_accent_text.png"))
+    }
+
     @Test func renderInsightsBySection() throws {
         var insights = StudyInsights()
         insights.totalCards = 12

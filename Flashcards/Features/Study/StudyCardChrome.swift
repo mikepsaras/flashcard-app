@@ -40,6 +40,8 @@ struct StudyCardLabel: View {
 struct StudyCardText: View {
     let text: String
     let fontSize: CGFloat
+    /// The deck's accent — used to color `==…==` spans in the card text.
+    var accent: Color = Theme.accent
 
     var body: some View {
         if text.isEmpty {
@@ -66,7 +68,7 @@ struct StudyCardText: View {
                     .multilineTextAlignment(.center)
             } else {
                 // Centers a plain term, left-aligns structural content (lists/headings).
-                MarkdownText(text: text, baseSize: size, weight: .semibold, centered: true)
+                MarkdownText(text: text, baseSize: size, weight: .semibold, centered: true, accent: accent)
             }
         }
         .foregroundStyle(.primary)

@@ -40,6 +40,20 @@ import Foundation
         #expect(Markdown.inlineRuns("use `$5` here") == [.text("use `$5` here")])
     }
 
+    @Test func parsesAccentSpan() {
+        // `==text==` becomes an accent run (rendered in the card's accent color).
+        #expect(Markdown.inlineRuns("a ==b== c") == [.text("a "), .accent("b"), .text(" c")])
+    }
+
+    @Test func accentInCodeSpanIsLiteral() {
+        // `==x==` inside a backtick span stays literal text, not an accent run.
+        #expect(Markdown.inlineRuns("use `==x==` here") == [.text("use `==x==` here")])
+    }
+
+    @Test func unclosedAccentIsLiteral() {
+        #expect(Markdown.inlineRuns("a == b") == [.text("a == b")])
+    }
+
     // MARK: Block parsing
 
     @Test func parsesBulletList() {
@@ -91,5 +105,6 @@ import Foundation
         #expect(String(Markdown.previewLine("* Identify the problem").characters) == "• Identify the problem")
         #expect(String(Markdown.previewLine("plain text").characters) == "plain text")
         #expect(String(Markdown.previewLine("area is $x^2$").characters) == "area is x^2")
+        #expect(String(Markdown.previewLine("==key== fact").characters) == "key fact")
     }
 }

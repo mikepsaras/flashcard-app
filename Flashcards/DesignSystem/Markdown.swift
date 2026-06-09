@@ -27,6 +27,7 @@ enum Markdown {
         for marker in ["- ", "* ", "+ ", "> ", "# "] where stripped.hasPrefix(marker) {
             stripped = "• " + stripped.dropFirst(marker.count); break
         }
+        stripped = stripped.replacingOccurrences(of: "==", with: "")   // show accent text, not its markers
         stripped = stripped.replacingOccurrences(of: "$", with: "")
         return attributed(stripped)
     }
@@ -56,7 +57,7 @@ enum Markdown {
 
     // MARK: Inline runs (text vs. inline math)
 
-    enum InlineRun: Equatable { case text(String); case math(String) }
+    enum InlineRun: Equatable { case text(String); case math(String); case accent(String) }
 
     /// Splits a line into text and inline-`$…$`-math runs. `\$` is a literal dollar; `$` inside a
     /// backtick code span is left as text (not math).
@@ -83,6 +84,20 @@ enum Markdown {
                 }
                 if closed, !math.trimmingCharacters(in: .whitespaces).isEmpty {
                     flush(); runs.append(.math(math)); i = j + 1; continue
+                }
+            }
+            // Accent color: `==text==` renders the inner text in the card's accent color (a single
+            // highlight color, à la Obsidian). Skipped inside a backtick code span.
+            if c == "=", !inCode, i + 1 < chars.count, chars[i + 1] == "=" {
+                var j = i + 2
+                var inner = ""
+                var closed = false
+                while j < chars.count {
+                    if chars[j] == "=", j + 1 < chars.count, chars[j + 1] == "=" { closed = true; break }
+                    inner.append(chars[j]); j += 1
+                }
+                if closed, !inner.trimmingCharacters(in: .whitespaces).isEmpty {
+                    flush(); runs.append(.accent(inner)); i = j + 2; continue
                 }
             }
             text.append(c); i += 1
@@ -258,6 +273,8 @@ struct MarkdownText: View {
     var weight: Font.Weight = .regular
     var centered: Bool = false
     var mathColor: MTColor = MathColor.label
+    /// The color for `==…==` accent spans — the deck's accent on the study card; the app accent elsewhere.
+    var accent: Color = Theme.accent
 
     var body: some View {
         let blocks = Markdown.blocks(text)
@@ -345,6 +362,8 @@ struct MarkdownText: View {
             switch run {
             case let .text(t):
                 result = result + Text(Markdown.attributed(t))
+            case let .accent(t):
+                result = result + Text(Markdown.attributed(t)).foregroundStyle(accent)
             case let .math(m):
                 result = result + inlineMathText(m, fontSize: size, color: mathColor)
             }

@@ -48,7 +48,7 @@ struct FlashcardView: View {
 
             VStack(spacing: 14) {
                 if let label { StudyCardLabel(label: label, accent: accent) }
-                StudyCardText(text: text, fontSize: fontSize)
+                StudyCardText(text: text, fontSize: fontSize, accent: accent)
             }
             .padding(40)
         }
@@ -89,7 +89,7 @@ struct ElaborationPanel: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(accent)
                 .padding(.top, 2)
-            MarkdownText(text: text, baseSize: compact ? 14 : 15, mathColor: MathColor.secondary)
+            MarkdownText(text: text, baseSize: compact ? 14 : 15, mathColor: MathColor.secondary, accent: accent)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(.secondary)
