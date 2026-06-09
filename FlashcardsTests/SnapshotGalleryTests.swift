@@ -487,6 +487,14 @@ struct SnapshotGalleryTests {
             size: CGSize(width: 1120, height: 760), name: "34_gallery_editor")
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/34_gallery_editor.png"))
     }
+
+    /// The repo's GitHub social-preview / Open Graph card (1280×640): the real app icon + name, tagline,
+    /// and feature chips on the app's soft surface — rendered through the same pipeline as every other shot.
+    @Test func renderSocialPreview() throws {
+        try Snapshot.write(SocialPreviewCard(),
+                           size: CGSize(width: 1280, height: 640), name: "social_preview")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/social_preview.png"))
+    }
 }
 
 /// Hosts an `EditableFlashcard` for snapshots — it needs a `@FocusState` and `@State` bindings, which
@@ -513,6 +521,39 @@ private struct EditableCardHost: View {
             accent: Theme.accent, minHeight: 300, focus: $focus
         )
         .frame(width: 360)
+    }
+}
+
+/// The GitHub social-preview / Open Graph card for the repo (1280×640): the real `AppIconArtwork`, the
+/// name in the app's rounded type, a tagline, and accent feature chips on the app's soft card surface.
+private struct SocialPreviewCard: View {
+    private let accent = Color(red: 0.20, green: 0.45, blue: 0.95)
+    private let chips = ["FSRS", "AI generation", "Markdown & LaTeX", "Local-first"]
+
+    var body: some View {
+        VStack(spacing: 26) {
+            AppIconArtwork(squircle: true)
+                .frame(width: 208, height: 208)
+            Text("Flashcards")
+                .font(.system(size: 92, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+            Text("Spaced-repetition flashcards for macOS & iPhone")
+                .font(.system(size: 33, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 14) {
+                ForEach(chips, id: \.self) { chip in
+                    Text(chip)
+                        .font(.system(size: 24, weight: .semibold, design: .rounded))
+                        .foregroundStyle(accent)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 11)
+                        .background(accent.opacity(0.12), in: Capsule())
+                }
+            }
+            .padding(.top, 6)
+        }
+        .frame(width: 1280, height: 640)
+        .background(Color(red: 0.937, green: 0.949, blue: 0.965))   // the app's soft card surface (light)
     }
 }
 #endif

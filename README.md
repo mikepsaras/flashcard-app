@@ -50,6 +50,12 @@ The app **ad-hoc signs** (`CODE_SIGN_IDENTITY = "-"`), so it builds and runs wit
 
 Each deck is a `.cards` file (pretty-printed JSON) in a library folder — `~/Documents/Flashcards` by default, and on macOS you can register several. The app loads them at launch, keeps an in-memory working copy, and rewrites the files after every change; external edits to the files are picked up live. There is **no on-disk database and no iCloud sync** — your cards never leave your machine.
 
+## License
+
+Free software under the **GNU General Public License v3.0** ([LICENSE](LICENSE)) — use it, study it, modify it, and share it; any distributed derivative must stay open under the same terms.
+
+© 2026 Mike Psaras. As the copyright holder, the author reserves the right to also distribute the software under separate commercial terms (dual-licensing).
+
 ---
 
 <p align="center"><sub>A solo project. Grab the latest build from <a href="https://github.com/mikepsaras/flashcard-app/releases/latest">Releases</a>.</sub></p>
