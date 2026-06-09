@@ -59,9 +59,12 @@ struct EditableStudyCard: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            // Return — while nothing is focused (browsing the strip with ← / →) — drops into editing.
+            .background(returnToEditShortcut)
         }
         .accessibilityElement(children: .contain)
-        // Exit edit when focus leaves the card (Tab, Esc, clicking a thumbnail, etc.) → re-render.
+        // Exit edit when focus leaves the card (Esc, clicking a thumbnail, etc.) → re-render. Tab does
+        // NOT leave — it flips to the other side and keeps editing, so focus stays on the card.
         .onChange(of: focus.wrappedValue) { _, value in if value == nil { editingSide = nil } }
         // A fresh, empty card opens ready to type; an existing card rests rendered until you click it.
         .onAppear { if !isCloze, front.isEmpty, back.isEmpty { beginEditing(.front) } }
@@ -146,7 +149,8 @@ struct EditableStudyCard: View {
     @ViewBuilder private func content(text: Binding<String>, rendered: String, editing: Bool,
                                       field: CardEditorField, fontSize: CGFloat, placeholder: String) -> some View {
         if editing {
-            GalleryCardEditor(text: text, field: field, focus: focus, fontSize: editSize(fontSize))
+            GalleryCardEditor(text: text, field: field, focus: focus, fontSize: editSize(fontSize),
+                              onTab: { flipWhileEditing() })
         } else if rendered.isEmpty {
             placeholderText(placeholder, fontSize: fontSize)
         } else {
@@ -191,6 +195,29 @@ struct EditableStudyCard: View {
             .opacity(0)
             .accessibilityHidden(true)
     }
+
+    /// Return — while **nothing** is focused (you're scrubbing the filmstrip with ← / →) — drops into
+    /// editing the shown face, so the keyboard alone can browse-then-edit. Gated on `focus == nil` so it
+    /// never steals Return from a focused editor, where Return must insert a newline.
+    @ViewBuilder private var returnToEditShortcut: some View {
+        if focus.wrappedValue == nil {
+            Button("") { beginEditing(isCloze ? .front : (showingBack ? .back : .front)) }
+                .keyboardShortcut(.return, modifiers: [])
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Flip to the other side and keep editing it — the Tab affordance while a face is being edited.
+    /// Editing shows the flat face, so this is a flat→flat swap with no 3D rotation to fight. Tab is caught
+    /// at the `NSTextView` level (`TabKeyCatcher`) because SwiftUI's `.keyboardShortcut(.tab)` never fires —
+    /// the text view consumes Tab as an inserted character first.
+    private func flipWhileEditing() {
+        guard let side = editingSide, !isCloze else { return }
+        showingBack = side == .front                       // moving to the back ⇒ show the back
+        beginEditing(side == .front ? .back : .front)
+    }
 }
 
 // MARK: - In-place face editor (fills the face, transparent, centered, scrolls if long)
@@ -203,6 +230,10 @@ private struct GalleryCardEditor: View {
     let field: CardEditorField
     var focus: FocusState<CardEditorField?>.Binding
     var fontSize: CGFloat
+    /// Tab flips to the other face while editing (front ↔ back). Caught with a key monitor — not
+    /// `.keyboardShortcut(.tab)`, which never fires because the `NSTextView` consumes Tab first. Nil ⇒ no
+    /// flip target (cloze is a single face), so Tab just inserts a tab there.
+    var onTab: (() -> Void)? = nil
 
     var body: some View {
         TextEditor(text: $text)
@@ -218,6 +249,7 @@ private struct GalleryCardEditor: View {
             .frame(maxWidth: .infinity)
             #if os(macOS)
             .background(GalleryEditorConfigurator())   // transparent NSTextView, centered
+            .background(TabKeyCatcher(onTab: onTab))    // Tab → flip (the NSTextView would otherwise eat it)
             #endif
     }
 }
@@ -248,6 +280,46 @@ private struct GalleryEditorConfigurator: NSViewRepresentable {
                 textView.defaultParagraphStyle = style
                 textView.typingAttributes[.paragraphStyle] = style
             }
+        }
+    }
+}
+
+/// While a face editor is mounted (i.e. a face is being edited), a bare Tab should flip to the other side
+/// rather than insert a tab character. SwiftUI's `.keyboardShortcut(.tab)` never sees it — the `NSTextView`
+/// consumes Tab first — so we install a local key monitor for the editor's lifetime, swallow Tab, and call
+/// the flip. The monitor is removed when the editor unmounts (focus leaves / the card commits), so Tab
+/// behaves normally everywhere else.
+private struct TabKeyCatcher: NSViewRepresentable {
+    var onTab: (() -> Void)?
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSView {
+        context.coordinator.onTab = onTab
+        context.coordinator.install()
+        return NSView(frame: .zero)
+    }
+    func updateNSView(_ nsView: NSView, context: Context) { context.coordinator.onTab = onTab }
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.remove() }
+
+    final class Coordinator {
+        var onTab: (() -> Void)?
+        private var monitor: Any?
+
+        func install() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, let onTab = self.onTab else { return event }
+                // Tab is keyCode 48. Let ⌘/⌥/⌃-modified Tabs through; a bare (or ⇧-) Tab flips the card.
+                guard event.keyCode == 48,
+                      event.modifierFlags.intersection([.command, .option, .control]).isEmpty
+                else { return event }
+                onTab()
+                return nil   // swallow — no tab character, no focus traversal
+            }
+        }
+
+        func remove() {
+            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         }
     }
 }

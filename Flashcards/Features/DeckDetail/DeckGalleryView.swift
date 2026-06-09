@@ -52,6 +52,7 @@ struct DeckGalleryView: View {
         }
         .background(Theme.windowBackground)
         .background(navigationKeys)
+        .background(addCardShortcut)
         #if os(macOS)
         // Esc is two-stage: finish editing (commit → re-render) if a face is being edited, else close.
         // (`onExitCommand` is macOS-only; the gallery editor is macOS-only too, so this is never reached
@@ -264,6 +265,16 @@ struct DeckGalleryView: View {
         }
     }
 
+    /// ⌘N adds a fresh card from the keyboard (committing any in-progress edit first), mirroring the "+"
+    /// tile. Always available — unlike ← / →, it's useful while editing too.
+    private var addCardShortcut: some View {
+        Button("", action: addCard)
+            .keyboardShortcut("n", modifiers: .command)
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
+    }
+
     // MARK: Selection / navigation
 
     private func openInitial() {
@@ -464,7 +475,7 @@ private struct GalleryAddTile: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in withAnimation(.snappy) { self.hovering = hovering } }
-        .help("Add a card")
+        .help("Add a card (⌘N)")
         .accessibilityLabel("Add a card")
     }
 }
