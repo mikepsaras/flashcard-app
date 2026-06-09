@@ -646,13 +646,14 @@ struct SettingsView: View {
             return
         }
         url.stopAccessingSecurityScopedResource()   // addFolder holds the session-long access
-        DeckStore.shared.reconcileFolders(into: context)   // load the new folder's decks
+        // RootView's `.onChange(of: LibraryLocation.shared.folders)` does the reload — and is guarded so
+        // it won't clobber a live gallery edit. Reconciling here too would bypass that guard.
     }
 
     /// Remove a folder from the library set; its decks drop from view (files are left on disk).
     private func removeLibraryFolder(_ url: URL) {
         LibraryLocation.shared.removeFolder(url)
-        DeckStore.shared.reconcileFolders(into: context)   // drop decks now absent from every folder
+        // RootView's folders `.onChange` does the reload (guarded against clobbering a live gallery edit).
     }
 
     private func testConnection() {

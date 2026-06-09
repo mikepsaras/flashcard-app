@@ -134,10 +134,13 @@ struct RootView: View {
             }
             .onChange(of: LibraryLocation.shared.folders) { _, _ in
                 // The library folders changed (Settings add/remove/switch): re-point the watcher + reload.
+                // Guard on `isTakingOverWindow` (not just `studyPlan`) so a folder change made in the
+                // separate Settings window can't reconcile — and clobber — cards being edited live in the
+                // macOS gallery. The study/editor close-handlers reconcile once the takeover ends.
                 watcher.stop()
-                watcher.isPaused = studyPlan != nil
+                watcher.isPaused = isTakingOverWindow
                 watcher.start(folders: DeckStore.libraryURLs()) { DeckStore.shared.reconcileFolders(into: context) }
-                if studyPlan == nil { DeckStore.shared.reconcileFolders(into: context) }
+                if !isTakingOverWindow { DeckStore.shared.reconcileFolders(into: context) }
             }
             #if os(macOS)
             .onChange(of: AppActions.shared.showFormattingGuideTick) { _, _ in

@@ -324,10 +324,14 @@ struct AIGenerationView: View {
                 let result = try await CardGenerator().generate(
                     prompt: prompt, count: requestedCount, provider: provider, model: model, apiKey: key, existing: existing, intent: intent
                 )
+                // The user may have navigated away (Edit Notes) or started a newer run while this was in
+                // flight — only the run still generating may apply its result, so it can't clobber.
+                guard phase == .generating else { return }
                 cards = result
                 included = Set(result.map(\.id))
                 phase = .review
             } catch {
+                guard phase == .generating else { return }   // don't surface a stale error after navigating away
                 errorText = (error as? AIError)?.errorDescription ?? error.localizedDescription
                 phase = .failed
             }
