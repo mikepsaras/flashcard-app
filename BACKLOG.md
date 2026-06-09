@@ -76,6 +76,11 @@ foundations) · 3 (ambitious / optional)
 
 ## Post-1.8.2 — Comprehensive review + new items (2026-06-09)
 
+**✅ SHIPPED as v1.9.0 / build 23 (2026-06-09):** FSRS-only (SM-2 removed), Review-by-Subject, colored
+text (`==…==`), all Phase 1–3 review fixes, and the iOS-build restore. Minor bump for the new features +
+scheduler removal. Still open (deferred): the colored-text wrap-selection toolbar button; an optional
+review-log backup safeguard (the "mastery vanished" report couldn't be pinned to a code path).
+
 A whole-codebase multi-agent review ran (54 agents; **34 confirmed findings** after adversarial
 verification — nothing critical/high survived; mostly cross-screen count mismatches, stale UI state,
 and edge-case data that doesn't round-trip). Plus four items the user added directly. Working order:
