@@ -77,7 +77,7 @@ struct EditableStudyCard: View {
                 .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
         }
         .rotation3DEffect(.degrees(showingBack ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-        .animation(.spring(response: 0.5, dampingFraction: 0.82), value: showingBack)
+        .animation(.cardFlip, value: showingBack)
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .onTapGesture { beginEditing(showingBack ? .back : .front) }
         .background(flipShortcut)   // ⌘↵ flips even while editing (commits first)
@@ -173,29 +173,14 @@ struct EditableStudyCard: View {
         // we want that card mounted (at the current side) BEFORE it animates — otherwise it would just
         // appear already-flipped. With the deferral the rotation animates whether or not we were editing.
         DispatchQueue.main.async {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) { showingBack.toggle() }
+            withAnimation(.cardFlip) { showingBack.toggle() }
         }
     }
 
     private func flipButton(isBack: Bool) -> some View {
-        Button(action: flip) {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.2.circlepath").font(.system(size: 11, weight: .semibold))
-                Text(isBack ? "Front" : backWord)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                Text("⌘↵")
-                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(.tertiary)
-            }
-            .foregroundStyle(accent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(accent.opacity(0.12), in: Capsule())
-            .overlay(Capsule().strokeBorder(accent.opacity(0.22), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .padding(.bottom, 16)
-        .accessibilityLabel(isBack ? "Flip to front" : "Flip to \(backWord.lowercased())")
+        CardFlipPill(label: isBack ? "Front" : backWord, accent: accent, showShortcut: true, action: flip)
+            .padding(.bottom, 16)
+            .accessibilityLabel(isBack ? "Flip to front" : "Flip to \(backWord.lowercased())")
     }
 
     /// A zero-size hidden button so ⌘↵ flips from anywhere — including while a face editor has focus.

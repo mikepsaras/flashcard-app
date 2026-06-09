@@ -102,3 +102,44 @@ struct StudyCardSectionChip: View {
         }
     }
 }
+
+// MARK: - Shared flip animation
+
+extension Animation {
+    /// The card-flip spring — defined once so the study card (`FlashcardView`) and both editors
+    /// (`EditableStudyCard`, `EditableFlashcard`) turn with the exact same timing.
+    static let cardFlip: Animation = .spring(response: 0.5, dampingFraction: 0.82)
+}
+
+// MARK: - Flip pill
+
+/// The flip affordance on an **editable** card face (front ↔ back). The face itself is a text field, so
+/// flipping is a real button here — unlike the study card's passive "tap to flip" hint. Defined once so
+/// the macOS gallery hero (`EditableStudyCard`) and the iOS composer card (`EditableFlashcard`) share
+/// identical chrome and can't drift apart; `showShortcut` adds the ⌘↵ hint on macOS, where it applies.
+struct CardFlipPill: View {
+    let label: String
+    var accent: Color = Theme.accent
+    var showShortcut: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.2.circlepath").font(.system(size: 11, weight: .semibold))
+                Text(label).font(.system(size: 12, weight: .semibold, design: .rounded))
+                if showShortcut {
+                    Text("⌘↵")
+                        .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .foregroundStyle(accent)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(accent.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(accent.opacity(0.22), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}

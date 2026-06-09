@@ -31,7 +31,7 @@ struct FlashcardView: View {
                     .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
             }
             .rotation3DEffect(.degrees(isShowingDefinition ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-            .animation(.spring(response: 0.5, dampingFraction: 0.82), value: isShowingDefinition)
+            .animation(.cardFlip, value: isShowingDefinition)
             .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             .onTapGesture(perform: onTap)
         }

@@ -53,7 +53,7 @@ struct EditableFlashcard: View {
                         face(side: .front).transition(.cardFlip)
                     }
                 }
-                .animation(.spring(response: 0.45, dampingFraction: 0.82), value: showingBack)
+                .animation(.cardFlip, value: showingBack)
             }
         }
         .frame(maxWidth: .infinity, minHeight: minHeight)
@@ -71,7 +71,7 @@ struct EditableFlashcard: View {
                 .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                 .onTapGesture { focus.wrappedValue = isBack ? .back(id) : .front(id) }
 
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 if isBack { StudyCardLabel(label: backWord, accent: accent) }
                 if isBack {
                     CardEditorText(text: $back, placeholder: "Type the \(backWord.lowercased())",
@@ -95,23 +95,11 @@ struct EditableFlashcard: View {
     /// real control here, since the card face itself is a text field. Turns the card to the other side
     /// and moves focus there, so you can keep typing.
     private func flipPill(isBack: Bool) -> some View {
-        Button {
+        CardFlipPill(label: isBack ? "Front" : backWord, accent: accent) {
             showingBack.toggle()
             focus.wrappedValue = isBack ? .front(id) : .back(id)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.2.circlepath")
-                Text(isBack ? "Front" : backWord)
-            }
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
-            .foregroundStyle(accent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(accent.opacity(0.12), in: Capsule())
-            .overlay(Capsule().strokeBorder(accent.opacity(0.25), lineWidth: 1))
         }
-        .buttonStyle(.plain)
-        .padding(.bottom, 14)
+        .padding(.bottom, 16)
         .accessibilityLabel(isBack ? "Flip to front" : "Flip to \(backWord.lowercased())")
     }
 
@@ -125,10 +113,10 @@ struct EditableFlashcard: View {
                 .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                 .onTapGesture { focus.wrappedValue = .front(id) }
 
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 StudyCardLabel(label: "Cloze", accent: accent)
                 CardEditorText(text: $front, placeholder: "The {{c1::sun}} is a star.",
-                               centered: false, baseSize: 20, field: .front(id), focus: focus)
+                               centered: true, baseSize: 20, field: .front(id), focus: focus)
             }
             .padding(.horizontal, 26)
             .padding(.top, 38)
@@ -172,7 +160,7 @@ struct CardEditorText: View {
                 if text.isEmpty && !isFocused {
                     Text(placeholder)
                         .font(.system(size: baseSize, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                         .multilineTextAlignment(centered ? .center : .leading)
                         .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
                         .allowsHitTesting(false)
