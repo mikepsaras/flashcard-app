@@ -122,6 +122,12 @@ parked in the review report / the fix-plan list below.)
   "your session didn't count").
 
 ### Review-fix plan (each fix verified valid against code, 2026-06-09 — see session report)
+**✅ ALL SHIPPED 2026-06-09 (commits `fc32f9b`…`91d73d8`).** Quick wins + copy/dead-code (Phase 1), SM-2
+removal (Phase 2), and every real bug (Phase 3) are on `main`; 318 tests green + iOS build green throughout.
+**Bonus find:** the **iOS build was broken** — `DeckGalleryView` (macOS-only) used macOS-only `onExitCommand`
+unguarded, failing the iOS target since the gallery's Esc handling landed (macOS-only testing missed it).
+Restored in `bd37059`, caught by an iOS build check during Phase 3. **Still open:** the "0 reviews" copy
+tweak, and the deferred colored-text wrap-selection toolbar button.
 - **Quick wins (pure logic + unit tests):** cloze due-count guard (`StudyInsights:266`), `absorb()`
   display-order, FocusInsights/Elo tie-breaks, linter `isCircular`/`looksLikeList`.
 - **Copy / dead code:** Settings grading footer (`:195`), dead `symbol` param (`StudyControlsBar`),
