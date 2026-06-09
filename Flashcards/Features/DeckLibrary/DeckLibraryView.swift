@@ -29,6 +29,9 @@ struct DeckLibraryView: View {
     #else
     @Binding var selection: SidebarItem?
     #endif
+    /// Launch a study run scoped to one Subject (`Deck.section`; "" ⇒ the No-Subject group). Wired by
+    /// RootView to present a subject-scoped `StudyPlan`.
+    var onStudySubject: (String) -> Void = { _ in }
 
     @State private var editorMode: DeckEditorMode?
     @State private var showingSettings = false
@@ -82,7 +85,7 @@ struct DeckLibraryView: View {
             }
 
             ForEach(groupedDecks) { group in
-                Section(group.section ?? (hasAnySections ? "No Subject" : "Decks")) {
+                Section {
                     ForEach(group.decks) { deck in
                         deckRow(deck)
                     }
@@ -103,6 +106,8 @@ struct DeckLibraryView: View {
                         .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
                         .listRowBackground(Color.clear)
                     }
+                } header: {
+                    subjectHeader(group)
                 }
             }
         }
@@ -262,6 +267,28 @@ struct DeckLibraryView: View {
             .map { DeckGroup(section: $0, decks: bySection[$0]!) }
         if !uncategorized.isEmpty { result.append(DeckGroup(section: nil, decks: uncategorized)) }
         return result
+    }
+
+    /// A Subject group's header: its name plus, when it has due cards, a quiet "Study N" button that
+    /// runs a study session over every due card in that Subject's decks. Shown only when real Subjects
+    /// exist (otherwise the flat list is just "Decks" and Today already covers everything).
+    @ViewBuilder private func subjectHeader(_ group: DeckGroup) -> some View {
+        let title = group.section ?? (hasAnySections ? "No Subject" : "Decks")
+        let due = group.decks.reduce(0) { $0 + $1.dueCount }
+        HStack(spacing: 6) {
+            Text(title)
+            Spacer(minLength: 8)
+            if hasAnySections && due > 0 {
+                Button { onStudySubject(group.section ?? "") } label: {
+                    Label("Study \(due)", systemImage: "play.fill")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.accent)
+                .help("Study all \(due) due in \(title)")
+                .accessibilityLabel("Study \(due) due cards in \(title)")
+            }
+        }
     }
 
     @ViewBuilder private func deckRow(_ deck: Deck) -> some View {

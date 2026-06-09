@@ -191,7 +191,7 @@ struct RootView: View {
 
     private var splitView: some View {
         NavigationSplitView {
-            DeckLibraryView(selection: $selection)
+            DeckLibraryView(selection: $selection, onStudySubject: { studyPlan = subjectPlan($0) })
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 380)
         } detail: {
             detail
@@ -296,6 +296,27 @@ struct RootView: View {
         ) {
             let ratings = Elo.replay(ReviewLog.records(from: ReviewLog.defaultURL))
             return Elo.adaptiveOrder(deck.allReviewItems, ratings: ratings)
+        }
+    }
+
+    /// A study run over every due card across all decks in one Subject (`Deck.section`; "" ⇒ the
+    /// No-Subject group) — the cross-deck Today queue, scoped to a Subject. Items are fetched when the
+    /// session starts / on "Study Again", so they reflect current due state.
+    private func subjectPlan(_ subject: String) -> StudyPlan {
+        StudyPlan(
+            id: "subject-\(subject)",
+            title: subject.isEmpty ? "No Subject" : subject,
+            accent: Theme.accent,
+            exportText: nil
+        ) {
+            let decks = ((try? context.fetch(FetchDescriptor<Deck>())) ?? []).filter { $0.section == subject }
+            let due = decks.flatMap { $0.dueReviewItems }.sorted { $0.dueDate < $1.dueDate }
+            return StudySession.prioritizingReviews(
+                due,
+                newPerDay: DefaultsKey.newCardsPerDayValue(),
+                introducedToday: StudyStats.newCardsIntroducedToday(),
+                interleaveBy: DefaultsKey.interleaveStudyValue() ? { $0.card.deck?.id.uuidString ?? "" } : nil
+            )
         }
     }
 }
