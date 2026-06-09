@@ -46,20 +46,21 @@ final class StudySessionTests {
     }
 
     @Test func missReschedulesSoonerAndEarnsAnotherLookThisSession() {
-        let cards = makeCards(1)
+        let cards = makeCards(2)           // a non-last card, so the re-look has room to be spaced
         let card = cards[0]
         let dueBefore = card.dueDate
 
         let session = StudySession(cards: cards, trackLearning: true)
-        session.grade(known: false)        // didn't know it
+        session.grade(known: false)        // miss card 0
 
         #expect(session.isFinished == false)   // the card returns for another look this session
-        #expect(session.total == 2)            // queue grew by one
+        #expect(session.total == 3)            // queue grew by one (the requeued copy)
         #expect(session.answered == 1)         // progress advanced past the first look
         #expect(card.lastReviewedAt != nil)
         #expect(card.dueDate > dueBefore)      // and it's rescheduled (sooner) for a future day
 
-        session.grade(known: true)         // see it again, pass it
+        session.grade(known: true)         // card 1
+        session.grade(known: true)         // card 0's re-look — pass it
         #expect(session.isFinished)
     }
 
@@ -244,14 +245,24 @@ final class StudySessionTests {
 
     // MARK: Learning-step requeue (S0.1)
 
-    @Test func missedCardRequeuesUpToCapThenStops() {
+    @Test func lastCardMissDoesNotRequeueImmediately() {
+        // The in-session re-look exists to SPACE a missed card behind a few others. The last card has
+        // nothing to interleave with, so missing it must NOT loop the same card back-to-back — it ends
+        // the run (the lapse is already rescheduled for a future day).
         let session = StudySession(cards: makeCards(1), trackLearning: true)
-        // Keep missing the same card: it returns up to the cap (3), so the run grows 1→2→3→4, then
-        // stops requeuing (it's still rescheduled for a future day).
-        session.grade(known: false); #expect(session.total == 2)
-        session.grade(known: false); #expect(session.total == 3)
-        session.grade(known: false); #expect(session.total == 4)
-        session.grade(known: false); #expect(session.total == 4)   // cap reached — no more requeues
+        session.grade(known: false)
+        #expect(session.total == 1)        // no requeued copy appended
+        #expect(session.isFinished)        // ended instead of re-showing the same card
+    }
+
+    @Test func missRequeuesWithRoomThenStopsAtTheLastCard() {
+        let session = StudySession(cards: makeCards(3), trackLearning: true)   // [0, 1, 2]
+        session.grade(known: false)        // miss card 0 — other cards remain, so it requeues for a re-look
+        #expect(session.total == 4)
+        session.grade(known: true)         // card 1
+        session.grade(known: true)         // card 2
+        session.grade(known: false)        // now on card 0's copy — the last card — so it must NOT requeue
+        #expect(session.total == 4)        // queue didn't grow
         #expect(session.isFinished)
     }
 

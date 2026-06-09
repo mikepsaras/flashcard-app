@@ -192,9 +192,15 @@ final class StudySession {
         // chronic miss can't balloon the run. Computed against the pre-insert queue/index.
         let willRequeue = trackLearning && !isPractice && !grade.isCorrect
             && (requeueCounts[item.id] ?? 0) < Self.maxRequeuesPerItem
-        let requeuedAt: Int? = willRequeue
-            ? buriedRequeueIndex(forCard: card.id, target: min(index + 1 + Self.requeueSpacing, items.count))
-            : nil
+        let requeuedAt: Int? = {
+            guard willRequeue else { return nil }
+            let at = buriedRequeueIndex(forCard: card.id, target: min(index + 1 + Self.requeueSpacing, items.count))
+            // Requeue only if at least one other card will be shown before the copy. On the last card
+            // the slot collapses to "immediately again" — the back-to-back "Again" loop — which is no
+            // spacing at all, so skip it. The lapse is already rescheduled for a future day, so the card
+            // returns next session; `advance()` simply ends the run.
+            return at >= index + 2 ? at : nil
+        }()
 
         history.append(Move(
             item: item,
