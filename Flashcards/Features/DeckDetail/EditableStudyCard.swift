@@ -32,6 +32,11 @@ struct EditableStudyCard: View {
     /// in the tree just reverts (focus bootstrapping), and a TextEditor inside the 3D-rotated card can't
     /// take focus at all — so editing renders the active face FLAT.
     @State private var editingSide: Side?
+    /// True during `beginEditing`'s focus handoff. The first focus set can revert (the editor isn't in the
+    /// tree yet) — notably on the ⌘N add path, where the shortcut button briefly holds first responder — and
+    /// that revert (focus → nil) would otherwise trip `onChange` into blanking `editingSide`, dropping the
+    /// new card straight back to resting. Suppress the reset for the handoff window; re-assert focus after.
+    @State private var bootstrapping = false
 
     private func field(_ side: Side) -> CardEditorField { side == .back ? .back(id) : .front(id) }
 
@@ -39,8 +44,15 @@ struct EditableStudyCard: View {
     private func beginEditing(_ side: Side) {
         guard editingSide != side else { return }
         editingSide = side
+        bootstrapping = true
         let target = field(side)
-        DispatchQueue.main.async { focus.wrappedValue = target }
+        DispatchQueue.main.async {
+            focus.wrappedValue = target
+            DispatchQueue.main.async {
+                if editingSide == side { focus.wrappedValue = target }   // re-assert if the first set reverted
+                bootstrapping = false
+            }
+        }
     }
 
     var body: some View {
@@ -65,7 +77,7 @@ struct EditableStudyCard: View {
         .accessibilityElement(children: .contain)
         // Exit edit when focus leaves the card (Esc, clicking a thumbnail, etc.) → re-render. Tab does
         // NOT leave — it flips to the other side and keeps editing, so focus stays on the card.
-        .onChange(of: focus.wrappedValue) { _, value in if value == nil { editingSide = nil } }
+        .onChange(of: focus.wrappedValue) { _, value in if value == nil, !bootstrapping { editingSide = nil } }
         // A fresh, empty card opens ready to type; an existing card rests rendered until you click it.
         .onAppear { if !isCloze, front.isEmpty, back.isEmpty { beginEditing(.front) } }
     }
