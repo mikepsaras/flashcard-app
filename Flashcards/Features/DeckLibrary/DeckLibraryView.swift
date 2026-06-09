@@ -289,6 +289,7 @@ struct DeckLibraryView: View {
                 .accessibilityLabel("Study \(due) due cards in \(title)")
             }
         }
+        .padding(.trailing, 8)   // keep the "Study N" button off the sidebar's right edge
     }
 
     @ViewBuilder private func deckRow(_ deck: Deck) -> some View {
