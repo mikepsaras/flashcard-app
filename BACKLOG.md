@@ -97,6 +97,10 @@ Supersedes Decision-log #1. No per-deck scheduler choice, no SM-2 algorithm.
 - Resolves review-finding #1 (scheduler-default inconsistency); **moots** #4 (SM-2 interval==0 floor).
 
 ### New items from the user (2026-06-09)
+**Status:** ✅ last-card "Again" fixed (`4616710`) · ✅ review-by-subject shipped + live-verified (`d4f0fdc`) ·
+colored text is **NEXT** (scope decided with the user: a **single accent/highlight** color, not a palette) ·
+"0 reviews" copy still pending. (Phase 1 + Phase 2 (SM-2 removal) shipped; Phase 3's other review bugs remain
+parked in the review report / the fix-plan list below.)
 - **FEATURE — colored text in markdown.** A markdown shortcut in edit mode that renders text in a
   different color in study. Touches: `Markdown.swift` inline parser (a new color-span syntax) + an
   edit-mode toolbar/shortcut + the `AttributedString`/`Text` build. Choose a syntax that won't collide
