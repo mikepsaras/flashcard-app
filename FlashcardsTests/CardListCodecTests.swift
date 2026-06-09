@@ -20,6 +20,14 @@ import Foundation
         #expect(parsed.cards[0].definition == "B")
     }
 
+    @Test func bareArrayDoesNotLeakFirstCardKeysIntoDeckMetadata() {
+        // A bare array's first {…} IS the first card — its keys must not become deck metadata.
+        let parsed = CardListCodec.parse(#"[{"term":"hola","definition":"hello","section":"Lesson 1"}]"#)
+        #expect(parsed.name == nil)
+        #expect(parsed.section == nil)                       // not leaked from the first card
+        #expect(parsed.cards.first?.section == "Lesson 1")   // the card keeps its own section
+    }
+
     @Test func capturesDeckMetadataFromEnvelope() {
         let json = #"{"name":"Spanish","section":"Languages","description":"basics","cards":[{"term":"hola","definition":"hello"}]}"#
         let parsed = CardListCodec.parse(json)
@@ -86,6 +94,17 @@ import Foundation
         #expect(CardListCodec.parse(json).cards.first?.definition == "Written as {1, 2, 3}")
     }
 
+    @Test func extraRoundTripsThroughJSON() {
+        let container = DeckStore.makeContainer()
+        let deck = Deck(name: "E"); container.mainContext.insert(deck)
+        let card = Card(term: "Krebs cycle", definition: "Produces ATP", deck: deck)
+        card.extra = "Occurs in the mitochondrial matrix."
+        container.mainContext.insert(card)
+        let json = CardListCodec.exportJSON([card])
+        #expect(json.contains("\"extra\""))
+        #expect(CardListCodec.parse(json).cards.first?.extra == "Occurs in the mitochondrial matrix.")
+    }
+
     // MARK: Sections
 
     @Test func jsonPerCardSectionRoundTrips() {
@@ -134,5 +153,14 @@ import Foundation
         let parsed = CardListCodec.parse(#"{"cards":[{"question":"Capital of France","answer":"Paris"}]}"#)
         #expect(parsed.cards.first?.term == "Capital of France")
         #expect(parsed.cards.first?.definition == "Paris")
+    }
+
+    @Test func headerlessQACSVKeepsTheFirstRowAsACard() {
+        // "Q,A" is a legit headerless first card, not a header — 1-letter aliases don't count as a header.
+        let parsed = CardListCodec.parse("Q,A\nmtDNA,maternal\n")
+        #expect(parsed.cards.count == 2)
+        #expect(parsed.cards.first?.term == "Q")
+        // A real full-word header is still detected (not imported as a card).
+        #expect(CardListCodec.parse("Term,Definition\na,b\n").cards.count == 1)
     }
 }

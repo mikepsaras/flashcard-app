@@ -327,7 +327,9 @@ struct DeckDetailView: View {
             let section = card.section ?? ""
             let order = nextOrder[section, default: 0]
             nextOrder[section] = order + 1
-            context.insert(Card(term: card.term, definition: card.definition, deck: deck, section: section, sortOrder: order))
+            let newCard = Card(term: card.term, definition: card.definition, deck: deck, section: section, sortOrder: order)
+            newCard.extra = card.extra.trimmingCharacters(in: .whitespacesAndNewlines)   // preserve any elaboration
+            context.insert(newCard)
         }
         if !parsed.cards.isEmpty { context.saveAndPersist(touching: deck) }
         let n = parsed.cards.count

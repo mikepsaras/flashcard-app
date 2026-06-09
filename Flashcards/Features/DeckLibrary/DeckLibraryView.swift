@@ -351,8 +351,10 @@ struct DeckLibraryView: View {
         deck.sectionOrder = CardListCodec.orderedSections(parsed.cards)
         context.insert(deck)
         for (index, card) in parsed.cards.enumerated() {
-            context.insert(Card(term: card.term, definition: card.definition, deck: deck,
-                                section: card.section ?? "", sortOrder: index))
+            let newCard = Card(term: card.term, definition: card.definition, deck: deck,
+                               section: card.section ?? "", sortOrder: index)
+            newCard.extra = card.extra.trimmingCharacters(in: .whitespacesAndNewlines)   // preserve any elaboration
+            context.insert(newCard)
         }
         context.saveAndPersist(touching: deck)
         select(.deck(deck.persistentModelID))

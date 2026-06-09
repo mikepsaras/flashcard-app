@@ -41,7 +41,11 @@ enum CardListCodec {
         // Optional deck metadata from a top-level object envelope ({"name":…, "cards":[…]}).
         var name: String?, section: String?, description: String?
         let cleaned = CardJSON.stripFences(text)
-        if let object = CardJSON.balancedSpans(in: cleaned, open: "{", close: "}").first,
+        // Deck metadata comes only from a top-level OBJECT envelope. For a bare top-level array the
+        // first `{…}` is the first CARD, so mining it would leak that card's keys (name/section/…)
+        // into the deck — guard on the cleaned text actually starting with `{`.
+        if cleaned.trimmingCharacters(in: .whitespacesAndNewlines).first == "{",
+           let object = CardJSON.balancedSpans(in: cleaned, open: "{", close: "}").first,
            let data = object.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             name = clean((json["name"] ?? json["deckName"] ?? json["title"]) as? String)
@@ -65,14 +69,15 @@ enum CardListCodec {
 
     // MARK: Export
 
-    /// Encodes cards as pretty-printed JSON — `{"cards":[{"front":…,"back":…,"source":…}]}` —
-    /// which round-trips back through `parse`. `source` carries a card's within-deck section and is
-    /// omitted when empty. (No top-level deck name: this format is a bare card list, so a re-import
-    /// takes its deck name from the filename.)
+    /// Encodes cards as pretty-printed JSON — `{"cards":[{"front":…,"back":…,"source":…,"extra":…}]}` —
+    /// which round-trips back through `parse`. `source` (a card's within-deck section) and `extra` (its
+    /// elaboration) are each omitted when empty. (No top-level deck name: this format is a bare card
+    /// list, so a re-import takes its deck name from the filename.)
     static func exportJSON(_ cards: [Card]) -> String {
         let envelope = Envelope(
             cards: cards.map { Envelope.Item(front: $0.term, back: $0.definition,
-                                             source: $0.section.isEmpty ? nil : $0.section) }
+                                             source: $0.section.isEmpty ? nil : $0.section,
+                                             extra: $0.extra.isEmpty ? nil : $0.extra) }
         )
         let encoder = JSONEncoder()
         // No `.sortedKeys`: synthesized Codable encodes in declaration order, so each card reads
@@ -98,7 +103,7 @@ enum CardListCodec {
     private struct Envelope: Encodable {
         var cards: [Item]
         // `source` (the card's section) is omitted when nil (Encodable uses encodeIfPresent for optionals).
-        struct Item: Encodable { var front: String; var back: String; var source: String? }
+        struct Item: Encodable { var front: String; var back: String; var source: String?; var extra: String? }
     }
 }
 

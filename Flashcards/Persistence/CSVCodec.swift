@@ -61,8 +61,13 @@ enum CSVCodec {
             // so a "Front,Back" or "Question,Answer" header isn't imported as a card.
             if !sawContent {
                 sawContent = true
-                if CardJSON.frontKeys.contains(termKey.lowercased()),
-                   CardJSON.backKeys.contains(defKey.lowercased()) { continue }
+                // Header detection uses the multi-letter column names only — a 1-letter alias like
+                // "q"/"a" is too likely to be a real first card (e.g. a headerless "Q,A" file), so
+                // those don't count as a header row.
+                let frontHeaders = CardJSON.frontKeys.filter { $0.count > 1 }
+                let backHeaders = CardJSON.backKeys.filter { $0.count > 1 }
+                if frontHeaders.contains(termKey.lowercased()),
+                   backHeaders.contains(defKey.lowercased()) { continue }
             }
             rows.append(Row(term: term, definition: definition, section: section))
         }
