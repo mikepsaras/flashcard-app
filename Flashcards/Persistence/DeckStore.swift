@@ -552,11 +552,13 @@ final class DeckStore {
     /// The on-disk file URL for a deck (for sharing / reveal). Served from the warm
     /// id→URL cache; only falls back to scanning + decoding files on a cache miss
     /// (and rewarms the cache as it goes).
-    func fileURL(for deck: Deck, in directory: URL = DeckStore.libraryURL()) -> URL? {
+    func fileURL(for deck: Deck) -> URL? {
         if let cached = urlByDeckID[deck.id], FileManager.default.fileExists(atPath: cached.path) {
             return cached
         }
-        for url in Self.deckFiles(in: directory) {
+        // Cache miss: scan EVERY library folder (not just the primary) so a deck in a secondary macOS
+        // folder is still found for Share / Reveal in Finder; rewarm the cache as we go.
+        for url in DeckStore.libraryURLs().flatMap(Self.deckFiles) {
             if let data = try? Data(contentsOf: url), let dto = try? DeckCodec.decodeDTO(data) {
                 urlByDeckID[dto.id] = url
                 if dto.id == deck.id { return url }

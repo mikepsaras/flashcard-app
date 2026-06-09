@@ -20,6 +20,11 @@ final class LibraryLocation {
     /// non-scoped folder (the in-container default) is harmless, so we track all of them uniformly.
     private var accessed: [URL] = []
 
+    /// Bookmarks that didn't resolve this launch (e.g. an offline network/removable volume). Kept so
+    /// `persistBookmarks` writes them back instead of permanently forgetting the folder — it returns to
+    /// the set when the volume does.
+    private static var unresolvedBookmarks: [Data] = []
+
     private init() {
         folders = Self.resolveStoredFolders()
         if folders.isEmpty { folders = [Self.defaultFolder()] }
@@ -100,7 +105,9 @@ final class LibraryLocation {
     }
 
     private func persistBookmarks() {
-        let datas = folders.compactMap { try? $0.bookmarkData() }
+        // Current folders' fresh bookmarks, plus any unresolvable this launch (offline volumes) so they
+        // aren't permanently dropped from the set.
+        let datas = folders.compactMap { try? $0.bookmarkData() } + Self.unresolvedBookmarks
         UserDefaults.standard.set(datas, forKey: Self.bookmarksKey)
         UserDefaults.standard.removeObject(forKey: Self.legacyBookmarkKey)
     }
@@ -108,7 +115,13 @@ final class LibraryLocation {
     private static func resolveStoredFolders() -> [URL] {
         let defaults = UserDefaults.standard
         if let datas = defaults.array(forKey: bookmarksKey) as? [Data] {
-            return datas.compactMap(resolveBookmark)
+            unresolvedBookmarks = []
+            var urls: [URL] = []
+            for data in datas {
+                if let url = resolveBookmark(data) { urls.append(url) }
+                else { unresolvedBookmarks.append(data) }   // offline/unresolvable now — keep it to re-persist
+            }
+            return urls
         }
         // Migrate the pre-1.8 single-folder bookmark into the set.
         if let data = defaults.data(forKey: legacyBookmarkKey), let url = resolveBookmark(data) {

@@ -16,6 +16,9 @@ struct StatsView: View {
     @AppStorage(StudyStats.revisionKey) private var statsRevision = 0
     @State private var showingExporter = false
     @State private var exportText = ""
+    /// Cached weak-spots ranking. `FocusInsights.make` reads the whole review log + replays Elo, so it's
+    /// computed on appear / stats change / deck-count change — NOT in `body` (which re-runs constantly).
+    @State private var focus = FocusInsights()
 
     var body: some View {
         let _ = statsRevision   // re-render when stats are reset (the log isn't otherwise observed)
@@ -27,7 +30,6 @@ struct StatsView: View {
             matureByDay: StudyStats.matureReviewsByDay(),
             matureCorrectByDay: StudyStats.matureCorrectByDay()
         )
-        let focus = FocusInsights.make(decks: decks, records: ReviewLog.records(from: ReviewLog.defaultURL))
         Group {
             if insights.totalCards == 0 && insights.reviewsAllTime == 0 {
                 ContentUnavailableView(
@@ -45,6 +47,9 @@ struct StatsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.groupedBackground)
+        .onAppear { reloadFocus() }
+        .onChange(of: statsRevision) { _, _ in reloadFocus() }
+        .onChange(of: decks.count) { _, _ in reloadFocus() }
         .navigationTitle("Insights")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -61,6 +66,12 @@ struct StatsView: View {
             contentType: .commaSeparatedText,
             defaultFilename: "Flashcards Insights"
         ) { _ in }
+    }
+
+    /// Reloads the cached weak-spots ranking from the review log (expensive: full log read + Elo replay),
+    /// so `body` doesn't recompute it on every render.
+    private func reloadFocus() {
+        focus = FocusInsights.make(decks: decks, records: ReviewLog.records(from: ReviewLog.defaultURL))
     }
 
     /// A cross-deck "practice your weak spots" run — every card, weakest (highest Elo difficulty)

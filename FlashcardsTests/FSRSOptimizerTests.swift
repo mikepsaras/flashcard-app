@@ -27,6 +27,18 @@ import Foundation
         #expect(seqs[0].map(\.recalled) == [true, false, true])
     }
 
+    @Test func sequencesFloorElapsedToWholeDaysLikeTheScheduler() {
+        let card = UUID(), deck = UUID()
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        func rec(_ offset: Double) -> ReviewLog.Record {
+            ReviewLog.Record(ts: t0.addingTimeInterval(offset * 86_400), deck: deck, card: card, direction: .forward,
+                             grade: Grade.good.rawValue, correct: true, elapsedDays: offset, intervalBefore: 1, mature: false)
+        }
+        // 5.7 days elapsed must floor to 5 — matching FSRS.schedule's integer-day retrievability.
+        let seqs = FSRSOptimizer.sequences(from: [rec(0), rec(5.7)])
+        #expect(seqs[0].map(\.elapsedDays) == [0, 5])
+    }
+
     @Test func scoredCountSkipsFirstAndSameDayReviews() {
         let seq = [
             FSRSOptimizer.Review(elapsedDays: 0, rating: 3, recalled: true),    // first (seed)

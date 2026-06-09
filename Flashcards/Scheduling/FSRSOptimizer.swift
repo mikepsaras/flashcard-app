@@ -28,7 +28,10 @@ enum FSRSOptimizer {
         return byUnit.values.map { recs in
             recs.sorted { $0.ts < $1.ts }.map { rec in
                 let rating = FSRS.fsrsRating(Grade(rawValue: rec.grade) ?? .good)
-                return Review(elapsedDays: max(rec.elapsedDays, 0), rating: rating, recalled: rec.correct)
+                // Floor to whole days to match FSRS.schedule, which computes retrievability on INTEGER
+                // elapsed days — so the optimizer fits the same R(t) curve the live scheduler applies
+                // (avoids a train/serve skew at short intervals where the forgetting curve is steepest).
+                return Review(elapsedDays: max(rec.elapsedDays, 0).rounded(.down), rating: rating, recalled: rec.correct)
             }
         }
     }
