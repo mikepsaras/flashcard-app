@@ -147,7 +147,8 @@ struct EditableStudyCard: View {
 
     @ViewBuilder private func clozeContent(editing: Bool, field: CardEditorField, fontSize: CGFloat) -> some View {
         if editing {
-            GalleryCardEditor(text: $front, field: field, focus: focus, fontSize: editSize(fontSize))
+            GalleryCardEditor(text: $front, field: field, focus: focus, fontSize: editSize(fontSize),
+                              onEscape: { exitEditing() })
         } else if front.isEmpty {
             placeholderText("The {{c1::sun}} is a star.", fontSize: fontSize)
         } else {
@@ -162,7 +163,7 @@ struct EditableStudyCard: View {
                                       field: CardEditorField, fontSize: CGFloat, placeholder: String) -> some View {
         if editing {
             GalleryCardEditor(text: text, field: field, focus: focus, fontSize: editSize(fontSize),
-                              onTab: { flipWhileEditing() })
+                              onTab: { flipWhileEditing() }, onEscape: { exitEditing() })
         } else if rendered.isEmpty {
             placeholderText(placeholder, fontSize: fontSize)
         } else {
@@ -230,6 +231,15 @@ struct EditableStudyCard: View {
         showingBack = side == .front                       // moving to the back ⇒ show the back
         beginEditing(side == .front ? .back : .front)
     }
+
+    /// Exit editing the current face — the first stage of the gallery's two-stage Esc. Clears `editingSide`
+    /// **directly** (like `flip()`), not just `focus`: clearing `@FocusState` to nil alone doesn't reliably
+    /// re-render to rest from a key handler. A second Esc — now that no face editor has focus — reaches the
+    /// gallery's `onExitCommand`, which closes the gallery.
+    private func exitEditing() {
+        editingSide = nil
+        focus.wrappedValue = nil
+    }
 }
 
 // MARK: - In-place face editor (fills the face, transparent, centered, scrolls if long)
@@ -246,6 +256,11 @@ private struct GalleryCardEditor: View {
     /// `.keyboardShortcut(.tab)`, which never fires because the `NSTextView` consumes Tab first. Nil ⇒ no
     /// flip target (cloze is a single face), so Tab just inserts a tab there.
     var onTab: (() -> Void)? = nil
+    /// Esc exits editing (first stage of the gallery's two-stage Esc). The `NSTextView` interprets Esc as
+    /// `cancelOperation:` at the AppKit level — ahead of SwiftUI's `.onKeyPress` / the gallery's
+    /// `.onExitCommand` / a local keyDown monitor (each was tried; none exited the card) — so
+    /// `GalleryEditorConfigurator` intercepts that one command at the text view's delegate instead.
+    var onEscape: (() -> Void)? = nil
 
     var body: some View {
         TextEditor(text: $text)
@@ -260,8 +275,8 @@ private struct GalleryCardEditor: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
             #if os(macOS)
-            .background(GalleryEditorConfigurator())   // transparent NSTextView, centered
-            .background(TabKeyCatcher(onTab: onTab))    // Tab → flip (the NSTextView would otherwise eat it)
+            .background(GalleryEditorConfigurator(onCancel: onEscape))   // transparent NSTextView; Esc → exit
+            .background(TabKeyCatcher(onTab: onTab))                     // Tab → flip (the NSTextView eats it)
             #endif
     }
 }
@@ -271,10 +286,18 @@ private struct GalleryCardEditor: View {
 /// no scroller (the editor is content-sized, so it never scrolls — and a zeroed text inset avoids the
 /// stray overlay-scroller knob). Reuses `TextEditorConfigurator`'s geometry-targeted lookup.
 private struct GalleryEditorConfigurator: NSViewRepresentable {
+    var onCancel: (() -> Void)?
+
     func makeNSView(context: Context) -> Probe { Probe() }
-    func updateNSView(_ nsView: Probe, context: Context) { nsView.configure() }
+    func updateNSView(_ nsView: Probe, context: Context) {
+        nsView.onCancel = onCancel
+        nsView.configure()
+    }
 
     final class Probe: NSView {
+        var onCancel: (() -> Void)?
+        private var escDelegate: EscCommandDelegate?
+
         override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); configure() }
         override func layout() { super.layout(); configure() }
 
@@ -291,8 +314,50 @@ private struct GalleryEditorConfigurator: NSViewRepresentable {
                 textView.alignment = .center
                 textView.defaultParagraphStyle = style
                 textView.typingAttributes[.paragraphStyle] = style
+                interceptEsc(on: textView)
             }
         }
+
+        /// Esc in an `NSTextView` is interpreted as `cancelOperation:` and consumed there — before SwiftUI or
+        /// a local key monitor can see it. Slot a forwarding delegate in front of SwiftUI's so we can turn
+        /// that one command into the card's "exit editing"; every other delegate message passes straight
+        /// through, so the text binding SwiftUI drives is untouched.
+        private func interceptEsc(on textView: NSTextView) {
+            if let esc = textView.delegate as? EscCommandDelegate {
+                esc.onCancel = { [weak self] in self?.onCancel?() }   // already wrapped — just refresh
+                return
+            }
+            let esc = EscCommandDelegate(forwarding: textView.delegate)
+            esc.onCancel = { [weak self] in self?.onCancel?() }
+            textView.delegate = esc
+            escDelegate = esc   // retain — NSTextView.delegate is weak
+        }
+    }
+}
+
+/// Forwards every `NSTextViewDelegate` message to SwiftUI's own delegate, except `doCommandBy` for
+/// `cancelOperation:` (Esc), which it turns into `onCancel`. Lets the gallery card exit editing on Esc
+/// without disturbing the text binding SwiftUI drives through its delegate.
+private final class EscCommandDelegate: NSObject, NSTextViewDelegate {
+    weak var forwarding: NSTextViewDelegate?
+    var onCancel: (() -> Void)?
+
+    init(forwarding: NSTextViewDelegate?) { self.forwarding = forwarding }
+
+    func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.cancelOperation(_:)) {
+            onCancel?()
+            return true   // handled — don't let the text view no-op the cancel
+        }
+        return forwarding?.textView?(textView, doCommandBy: selector) ?? false
+    }
+
+    // Pass through every other delegate method to SwiftUI's original delegate.
+    override func responds(to selector: Selector!) -> Bool {
+        super.responds(to: selector) || (forwarding?.responds(to: selector) ?? false)
+    }
+    override func forwardingTarget(for selector: Selector!) -> Any? {
+        (forwarding?.responds(to: selector) ?? false) ? forwarding : super.forwardingTarget(for: selector)
     }
 }
 
