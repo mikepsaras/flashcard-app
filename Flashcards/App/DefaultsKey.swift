@@ -44,6 +44,9 @@ enum DefaultsKey {
     static let showImportExport = "showImportExport"
     /// JSON-encoded `[RecentDeckFiles.Entry]` — the File ▸ Open Recent list (macOS).
     static let recentDeckFiles = "recentDeckFiles"
+    /// JSON-encoded `[String]` of sidebar Subject groups the user collapsed ("" = the No-Subject
+    /// group). Stored as a collapsed-set so NEW subjects default to expanded.
+    static let collapsedSubjects = "collapsedSubjects"
     /// Developer-only: show projected next-interval subtitles on the study grade buttons. Off by
     /// default so the numbers don't bias honest grading; surfaced in the hidden Developer section.
     static let showGradeIntervals = "showGradeIntervals"

@@ -218,6 +218,35 @@ struct SnapshotGalleryTests {
         )
     }
 
+    /// Sidebar deck rows at sidebar width: the new "M due · N cards" caption (accent due
+    /// fragment) vs a no-due row, at the tightened padding. (The List itself can't render
+    /// under ImageRenderer; rows are rendered standalone.)
+    @Test func renderSidebarRows() throws {
+        let container = DeckStore.previewContainer(seeded: false)
+        let context = container.mainContext
+        let due = Deck(name: "Spanish Verbs", colorHex: "#FF9500", section: "Languages", icon: "character.book.closed")
+        context.insert(due)
+        for i in 0..<8 { context.insert(Card(term: "v\(i)", definition: "m\(i)", deck: due)) }
+        let idle = Deck(name: "Capitals", colorHex: "#34C759", icon: "globe.europe.africa.fill")
+        context.insert(idle)
+        for i in 0..<3 {
+            let card = Card(term: "c\(i)", definition: "x\(i)", deck: idle)
+            card.dueDate = Date(timeIntervalSinceNow: 86_400)   // nothing due
+            context.insert(card)
+        }
+        try context.save()
+
+        let column = VStack(alignment: .leading, spacing: 6) {
+            DeckRowView(deck: due)
+            DeckRowView(deck: idle)
+        }
+        .padding(12)
+        .frame(width: 300)
+        .background(Theme.groupedBackground)
+        try Snapshot.write(column, size: CGSize(width: 300, height: 120), name: "36_sidebar_rows")
+        #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/36_sidebar_rows.png"))
+    }
+
     @Test func renderDeckIcons() throws {
         let row = VStack(spacing: 20) {
             HStack(spacing: 16) {

@@ -14,7 +14,7 @@ struct DeckRowView: View {
                 Text(deck.displayName)
                     .font(Typography.headline)
                     .lineLimit(1)
-                Text("\(deck.cardCount) \(deck.cardCount == 1 ? "card" : "cards")")
+                caption
                     .font(Typography.caption)
                     .foregroundStyle(.secondary)
             }
@@ -25,7 +25,17 @@ struct DeckRowView: View {
                 SidebarCountBadge(count: deck.dueCount, selected: selected)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
+    }
+
+    /// "N cards", with a quiet accent "M due · " prefix when something's waiting — readable at a
+    /// glance without scanning across to the badge. The tint drops on the selected row (accent
+    /// text on the accent highlight would vanish).
+    private var caption: Text {
+        let cards = Text("\(deck.cardCount) \(deck.cardCount == 1 ? "card" : "cards")")
+        guard deck.dueCount > 0 else { return cards }
+        let due = Text("\(deck.dueCount) due").foregroundStyle(selected ? AnyShapeStyle(.primary) : AnyShapeStyle(Theme.accent))
+        return due + Text(" · ") + cards
     }
 }
 

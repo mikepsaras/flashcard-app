@@ -41,6 +41,9 @@ struct DeckLibraryView: View {
     @State private var decksPendingDeletion: [Deck] = []
     @AppStorage(DefaultsKey.deckSort) private var deckSortRaw = DeckSort.recent.rawValue
     @AppStorage(DefaultsKey.showImportExport) private var showImportExport = false
+    /// Collapsed Subject groups (JSON `[String]`; "" = No Subject). A collapsed-SET — not an
+    /// expanded one — so subjects the user has never touched default to expanded.
+    @AppStorage(DefaultsKey.collapsedSubjects) private var collapsedSubjectsRaw = "[]"
 
     private var deckSort: DeckSort { DeckSort(rawValue: deckSortRaw) ?? .recent }
     private var totalDue: Int { decks.reduce(0) { $0 + $1.dueCount } }
@@ -85,29 +88,20 @@ struct DeckLibraryView: View {
             }
 
             ForEach(groupedDecks) { group in
-                Section {
-                    ForEach(group.decks) { deck in
-                        deckRow(deck)
+                // Subject groups collapse (native Section disclosure ONLY — no row/header tap
+                // gestures, FB7367473); the flat "Decks" group stays plain.
+                if hasAnySections {
+                    Section(isExpanded: expansionBinding(for: group)) {
+                        groupRows(group)
+                    } header: {
+                        subjectHeader(group)
                     }
-                    .onDelete { offsets in
-                        if let index = offsets.first { decksPendingDeletion = [group.decks[index]] }
+                } else {
+                    Section {
+                        groupRows(group)
+                    } header: {
+                        subjectHeader(group)
                     }
-
-                    if group.section == nil && decks.isEmpty {
-                        Button { editorMode = .new } label: {
-                            Label("Create your first deck", systemImage: "plus")
-                                .font(.system(.callout, design: .rounded, weight: .medium))
-                                .foregroundStyle(Theme.accent)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
-                        .listRowBackground(Color.clear)
-                    }
-                } header: {
-                    subjectHeader(group)
                 }
             }
         }
@@ -243,6 +237,52 @@ struct DeckLibraryView: View {
 
     /// Whether any visible deck has a section — drives grouping vs a single flat "Decks" section.
     private var hasAnySections: Bool { filteredDecks.contains { !$0.section.isEmpty } }
+
+    /// One Subject group's rows (+ the first-deck CTA in the empty library).
+    @ViewBuilder private func groupRows(_ group: DeckGroup) -> some View {
+        ForEach(group.decks) { deck in
+            deckRow(deck)
+        }
+        .onDelete { offsets in
+            if let index = offsets.first { decksPendingDeletion = [group.decks[index]] }
+        }
+
+        if group.section == nil && decks.isEmpty {
+            Button { editorMode = .new } label: {
+                Label("Create your first deck", systemImage: "plus")
+                    .font(.system(.callout, design: .rounded, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
+            .listRowBackground(Color.clear)
+        }
+    }
+
+    private var collapsedSubjects: Set<String> {
+        Set((try? JSONDecoder().decode([String].self, from: Data(collapsedSubjectsRaw.utf8))) ?? [])
+    }
+
+    /// Expansion state for a Subject group, persisted as the collapsed-set. While searching,
+    /// every group reads expanded (matches must be visible) and toggles are not persisted.
+    private func expansionBinding(for group: DeckGroup) -> Binding<Bool> {
+        let key = group.section ?? ""
+        return Binding(
+            get: { !search.isEmpty || !collapsedSubjects.contains(key) },
+            set: { expanded in
+                guard search.isEmpty else { return }
+                var set = collapsedSubjects
+                if expanded { set.remove(key) } else { set.insert(key) }
+                collapsedSubjectsRaw = String(
+                    data: (try? JSONEncoder().encode(set.sorted())) ?? Data("[]".utf8),
+                    encoding: .utf8
+                ) ?? "[]"
+            }
+        )
+    }
 
     private struct DeckGroup: Identifiable {
         let section: String?      // nil ⇒ the "Uncategorized" group
