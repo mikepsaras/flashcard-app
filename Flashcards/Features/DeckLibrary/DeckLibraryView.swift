@@ -323,25 +323,32 @@ struct DeckLibraryView: View {
 
     private func openDeckFiles(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result else { return }
-        var imported: Deck?
+        var opened: Deck?
         for url in urls {
-            if let deck = DeckStore.importDeck(from: url, into: context) { imported = deck }
+            // Select-don't-duplicate: a file whose deck is already loaded resolves to it.
+            if let deck = DeckFileOpen.importPreferringExisting(url, context: context) {
+                opened = deck
+                RecentDeckFiles.shared.record(url, name: deck.displayName)
+            }
         }
         context.saveAndPersist()
-        if let imported { select(.deck(imported.persistentModelID)) }
+        if let opened { select(.deck(opened.persistentModelID)) }
     }
 
     @discardableResult
     private func importDroppedDecks(_ urls: [URL]) -> Bool {
         let deckURLs = urls.filter { DeckStore.isDeckFile($0) }
         guard !deckURLs.isEmpty else { return false }
-        var imported: Deck?
+        var opened: Deck?
         for url in deckURLs {
-            if let deck = DeckStore.importDeck(from: url, into: context) { imported = deck }
+            if let deck = DeckFileOpen.importPreferringExisting(url, context: context) {
+                opened = deck
+                RecentDeckFiles.shared.record(url, name: deck.displayName)
+            }
         }
         context.saveAndPersist()
-        if let imported { select(.deck(imported.persistentModelID)) }
-        return imported != nil
+        if let opened { select(.deck(opened.persistentModelID)) }
+        return opened != nil
     }
 
     private func importCardsAsDeck(_ result: Result<[URL], Error>) {

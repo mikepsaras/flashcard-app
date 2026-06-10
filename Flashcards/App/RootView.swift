@@ -3,6 +3,9 @@ import SwiftData
 #if canImport(UIKit)
 import UIKit
 #endif
+#if os(macOS)
+import AppKit
+#endif
 
 /// Sidebar selection: the cross-deck Today queue, or a specific deck.
 enum SidebarItem: Hashable {
@@ -30,6 +33,11 @@ struct RootView: View {
     @Query(sort: \Deck.createdAt) private var decks: [Deck]
     @State private var studyPlan: StudyPlan?
     @State private var watcher = DeckFolderWatcher()
+    /// Readable deck files opened from outside the library, awaiting the user's import choice
+    /// (first one is presented; the rest queue behind it).
+    @State private var pendingImportURLs: [URL] = []
+    /// A file the app was asked to open but couldn't read (wrong/old format) — alert content.
+    @State private var unreadableFileName: String?
     #if os(macOS)
     /// The deck being edited in the full-window gallery editor (macOS), with the card to open on.
     @State private var editorTarget: EditorTarget?
@@ -74,13 +82,23 @@ struct RootView: View {
         // Body-time read so changes to `failure` re-run body and present the alert.
         let failure = persistenceMonitor.failure
         content
+            // The File-menu Save a Copy command acts on the selected deck.
+            .focusedSceneValue(\.selectedDeck, selectedDeck)
             .task {
                 // The termination flush (AppDelegate) persists through this context.
                 DeckStore.shared.registerLiveContext(context)
                 // Reflect external edits to the .deck files live; pause while studying or editing.
                 watcher.isPaused = isTakingOverWindow
                 watcher.start(folders: DeckStore.libraryURLs()) { reconcileAfterFlush() }
+                // A cold-launch Finder open can arrive before this view exists — drain the buffer.
+                drainPendingOpens()
             }
+            .onChange(of: AppActions.shared.openFileTick) { _, _ in drainPendingOpens() }
+            #if os(iOS)
+            .onOpenURL { url in
+                if DeckStore.isDeckFile(url) { handleOpenedFile(url) }
+            }
+            #endif
             .onChange(of: decks.count) { _, _ in
                 // Drop any selected deck that vanished (delete / Delete All / external removal) so the
                 // detail pane falls back to the placeholder.
@@ -174,6 +192,41 @@ struct RootView: View {
             } message: {
                 Text(failure ?? "")
             }
+            .confirmationDialog(
+                "Add to Library?",
+                isPresented: Binding(
+                    get: { !pendingImportURLs.isEmpty },
+                    set: { _ in }   // resolved by the buttons below (incl. Cancel / Esc)
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Import a Copy") { resolvePendingImport(.importCopy) }
+                #if os(macOS)
+                Button("Add Its Folder to Library…") { resolvePendingImport(.addFolder) }
+                #endif
+                Button("Cancel", role: .cancel) { resolvePendingImport(nil) }
+            } message: {
+                Text("“\(pendingImportURLs.first?.lastPathComponent ?? "")” isn’t in your library. Import a copy into your library folder\(addFolderHint), or cancel.")
+            }
+            .alert(
+                "Couldn’t Open File",
+                isPresented: Binding(
+                    get: { unreadableFileName != nil },
+                    set: { if !$0 { unreadableFileName = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("“\(unreadableFileName ?? "")” isn’t a readable deck file (it may use an old format).")
+            }
+    }
+
+    private var addFolderHint: String {
+        #if os(macOS)
+        ", or add its folder so the deck opens in place"
+        #else
+        ""
+        #endif
     }
 
     @ViewBuilder
@@ -272,6 +325,75 @@ struct RootView: View {
             DeckStore.shared.reconcileFolders(into: context)
         }
     }
+
+    // MARK: Opening deck files (Finder / File menu / Open Recent)
+
+    private func drainPendingOpens() {
+        let urls = AppActions.shared.pendingOpenURLs
+        AppActions.shared.pendingOpenURLs = []
+        for url in urls { handleOpenedFile(url) }
+    }
+
+    private func handleOpenedFile(_ url: URL) {
+        Task { @MainActor in
+            switch await DeckFileOpen.resolve(url, context: context) {
+            case .existing(let deck):
+                select(deck)
+                RecentDeckFiles.shared.record(url, name: deck.displayName)
+            case .needsImportConsent:
+                pendingImportURLs.append(url)
+            case .unreadable:
+                unreadableFileName = url.lastPathComponent
+            }
+        }
+    }
+
+    private func select(_ deck: Deck) {
+        #if os(macOS)
+        selection = [.deck(deck.persistentModelID)]
+        #else
+        selection = .deck(deck.persistentModelID)
+        #endif
+    }
+
+    private enum ImportChoice { case importCopy, addFolder }
+
+    private func resolvePendingImport(_ choice: ImportChoice?) {
+        guard !pendingImportURLs.isEmpty else { return }
+        let url = pendingImportURLs.removeFirst()
+        switch choice {
+        case .importCopy:
+            if let deck = DeckFileOpen.importPreferringExisting(url, context: context) {
+                context.saveAndPersist(touching: deck)
+                select(deck)
+                RecentDeckFiles.shared.record(url, name: deck.displayName)
+            } else {
+                unreadableFileName = url.lastPathComponent
+            }
+        case .addFolder:
+            #if os(macOS)
+            addFolderToLibrary(for: url)
+            #endif
+        case nil:
+            break
+        }
+    }
+
+    #if os(macOS)
+    /// "Add Its Folder to Library…": confirm the folder via an open panel preset to the file's
+    /// parent, register it, then re-route the file — it now resolves to `.existing` and selects.
+    private func addFolderToLibrary(for url: URL) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.directoryURL = url.deletingLastPathComponent()
+        panel.prompt = "Add Folder"
+        panel.message = "This folder joins your library — its decks open in place, no copies."
+        guard panel.runModal() == .OK, let folder = panel.url,
+              LibraryLocation.shared.addFolder(folder) else { return }
+        handleOpenedFile(url)
+    }
+    #endif
 
     private var placeholder: some View {
         ContentUnavailableView(

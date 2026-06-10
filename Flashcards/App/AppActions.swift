@@ -27,4 +27,16 @@ final class AppActions {
         pendingWipe = wipe
         wipeTick += 1
     }
+
+    /// Deck-file URLs handed to the app (Finder double-click / Dock drag via the AppDelegate,
+    /// File ▸ Open / Open Recent). Buffered — a cold-launch open can arrive before RootView
+    /// exists; RootView drains the buffer in `.task` and on each tick.
+    var pendingOpenURLs: [URL] = []
+    var openFileTick = 0
+
+    func requestOpen(urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        pendingOpenURLs.append(contentsOf: urls)
+        openFileTick += 1
+    }
 }

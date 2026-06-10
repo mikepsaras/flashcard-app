@@ -8,6 +8,13 @@ import SwiftData
 /// ⌘Q mid-study, whose grades otherwise persist only on session finish — and wait for the
 /// persist pipeline to go quiet.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Finder double-click / drag-onto-Dock-icon delivery (also fires on cold launch, possibly
+    /// before any SwiftUI scene exists — hence the buffer on AppActions).
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard !DeckStore.isHostingTests else { return }
+        AppActions.shared.requestOpen(urls: urls.filter { DeckStore.isDeckFile($0) })
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // The test host shares the app's bundle id + library bookmark; a quit-time persist from
         // it would prune the user's real library against the tests' empty context.

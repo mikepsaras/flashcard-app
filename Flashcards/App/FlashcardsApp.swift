@@ -65,6 +65,7 @@ struct FlashcardsApp: App {
                 Button("New Deck") { AppActions.shared.newDeckTick += 1 }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
             }
+            DeckFileCommands()
             CommandGroup(replacing: .help) {
                 Button("Flashcards Formatting Guide") { AppActions.shared.showFormattingGuideTick += 1 }
                     .keyboardShortcut("?", modifiers: .command)
@@ -86,3 +87,71 @@ struct FlashcardsApp: App {
         #endif
     }
 }
+
+/// The selected deck, published by RootView for the File-menu commands (Save a Copy).
+struct SelectedDeckFocusedKey: FocusedValueKey {
+    typealias Value = Deck
+}
+
+extension FocusedValues {
+    var selectedDeck: Deck? {
+        get { self[SelectedDeckFocusedKey.self] }
+        set { self[SelectedDeckFocusedKey.self] = newValue }
+    }
+}
+
+#if os(macOS)
+/// File-menu deck-file commands: Open (⌘O), Open Recent, Save a Copy (⌘⇧S). The app keeps its
+/// library model (no NSDocument), so these drive the panels directly and route opens through
+/// the same `DeckFileOpen` path as Finder double-clicks.
+struct DeckFileCommands: Commands {
+    @FocusedValue(\.selectedDeck) private var selectedDeck
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Divider()
+            Button("Open Deck File…") { openPanel() }
+                .keyboardShortcut("o", modifiers: .command)
+            Menu("Open Recent") {
+                let recents = RecentDeckFiles.shared.entries
+                ForEach(recents) { entry in
+                    Button(entry.name) { open(entry) }
+                }
+                if !recents.isEmpty { Divider() }
+                Button("Clear Menu") { RecentDeckFiles.shared.clear() }
+                    .disabled(recents.isEmpty)
+            }
+            Divider()
+            Button("Save a Copy…") { if let deck = selectedDeck { saveCopy(of: deck) } }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .disabled(selectedDeck == nil)
+        }
+    }
+
+    private func openPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = DeckStore.importContentTypes.filter { $0 != .json }
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.message = "Open a deck file — decks already in your library are selected, not duplicated."
+        guard panel.runModal() == .OK else { return }
+        AppActions.shared.requestOpen(urls: panel.urls)
+    }
+
+    private func open(_ entry: RecentDeckFiles.Entry) {
+        guard let url = RecentDeckFiles.shared.url(for: entry) else { return }
+        AppActions.shared.requestOpen(urls: [url])
+    }
+
+    private func saveCopy(of deck: Deck) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.flashcardsDeck]
+        panel.nameFieldStringValue = deck.displayName
+        panel.title = "Save a Copy"
+        guard panel.runModal() == .OK, let url = panel.url,
+              let data = try? DeckCodec.encode(deck) else { return }
+        try? data.write(to: url, options: .atomic)
+        RecentDeckFiles.shared.record(url, name: deck.displayName)
+    }
+}
+#endif

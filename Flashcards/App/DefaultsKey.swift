@@ -42,6 +42,8 @@ enum DefaultsKey {
     /// Advanced: show the card JSON/CSV import & export affordances (off by default). Opening and
     /// sharing `.cards` deck files stays available regardless of this setting.
     static let showImportExport = "showImportExport"
+    /// JSON-encoded `[RecentDeckFiles.Entry]` — the File ▸ Open Recent list (macOS).
+    static let recentDeckFiles = "recentDeckFiles"
     /// Developer-only: show projected next-interval subtitles on the study grade buttons. Off by
     /// default so the numbers don't bias honest grading; surfaced in the hidden Developer section.
     static let showGradeIntervals = "showGradeIntervals"
