@@ -15,7 +15,7 @@ enum DeckCodec {
     /// rejects any other version, so old-format files (v1–v3) are ignored by the loader.
     static let formatVersion = 4
 
-    struct DeckDTO: Codable, Equatable {
+    struct DeckDTO: Codable, Equatable, Sendable {
         var formatVersion: Int = DeckCodec.formatVersion
         var id: UUID
         var name: String
@@ -37,7 +37,7 @@ enum DeckCodec {
         var cards: [CardDTO]
     }
 
-    struct CardDTO: Codable, Equatable {
+    struct CardDTO: Codable, Equatable, Sendable {
         var id: UUID
         var term: String
         var definition: String
@@ -85,9 +85,12 @@ enum DeckCodec {
         return decoder
     }
 
+    /// Snapshots a deck (with its cards, in display order) into a Sendable DTO. Runs on the main
+    /// actor because it reads the `@Model` graph; the JSON stage (`encode(_ dto:)`) is pure and can
+    /// run anywhere — this split is what lets the persist write pass move off the main thread.
     @MainActor
-    static func encode(_ deck: Deck) throws -> Data {
-        let dto = DeckDTO(
+    static func dto(from deck: Deck) -> DeckDTO {
+        DeckDTO(
             formatVersion: formatVersion,
             id: deck.id,
             name: deck.name,
@@ -115,7 +118,16 @@ enum DeckCodec {
                 }
                 .map(cardDTO)
         )
-        return try encoder.encode(dto)
+    }
+
+    /// Pure JSON encode of an already-snapshotted DTO — no model access, safe off the main actor.
+    static func encode(_ dto: DeckDTO) throws -> Data {
+        try encoder.encode(dto)
+    }
+
+    @MainActor
+    static func encode(_ deck: Deck) throws -> Data {
+        try encode(dto(from: deck))
     }
 
     static func decodeDTO(_ data: Data) throws -> DeckDTO {

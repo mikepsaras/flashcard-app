@@ -43,16 +43,17 @@ final class DeckStore {
 
     /// Current deck-file extension. `.cards` is ours alone — the old `.deck` collided with
     /// another app's document type on some systems, so deck files couldn't pick up our icon.
-    static let fileExtension = "cards"
+    /// (Nonisolated so `PersistenceEngine` can read it off the main actor.)
+    nonisolated static let fileExtension = "cards"
 
     /// Older releases (and decks shared from them) used `.deck`. We still read these and
     /// migrate them to `.cards` in place (see `migrateLegacyExtension`).
-    static let legacyFileExtensions: Set<String> = ["deck"]
+    nonisolated static let legacyFileExtensions: Set<String> = ["deck"]
 
     static let schema = Schema([Deck.self, Card.self])
 
     /// Whether a URL is one of our deck files (current or legacy extension).
-    static func isDeckFile(_ url: URL) -> Bool {
+    nonisolated static func isDeckFile(_ url: URL) -> Bool {
         url.pathExtension == fileExtension || legacyFileExtensions.contains(url.pathExtension)
     }
 
@@ -92,6 +93,11 @@ final class DeckStore {
     /// card's `deck.modifiedAt` itself (`StudySession.grade`). `DeckStorePersistTests` asserts a write
     /// actually lands after each kind of mutation, including study.
     private var persistedModifiedAt: [UUID: Date] = [:]
+
+    /// Monotonic id for persist passes. Today it just labels each `PersistRequest`; once the
+    /// write pass moves onto the background worker it's what lets a newer pass supersede an
+    /// older in-flight one.
+    private var nextGeneration: UInt64 = 0
 
     // MARK: Container (no database on disk)
 
@@ -237,7 +243,10 @@ final class DeckStore {
         return migrated
     }
 
-    private static func deckFiles(in directory: URL) -> [URL] {
+    /// The deck files directly inside `directory` (non-recursive — a `.backups/` subfolder is
+    /// invisible here by construction). Nonisolated so `PersistenceEngine`'s prune can list
+    /// folders off the main actor.
+    nonisolated static func deckFiles(in directory: URL) -> [URL] {
         (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil))?
             .filter { isDeckFile($0) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
@@ -414,15 +423,21 @@ final class DeckStore {
     /// via `PersistenceMonitor`.
     @discardableResult
     func persist(_ context: ModelContext, to directory: URL = DeckStore.libraryURL()) -> PersistResult {
+        applyOutcome(PersistenceEngine.run(buildPersistRequest(context, primary: directory)))
+    }
+
+    /// The main-actor half of a persist: snapshots every live deck into a `PersistRequest` —
+    /// canonical destination (own folder + collision-free filename), the modifiedAt skip gate
+    /// (avoids the O(cards) DTO snapshot for untouched decks; the URL check forces a rewrite when
+    /// the canonical filename or folder shifts, so a rename/move still lands), and DTOs for the
+    /// decks that need writing. The request is self-contained, so the engine can run it anywhere.
+    private func buildPersistRequest(_ context: ModelContext, primary: URL) -> PersistRequest {
         let decks = (try? context.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
-        let primary = directory.standardizedFileURL
-        // Filenames are unique *per folder* (two folders may each hold a "Spanish.cards"); the written
-        // set + the prune compare lowercased absolute paths (case-insensitive macOS FS, see below).
+        let primary = primary.standardizedFileURL
+        // Filenames are unique *per folder* (two folders may each hold a "Spanish.cards").
         var usedByFolder: [URL: Set<String>] = [:]
-        var written = Set<String>()
         var pruneFolders: Set<URL> = [primary]
-        var failedIDs = Set<UUID>()
-        var failedNames: [String] = []
+        var plans: [DeckWritePlan] = []
 
         for deck in decks {
             let folder = deckFolder(deck, primary: primary)
@@ -431,51 +446,38 @@ final class DeckStore {
             let filename = Self.uniqueFilename(for: deck, used: &used)
             usedByFolder[folder] = used
             let fileURL = folder.appendingPathComponent(filename)
-            let key = fileURL.standardizedFileURL.path.lowercased()
 
-            // modifiedAt gate (avoids the O(cards) encode for untouched decks) + URL check (forces a
-            // rewrite when the canonical filename or folder shifts, so the rename/move still lands).
-            if persistedModifiedAt[deck.id] == deck.modifiedAt,
-               urlByDeckID[deck.id]?.standardizedFileURL == fileURL.standardizedFileURL,
-               FileManager.default.fileExists(atPath: fileURL.path) {
-                written.insert(key)
-                continue
-            }
-            guard let data = try? DeckCodec.encode(deck) else {
-                failedIDs.insert(deck.id); failedNames.append(deck.displayName); continue
-            }
-            // Skip the write when the bytes are identical (don't wake the watcher); still "written".
-            if let existing = try? Data(contentsOf: fileURL), existing == data {
-                written.insert(key); urlByDeckID[deck.id] = fileURL; persistedModifiedAt[deck.id] = deck.modifiedAt
-                continue
-            }
-            // Only count "written" after the atomic write succeeds, so prune can't delete a good file.
-            if (try? data.write(to: fileURL, options: .atomic)) != nil {
-                written.insert(key); urlByDeckID[deck.id] = fileURL; persistedModifiedAt[deck.id] = deck.modifiedAt
-            } else {
-                failedIDs.insert(deck.id); failedNames.append(deck.displayName)
-                persistedModifiedAt[deck.id] = nil   // write failed → force a fresh encode next time
-            }
+            let unchanged = persistedModifiedAt[deck.id] == deck.modifiedAt
+                && urlByDeckID[deck.id]?.standardizedFileURL == fileURL.standardizedFileURL
+                && FileManager.default.fileExists(atPath: fileURL.path)
+            plans.append(DeckWritePlan(
+                deckID: deck.id,
+                displayName: deck.displayName,
+                fileURL: fileURL,
+                modifiedAt: deck.modifiedAt,
+                dto: unchanged ? nil : DeckCodec.dto(from: deck)
+            ))
         }
+        nextGeneration += 1
+        return PersistRequest(generation: nextGeneration, plans: plans, pruneFolders: pruneFolders)
+    }
 
-        // Prune ONLY folders that hold our decks (+ the primary) — never a folder we didn't write to.
-        // This is the multi-folder safety invariant: a deck in folder A is never removed because we
-        // persisted with folder B also registered (B isn't in `pruneFolders` unless a deck lives there).
-        // Within a pruned folder, a `.cards` file is an orphan iff it decodes to a deck no longer
-        // present and isn't a failed write; anything unreadable is kept (never delete what we can't decode).
-        for folder in pruneFolders {
-            for url in Self.deckFiles(in: folder)
-            where url.pathExtension == Self.fileExtension
-                && !written.contains(url.standardizedFileURL.path.lowercased()) {
-                guard let data = try? Data(contentsOf: url),
-                      let dto = try? DeckCodec.decodeDTO(data) else { continue }   // unreadable → keep
-                if failedIDs.contains(dto.id) { continue }                          // write just failed → keep
-                try? FileManager.default.removeItem(at: url)
-            }
+    /// The main-actor tail of a persist: records what the engine confirmed on disk into the
+    /// skip-gate caches, tracks failures for `reconcile` protection, and surfaces them via
+    /// `PersistenceMonitor`. An `aborted` outcome (superseded mid-pass) applies NOTHING — the
+    /// newer pass owns the disk and re-does all of it.
+    @discardableResult
+    private func applyOutcome(_ outcome: PersistOutcome) -> PersistResult {
+        guard !outcome.aborted else { return PersistResult() }
+        for entry in outcome.written {
+            urlByDeckID[entry.id] = entry.url
+            persistedModifiedAt[entry.id] = entry.modifiedAt
         }
-
-        unsavedDeckIDs = failedIDs
-        let result = PersistResult(failedDeckNames: failedNames)
+        for failure in outcome.failed {
+            persistedModifiedAt[failure.id] = nil   // write failed → force a fresh encode next time
+        }
+        unsavedDeckIDs = Set(outcome.failed.map(\.id))
+        let result = PersistResult(failedDeckNames: outcome.failed.map(\.name))
         PersistenceMonitor.shared.note(result)
         return result
     }
