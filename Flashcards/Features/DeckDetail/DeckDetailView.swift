@@ -16,6 +16,7 @@ struct DeckDetailView: View {
     private var otherDecks: [Deck] { allDecks.filter { $0.id != deck.id } }
 
     @State private var showingDeckEditor = false
+    @State private var showingRestore = false
     @State private var showingImporter = false
     @State private var showingExporter = false
     @State private var showingJSONExporter = false
@@ -134,6 +135,10 @@ struct DeckDetailView: View {
                 Label("Reset Progress", systemImage: "arrow.counterclockwise")
             }
             .disabled(!deck.cardArray.contains { $0.hasBeenReviewed })
+            Button { showingRestore = true } label: {
+                Label("Restore from Backup…", systemImage: "clock.arrow.circlepath")
+            }
+            .disabled(DeckBackups.entries(forDeck: deck.id, inAny: DeckStore.libraryURLs()).isEmpty)
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
@@ -213,6 +218,9 @@ struct DeckDetailView: View {
         }
         .sheet(isPresented: $showingAI) {
             AIGenerationView(target: .existing(deck))
+        }
+        .sheet(isPresented: $showingRestore) {
+            RestoreFromBackupView(deck: deck)
         }
         #if os(iOS)
         // iOS keeps the modal composer; macOS opens the full-window gallery editor instead.

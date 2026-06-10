@@ -76,6 +76,17 @@ enum DeckBackups {
             .sorted { $0.date > $1.date }
     }
 
+    /// All backups for a deck across the whole library folder set, newest first (macOS
+    /// multi-folder; a single folder on iOS).
+    static func entries(forDeck id: UUID, inAny folders: [URL]) -> [BackupEntry] {
+        folders.flatMap { entries(forDeck: id, in: $0) }.sorted { $0.date > $1.date }
+    }
+
+    /// The library folder a backup entry lives under (entry → `<uuid>/` → `.backups/` → folder).
+    static func libraryFolder(of entry: BackupEntry) -> URL {
+        entry.url.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    }
+
     /// Whether the deck already has a backup from the same (UTC) day as `now` — the daily gate
     /// that keeps routine edits from piling up more than one snapshot per day.
     static func hasBackup(sameDayAs now: Date, deck id: UUID, in libraryFolder: URL) -> Bool {

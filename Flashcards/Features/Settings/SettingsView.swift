@@ -347,7 +347,7 @@ struct SettingsView: View {
         } header: {
             Text("Storage")
         } footer: {
-            Text("Where your deck files are saved and loaded. Choose a folder to point the library at it (moving your decks, or using the ones already there). On Mac you can also add more folders — the library shows decks from all of them, and new decks go to the first.")
+            Text("Where your deck files are saved and loaded. Choose a folder to point the library at it (moving your decks, or using the ones already there). On Mac you can also add more folders — the library shows decks from all of them, and new decks go to the first. Each folder also keeps automatic daily backups of its decks (hidden in .backups); restore one from a deck’s ••• menu.")
         }
     }
 
