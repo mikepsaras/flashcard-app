@@ -74,7 +74,7 @@ struct RootView: View {
             .task {
                 // Reflect external edits to the .deck files live; pause while studying or editing.
                 watcher.isPaused = isTakingOverWindow
-                watcher.start(folders: DeckStore.libraryURLs()) { DeckStore.shared.reconcileFolders(into: context) }
+                watcher.start(folders: DeckStore.libraryURLs()) { reconcileAfterFlush() }
             }
             .onChange(of: decks.count) { _, _ in
                 // Drop any selected deck that vanished (delete / Delete All / external removal) so the
@@ -92,14 +92,14 @@ struct RootView: View {
             }
             .onChange(of: studyPlan != nil) { _, studying in
                 watcher.isPaused = isTakingOverWindow
-                if !studying { DeckStore.shared.reconcileFolders(into: context) }
+                if !studying { reconcileAfterFlush() }
             }
             #if os(macOS)
             .onChange(of: editorTarget != nil) { _, editing in
                 // Same guard as Study: the gallery edits cards live, so pause the watcher while open
                 // and reconcile once on close (a mid-edit reload would replace the edited cards).
                 watcher.isPaused = isTakingOverWindow
-                if !editing { DeckStore.shared.reconcileFolders(into: context) }
+                if !editing { reconcileAfterFlush() }
             }
             #endif
             .onChange(of: AppActions.shared.wipeTick) { _, _ in
@@ -127,7 +127,7 @@ struct RootView: View {
                     // Not while studying or editing: a reconcile can delete cards the live
                     // StudySession / gallery still references (the watcher is paused for the same
                     // reason). The study/edit-end handlers above reconcile when they finish.
-                    if !isTakingOverWindow { DeckStore.shared.reconcileFolders(into: context) }
+                    if !isTakingOverWindow { reconcileAfterFlush() }
                 } else {
                     DeckStore.shared.persist(context)
                 }
@@ -139,8 +139,8 @@ struct RootView: View {
                 // macOS gallery. The study/editor close-handlers reconcile once the takeover ends.
                 watcher.stop()
                 watcher.isPaused = isTakingOverWindow
-                watcher.start(folders: DeckStore.libraryURLs()) { DeckStore.shared.reconcileFolders(into: context) }
-                if !isTakingOverWindow { DeckStore.shared.reconcileFolders(into: context) }
+                watcher.start(folders: DeckStore.libraryURLs()) { reconcileAfterFlush() }
+                if !isTakingOverWindow { reconcileAfterFlush() }
             }
             #if os(macOS)
             .onChange(of: AppActions.shared.showFormattingGuideTick) { _, _ in
@@ -243,6 +243,17 @@ struct RootView: View {
             }
         case nil:
             placeholder
+        }
+    }
+
+    /// The one reconcile entry point: waits for any queued background writes to land first (so a
+    /// stale on-disk file can never win over an in-flight one), then re-checks the takeover guard
+    /// (study/editor may have started during the wait) before merging external edits.
+    private func reconcileAfterFlush() {
+        Task { @MainActor in
+            await DeckStore.shared.flush()
+            guard !isTakingOverWindow else { return }
+            DeckStore.shared.reconcileFolders(into: context)
         }
     }
 

@@ -36,10 +36,24 @@ final class PersistenceMonitor {
 /// from them at launch. Reads/writes/prunes span all `LibraryLocation.folders` (1.8.0 multi-folder).
 @MainActor
 final class DeckStore {
+    /// How persist passes run. `.background` (the app) hands each pass to `PersistenceWorker`
+    /// so JSON encoding + file I/O happen off the main thread; `.synchronous` (the default, and
+    /// what tests get from a bare `DeckStore()`) runs the identical engine inline, so every
+    /// existing test stays deterministic without sleeps or flushes.
+    enum IOMode { case synchronous, background }
+
     /// The app's shared store instance, holding the on-disk caches (`urlByDeckID`,
     /// `unsavedDeckIDs`). The app persists/loads/reconciles through it; tests create their own
     /// `DeckStore()` so one test's cache state can't leak into the next.
-    static let shared = DeckStore()
+    static let shared = DeckStore(io: .background)
+
+    private let io: IOMode
+    private let worker = PersistenceWorker()
+    private let gate = GenerationGate()
+
+    init(io: IOMode = .synchronous) {
+        self.io = io
+    }
 
     /// Current deck-file extension. `.cards` is ours alone — the old `.deck` collided with
     /// another app's document type on some systems, so deck files couldn't pick up our icon.
@@ -94,10 +108,29 @@ final class DeckStore {
     /// actually lands after each kind of mutation, including study.
     private var persistedModifiedAt: [UUID: Date] = [:]
 
-    /// Monotonic id for persist passes. Today it just labels each `PersistRequest`; once the
-    /// write pass moves onto the background worker it's what lets a newer pass supersede an
-    /// older in-flight one.
+    /// Monotonic id for persist passes. Each `PersistRequest` carries one; `gate` mirrors the
+    /// newest submitted, so an older in-flight pass notices it's been superseded and aborts.
     private var nextGeneration: UInt64 = 0
+
+    /// The newest generation whose outcome has been applied (or accounted for). `flush()`
+    /// waits until this catches up with `nextGeneration`.
+    private var appliedGeneration: UInt64 = 0
+
+    /// The chain of in-flight background persist passes — each task awaits its predecessor, so
+    /// outcomes apply in submission order; awaiting the head waits for everything submitted.
+    private var chainTask: Task<Void, Never>?
+
+    /// Decks whose latest content is queued/in-flight to disk but not yet written. While a deck
+    /// is here, `reconcile` must neither revert it to the (stale) file on disk nor delete it
+    /// because its file is missing. Replaced wholesale on each submission (a request is the full
+    /// desired disk state); cleared when the newest generation applies. Internal so tests can
+    /// pin the in-flight window open deterministically.
+    var pendingWriteIDs: Set<UUID> = []
+
+    /// Decks removed in memory whose files await the queued prune. While an id is here,
+    /// `reconcile` must not re-insert the deck from its still-on-disk file. Lifecycle mirrors
+    /// `pendingWriteIDs`.
+    var pendingDeletionIDs: Set<UUID> = []
 
     // MARK: Container (no database on disk)
 
@@ -149,6 +182,12 @@ final class DeckStore {
     /// written to `newURL`.
     func migrate(from oldURL: URL, to newURL: URL, context: ModelContext) {
         guard oldURL.standardizedFileURL != newURL.standardizedFileURL else { return }
+        chainExclusive { [self] in
+            migrateNow(from: oldURL, to: newURL, context: context)
+        }
+    }
+
+    private func migrateNow(from oldURL: URL, to newURL: URL, context: ModelContext) {
         persistedModifiedAt.removeAll()   // old-folder signatures don't apply to the new folder
 
         // Remember the originals so we can remove them after a successful move.
@@ -198,16 +237,18 @@ final class DeckStore {
     /// `newURL`, leaving the previous folder's files untouched on disk — the current decks
     /// aren't moved, just dropped from view until you switch back to that folder.
     func switchFolder(to newURL: URL, context: ModelContext) {
-        let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
-        for deck in existing {
-            context.delete(deck)
-            urlByDeckID[deck.id] = nil
+        chainExclusive { [self] in
+            let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+            for deck in existing {
+                context.delete(deck)
+                urlByDeckID[deck.id] = nil
+            }
+            unsavedDeckIDs.removeAll()
+            persistedModifiedAt.removeAll()
+            try? context.save()
+            Self.migrateLegacyExtension(in: newURL)
+            loadAll(into: context, from: newURL)
         }
-        unsavedDeckIDs.removeAll()
-        persistedModifiedAt.removeAll()
-        try? context.save()
-        Self.migrateLegacyExtension(in: newURL)
-        loadAll(into: context, from: newURL)
     }
 
     /// Renames legacy `.deck` files in `directory` to the current `.cards` extension in
@@ -327,9 +368,11 @@ final class DeckStore {
 
         // Decks whose file disappeared externally — but never one whose own write just
         // failed (its file is missing because we couldn't save it, not because it was
-        // deleted; removing it here would lose the user's unsaved deck). The in-memory
+        // deleted; removing it here would lose the user's unsaved deck), and never one
+        // whose write is still queued (its file may simply not exist *yet*). The in-memory
         // state is snapshotted into `.backups/` first: this is the last copy vanishing.
-        for deck in existing where diskDTOs[deck.id] == nil && !unsavedDeckIDs.contains(deck.id) {
+        for deck in existing where diskDTOs[deck.id] == nil
+            && !unsavedDeckIDs.contains(deck.id) && !pendingWriteIDs.contains(deck.id) {
             backUpBeforeDiskWins(deck, fallbackFolder: directory, now: now, dayGated: false)
             context.delete(deck)
             urlByDeckID[deck.id] = nil
@@ -341,9 +384,9 @@ final class DeckStore {
         for id in order {
             guard let dto = diskDTOs[id] else { continue }
             if let deck = byID[id] {
-                // Don't overwrite a deck whose own write just failed: the in-memory copy
-                // holds unsaved edits newer than the stale file on disk.
-                if unsavedDeckIDs.contains(id) { continue }
+                // Don't overwrite a deck whose own write just failed OR is still in flight:
+                // the in-memory copy holds edits newer than the stale file on disk.
+                if unsavedDeckIDs.contains(id) || pendingWriteIDs.contains(id) { continue }
                 // Compare via the same lossy encode path both sides take, so identical
                 // content (including our own just-written files) compares equal.
                 let current = (try? DeckCodec.encode(deck)).flatMap { try? DeckCodec.decodeDTO($0) }
@@ -358,6 +401,9 @@ final class DeckStore {
                 // doesn't needlessly re-encode/rewrite what we just merged in from (or matched on) disk.
                 persistedModifiedAt[id] = deck.modifiedAt
             } else {
+                // A file still on disk only because its queued prune hasn't run yet — don't
+                // resurrect the deck the user just deleted.
+                if pendingDeletionIDs.contains(id) { continue }
                 let deck = DeckCodec.makeDeck(from: dto, in: context)
                 persistedModifiedAt[id] = deck.modifiedAt
                 changed = true
@@ -404,8 +450,10 @@ final class DeckStore {
         var changed = false
 
         // Removed only when absent from EVERY folder (and not a deck whose own write just
-        // failed) — snapshotted into `.backups/` first: this is the last copy vanishing.
-        for deck in existing where diskDTOs[deck.id] == nil && !unsavedDeckIDs.contains(deck.id) {
+        // failed or is still queued — its file may not exist *yet*) — snapshotted into
+        // `.backups/` first: this is the last copy vanishing.
+        for deck in existing where diskDTOs[deck.id] == nil
+            && !unsavedDeckIDs.contains(deck.id) && !pendingWriteIDs.contains(deck.id) {
             if let fallback = folders.first {
                 backUpBeforeDiskWins(deck, fallbackFolder: fallback, now: now, dayGated: false)
             }
@@ -417,7 +465,8 @@ final class DeckStore {
         for id in order {
             guard let dto = diskDTOs[id] else { continue }
             if let deck = byID[id] {
-                if unsavedDeckIDs.contains(id) { continue }
+                // Failed-write OR in-flight-write decks: memory is newer than the file; skip.
+                if unsavedDeckIDs.contains(id) || pendingWriteIDs.contains(id) { continue }
                 let current = (try? DeckCodec.encode(deck)).flatMap { try? DeckCodec.decodeDTO($0) }
                 if current != dto {
                     // Disk is about to win — snapshot what we're replacing (daily-gated).
@@ -429,6 +478,8 @@ final class DeckStore {
                 }
                 persistedModifiedAt[id] = deck.modifiedAt
             } else {
+                // Awaiting its queued prune — don't resurrect the deck the user just deleted.
+                if pendingDeletionIDs.contains(id) { continue }
                 let deck = DeckCodec.makeDeck(from: dto, in: context)
                 persistedModifiedAt[id] = deck.modifiedAt
                 changed = true
@@ -446,7 +497,80 @@ final class DeckStore {
     /// via `PersistenceMonitor`.
     @discardableResult
     func persist(_ context: ModelContext, to directory: URL = DeckStore.libraryURL(), now: Date = .now) -> PersistResult {
-        applyOutcome(PersistenceEngine.run(buildPersistRequest(context, primary: directory, now: now)))
+        let request = buildPersistRequest(context, primary: directory, now: now)
+        switch io {
+        case .synchronous:
+            return applyOutcome(PersistenceEngine.run(request))
+        case .background:
+            schedule(request)
+            // Optimistic: the real outcome lands via `applyOutcome` → `PersistenceMonitor`
+            // when the pass finishes. (App call sites discard this value; tests that assert
+            // on it run synchronous stores.)
+            return PersistResult()
+        }
+    }
+
+    /// Queues a persist pass on the background worker. Each task chains behind its predecessor
+    /// (outcomes apply in order); the generation gate lets a pass that's been superseded by a
+    /// newer submission abort almost immediately, so a burst of edits costs roughly one full
+    /// write pass — the last one — instead of N.
+    private func schedule(_ request: PersistRequest) {
+        // The disk now lags memory for these decks until the newest generation applies.
+        pendingWriteIDs = Set(request.plans.compactMap { $0.dto != nil ? $0.deckID : nil })
+        let live = Set(request.plans.map(\.deckID))
+        pendingDeletionIDs = Set(urlByDeckID.keys).subtracting(live)
+
+        #if os(macOS)
+        // Don't let macOS kill the process while a write is queued (re-enabled per-task below).
+        ProcessInfo.processInfo.disableSuddenTermination()
+        #endif
+        let previous = chainTask
+        chainTask = Task { @MainActor [worker, gate] in
+            defer {
+                #if os(macOS)
+                ProcessInfo.processInfo.enableSuddenTermination()
+                #endif
+            }
+            await previous?.value
+            let outcome = await worker.run(request) { gate.current() > request.generation }
+            self.applyOutcome(outcome)
+        }
+    }
+
+    /// Waits until every persist submitted so far has run and applied its bookkeeping — after
+    /// this, the deck files reflect the in-memory state (or a failure has been reported).
+    /// Reconcile paths flush first so a stale file can't win over an in-flight write. No-op for
+    /// synchronous stores.
+    func flush() async {
+        while appliedGeneration < nextGeneration, let task = chainTask {
+            await task.value
+        }
+    }
+
+    /// Runs destructive disk work (delete-all, folder migrate/switch) **inside the persist
+    /// pipeline**: enqueued synchronously (so anything that observes the trigger and then calls
+    /// `flush()` — like RootView's reconcile — is guaranteed to wait for it), superseding any
+    /// queued persist passes (a write describing the old state aborts rather than landing after
+    /// the rewrite), and running after the in-flight pass finishes aborting. Synchronous stores
+    /// run `body` inline.
+    private func chainExclusive(_ body: @escaping @MainActor () -> Void) {
+        guard io == .background else {
+            body()
+            return
+        }
+        nextGeneration += 1
+        let generation = nextGeneration
+        gate.bump(to: generation)   // strictly newer than anything submitted → in-flight passes abort
+        let previous = chainTask
+        chainTask = Task { @MainActor in
+            await previous?.value
+            body()
+            self.appliedGeneration = max(self.appliedGeneration, generation)
+            if generation == self.nextGeneration {
+                self.pendingWriteIDs.removeAll()
+                self.pendingDeletionIDs.removeAll()
+            }
+        }
     }
 
     /// The main-actor half of a persist: snapshots every live deck into a `PersistRequest` —
@@ -482,6 +606,7 @@ final class DeckStore {
             ))
         }
         nextGeneration += 1
+        gate.bump(to: nextGeneration)   // an older in-flight pass is now superseded
         return PersistRequest(generation: nextGeneration, plans: plans, pruneFolders: pruneFolders, now: now)
     }
 
@@ -491,6 +616,9 @@ final class DeckStore {
     /// newer pass owns the disk and re-does all of it.
     @discardableResult
     private func applyOutcome(_ outcome: PersistOutcome) -> PersistResult {
+        appliedGeneration = max(appliedGeneration, outcome.generation)
+        // A superseded pass applies NOTHING — the newer request re-describes the whole disk,
+        // and its outcome (applied later, in chain order) carries the truth.
         guard !outcome.aborted else { return PersistResult() }
         for entry in outcome.written {
             urlByDeckID[entry.id] = entry.url
@@ -500,6 +628,11 @@ final class DeckStore {
             persistedModifiedAt[failure.id] = nil   // write failed → force a fresh encode next time
         }
         unsavedDeckIDs = Set(outcome.failed.map(\.id))
+        if outcome.generation == nextGeneration {
+            // The newest submission has landed — disk reflects memory again.
+            pendingWriteIDs.removeAll()
+            pendingDeletionIDs.removeAll()
+        }
         let result = PersistResult(failedDeckNames: outcome.failed.map(\.name))
         PersistenceMonitor.shared.note(result)
         return result
@@ -526,20 +659,26 @@ final class DeckStore {
         urlByDeckID.removeAll()
         unsavedDeckIDs.removeAll()
         persistedModifiedAt.removeAll()
+        pendingWriteIDs.removeAll()
+        pendingDeletionIDs.removeAll()
     }
 
     /// "Delete all decks" across **every** library folder (the app's reset). Tests use the single-folder
     /// `deleteAllDecks(_:in:)` to stay isolated from the real library.
     func deleteAllDecksEverywhere(_ context: ModelContext, now: Date = .now) {
-        let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
-        for deck in existing { context.delete(deck) }
-        try? context.save()
-        for folder in Self.libraryURLs() {
-            Self.removeDeckFilesBackingUp(in: folder, now: now)
+        chainExclusive { [self] in
+            let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
+            for deck in existing { context.delete(deck) }
+            try? context.save()
+            for folder in Self.libraryURLs() {
+                Self.removeDeckFilesBackingUp(in: folder, now: now)
+            }
+            urlByDeckID.removeAll()
+            unsavedDeckIDs.removeAll()
+            persistedModifiedAt.removeAll()
+            pendingWriteIDs.removeAll()
+            pendingDeletionIDs.removeAll()
         }
-        urlByDeckID.removeAll()
-        unsavedDeckIDs.removeAll()
-        persistedModifiedAt.removeAll()
     }
 
     /// Removes every deck file in `directory`, snapshotting each readable one into `.backups/`

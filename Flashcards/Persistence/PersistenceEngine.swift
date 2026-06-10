@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// One deck's write order within a `PersistRequest`. Built on the main actor (it snapshots
 /// `@Model` state into the DTO); executed by `PersistenceEngine` anywhere.
@@ -137,5 +138,31 @@ enum PersistenceEngine {
             }
         }
         return outcome
+    }
+}
+
+/// A monotonic generation watermark shared between the main actor (which submits persist
+/// requests) and the engine (which polls it mid-pass, possibly off-main). A request is
+/// superseded once the watermark moves past its generation — a newer request describes the
+/// disk now, so the older pass aborts at its next poll.
+final class GenerationGate: @unchecked Sendable {
+    private let state = OSAllocatedUnfairLock<UInt64>(initialState: 0)
+
+    /// Advances the watermark (never moves backwards).
+    func bump(to generation: UInt64) {
+        state.withLock { $0 = max($0, generation) }
+    }
+
+    func current() -> UInt64 {
+        state.withLock { $0 }
+    }
+}
+
+/// The off-main executor for persist passes. It holds no state of its own — serialization and
+/// coalescing live in `DeckStore`'s main-actor submission chain; this actor just gets the
+/// engine's file I/O off the main thread.
+actor PersistenceWorker {
+    func run(_ request: PersistRequest, isSuperseded: @escaping @Sendable () -> Bool) -> PersistOutcome {
+        PersistenceEngine.run(request, isSuperseded: isSuperseded)
     }
 }
