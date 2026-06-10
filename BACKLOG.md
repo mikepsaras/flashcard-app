@@ -74,7 +74,7 @@ foundations) · 3 (ambitious / optional)
 
 ---
 
-## Persistence rework + New Deck editor + sidebar (2026-06-10, on `main`, UNRELEASED)
+## Persistence rework + New Deck editor + sidebar (2026-06-10, on `main`, SHIPPED in v1.9.2)
 
 User ask: "rework how we save and load files, the new deck editor, and lightly touch the sidebar"
 (scoped via questions → save/load = backups + off-main I/O + document-style UX; editor = the New
@@ -297,7 +297,7 @@ the `DeckCodec` v4 round-trip, the unified add/edit `editing:` path, and multi-f
 answer-mode menu, section, and elaboration stay as a **minimal surround**. Snapshot `33_editable_card`;
 312 tests green; verified live in all three modes. **Phase 5 (release) complete — shipped as v1.8.0 / build 20.**
 
-**EDITOR VISION v3 — full-window GALLERY (2026-06-08, post-1.8.0, on `main`, UNRELEASED):** after seeing
+**EDITOR VISION v3 — full-window GALLERY (2026-06-08, post-1.8.0, on `main`, shipped in v1.8.1):** after seeing
 the in-place card *in a sheet*, the user refined the vision again to a **full-window deck gallery** (à la
 Finder/Photos): the selected card fills the top as the editable study card (the `EditableFlashcard` hero,
 reused), a **filmstrip** of every card runs along the bottom (scrub with ← / → or click a thumbnail), and a
@@ -341,7 +341,7 @@ The user compared the gallery editor to study and wants them visually/functional
 - Known trade-off: a small size "pop" entering/leaving edit (comfortable editing size → study-scaled size);
   tune it. Add a faint "click to edit" cue for discoverability. iOS keeps the `BulkAddView` sheet.
 
-**✅ BUILT (2026-06-09, on `main`, UNRELEASED).** New `EditableStudyCard` (gallery hero) renders at rest via
+**✅ BUILT (2026-06-09, on `main`, shipped in v1.8.2).** New `EditableStudyCard` (gallery hero) renders at rest via
 the shared `StudyCardText` + `StudyCardBackground` (extracted from `FlashcardView`, which now uses them too
 — `studyCardFontSize` is the shared scale formula) → the at-rest card is pixel-identical to study (verified:
 snapshot `34_gallery_editor` shows "User Stories" big/centered like `01_card_front`). Click a face → edit in
