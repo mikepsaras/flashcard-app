@@ -179,6 +179,45 @@ struct SnapshotGalleryTests {
         #expect(FileManager.default.fileExists(atPath: "\(Snapshot.directory)/23_retention_graphs.png"))
     }
 
+    /// The redesigned New/Edit Deck sheet (hero tile + color strip + answer chips). Renders
+    /// `editorFields` — NavigationStack AND ScrollView both come out blank in ImageRenderer.
+    @Test func renderDeckEditor() throws {
+        func sheet(_ editor: DeckEditorView) -> some View {
+            VStack(spacing: 0) {
+                editor.editorFields
+                Spacer(minLength: 0)
+            }
+            .background(Theme.groupedBackground)
+        }
+
+        try Snapshot.write(
+            sheet(DeckEditorView(mode: .new)),
+            size: CGSize(width: 460, height: 620), name: "35_deck_editor_new"
+        )
+
+        let container = DeckStore.previewContainer(seeded: false)
+        let context = container.mainContext
+        let deck = Deck(
+            name: "Spanish Verbs", deckDescription: "Daily conjugation drills",
+            colorHex: "#FF9500", section: "Languages", icon: "character.book.closed"
+        )
+        context.insert(deck)
+        for i in 0..<12 {
+            context.insert(Card(term: "verb \(i)", definition: "meaning \(i)", deck: deck))
+        }
+        try context.save()
+        try Snapshot.write(
+            sheet(DeckEditorView(mode: .edit(deck))),
+            size: CGSize(width: 460, height: 960), name: "35_deck_editor_edit"
+        )
+
+        // iPhone-width pass (the sheet is full-width on iOS).
+        try Snapshot.write(
+            sheet(DeckEditorView(mode: .new)),
+            size: CGSize(width: 402, height: 640), name: "35_deck_editor_new_phone"
+        )
+    }
+
     @Test func renderDeckIcons() throws {
         let row = VStack(spacing: 20) {
             HStack(spacing: 16) {

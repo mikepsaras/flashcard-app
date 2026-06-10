@@ -76,9 +76,47 @@ struct DeckEditorView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            editorContent
+                .navigationTitle(isEditing ? "Edit Deck" : "New Deck")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") { save() }.disabled(!canSave)
+                    }
+                }
+                .sheet(isPresented: $showingAI) {
+                    AIGenerationView(target: .newDeck, deckFactory: { makeNewDeck() }, onAdded: { dismiss() })
+                }
+        }
+        #if os(macOS)
+        .frame(width: 460, height: 600)
+        #endif
+    }
+
+    /// The sheet's scrollable body, NavigationStack-free.
+    var editorContent: some View {
+        ScrollView { editorFields }
+            .background(Theme.groupedBackground)
+    }
+
+    /// The fields column alone — the snapshot tests render THIS: both NavigationStack and
+    /// ScrollView come out blank under ImageRenderer (the bulk-add lesson).
+    var editorFields: some View {
                 VStack(alignment: .leading, spacing: 22) {
-                    LabeledField(label: "Name", placeholder: "Deck name", text: $name)
+                    // The deck identity is edited ON a live preview of itself — the tile carries
+                    // the actual icon, name, subject, count, and the chosen color (its tint),
+                    // rather than a stack of labeled fields. Same lesson as the card editor:
+                    // the preview IS the editor.
+                    VStack(alignment: .leading, spacing: 12) {
+                        heroTile
+                        colorStrip
+                            .disabled(isThemedIcon)
+                            .opacity(isThemedIcon ? 0.35 : 1)
+                        if isThemedIcon { caption("Color is set by the EU theme.") }
+                    }
+
                     LabeledField(label: "Description", placeholder: "Optional", text: $deckDescription, axis: .vertical, lines: 1...4)
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -86,23 +124,13 @@ struct DeckEditorView: View {
                         caption("Groups decks in the library. Each deck belongs to one subject; leave blank for No Subject.")
                     }
 
-                    // Compact appearance row: an icon-picker popover beside the color swatches, so the
-                    // create flow stays short instead of scrolling past the whole icon set.
-                    HStack(alignment: .top, spacing: 24) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            fieldLabel("Icon")
-                            iconButton
-                        }
-                        VStack(alignment: .leading, spacing: 10) {
-                            fieldLabel("Color")
-                            colorGrid
-                                .disabled(isThemedIcon)
-                                .opacity(isThemedIcon ? 0.35 : 1)
-                        }
+                    VStack(alignment: .leading, spacing: 8) {
+                        fieldLabel("Answer with")
+                        answerModeChips
+                        caption(answerModeCaption)
                     }
-                    if isThemedIcon { caption("Color is set by the EU theme.") }
 
-                    // Advanced settings are collapsed by default for a new deck (a clean,
+                    // The remaining toggles are collapsed by default for a new deck (a clean,
                     // name-and-color create flow) and expanded when editing an existing one.
                     DisclosureGroup(isExpanded: $showAdvanced) {
                         VStack(alignment: .leading, spacing: 22) {
@@ -125,15 +153,10 @@ struct DeckEditorView: View {
                                 toggleRow("Show card sections in study", $showSectionsInStudy)
                                 caption("When a card is in a section, show that section's name as a chip on the card while studying.")
                             }
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                answerModeRow
-                                caption(answerModeCaption)
-                            }
                         }
                         .padding(.top, 12)
                     } label: {
-                        Text("Advanced options").font(Typography.headline)
+                        Text("More options").font(Typography.headline)
                     }
                     .tint(.secondary)
 
@@ -149,42 +172,118 @@ struct DeckEditorView: View {
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(.snappy, value: showAdvanced)
-            }
-            .background(Theme.groupedBackground)
-            .navigationTitle(isEditing ? "Edit Deck" : "New Deck")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }.disabled(!canSave)
-                }
-            }
-            .sheet(isPresented: $showingAI) {
-                AIGenerationView(target: .newDeck, deckFactory: { makeNewDeck() }, onAdded: { dismiss() })
-            }
-        }
-        #if os(macOS)
-        .frame(width: 460, height: 560)
-        #endif
     }
 
-    /// The deck's **default** answer mode for its cards (flip vs type). Cards inherit this unless they
-    /// pin their own; cloze is per-card only. (1.8.0 — replaces the old grading/type-in picker.)
-    private var answerModeRow: some View {
-        HStack {
-            Text("Default answer mode").font(Typography.body)
-            Spacer(minLength: 8)
-            Picker("", selection: $defaultAnswerMode.animation()) {
-                ForEach(AnswerMode.deckDefaults) { Text($0.title).tag($0) }
+    /// The live deck preview that doubles as the identity editor: the icon is a button (opens
+    /// the picker popover), the name is typed directly on the tile, the caption mirrors the
+    /// sidebar row (subject · card count, plus the real due badge when editing), and the tile's
+    /// tint IS the color choice.
+    private var heroTile: some View {
+        HStack(spacing: 14) {
+            Button { showingIconPicker = true } label: {
+                ZStack(alignment: .bottomTrailing) {
+                    DeckIconChip(icon: icon, colorHex: colorHex, size: 46)
+                    // A small pencil so the icon reads as editable, not just decoration.
+                    Image(systemName: "pencil")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .padding(3.5)
+                        .background(Theme.cardSurface, in: Circle())
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.12)))
+                        .offset(x: 5, y: 5)
+                }
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
+            .buttonStyle(.plain)
+            .accessibilityLabel("Choose icon")
+            .popover(isPresented: $showingIconPicker, arrowEdge: .bottom) {
+                ScrollView { iconGrid.padding(16) }
+                    .frame(width: 320, height: 360)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                TextField("Deck Name", text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.system(.title3, design: .rounded, weight: .semibold))
+                HStack(spacing: 6) {
+                    Text(liveCaption)
+                        .font(Typography.caption)
+                        .foregroundStyle(.secondary)
+                    if case .edit(let deck) = mode, deck.dueCount > 0 {
+                        SidebarCountBadge(count: deck.dueCount)
+                    }
+                }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .fieldBox()
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [tint.opacity(0.18), tint.opacity(0.06)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+        .animation(.snappy, value: colorHex)
+    }
+
+    private var tint: Color { Color(hex: colorHex) }
+
+    private var liveCaption: String {
+        let subject = section.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subjectText = subject.isEmpty ? "No subject" : subject
+        let count: Int = {
+            if case .edit(let deck) = mode { return deck.cardCount }
+            return 0
+        }()
+        return "\(subjectText) · \(count) card\(count == 1 ? "" : "s")"
+    }
+
+    /// The 8 palette swatches as one centered strip under the tile (the tile shows the result).
+    private var colorStrip: some View {
+        HStack(spacing: 8) {
+            ForEach(DeckPalette.colors, id: \.self) { hex in
+                Circle()
+                    .fill(Color(hex: hex))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Circle().strokeBorder(Color.primary.opacity(0.9), lineWidth: colorHex == hex ? 2.5 : 0)
+                    )
+                    .overlay(
+                        Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                    )
+                    .frame(width: 36, height: 36)          // ≥36pt hit target (visual stays 28pt)
+                    .contentShape(Circle())
+                    .onTapGesture { colorHex = hex }
+                    .accessibilityLabel(Text(DeckPalette.name(for: hex)))
+                    .accessibilityAddTraits(colorHex == hex ? [.isSelected] : [])
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// The deck's **default** answer mode for its cards (flip vs type) as two capsule chips —
+    /// the gallery's chip vocabulary, NOT a segmented control (those read as tabs here). Cards
+    /// inherit this unless they pin their own; cloze is per-card only.
+    private var answerModeChips: some View {
+        HStack(spacing: 8) {
+            ForEach(AnswerMode.deckDefaults) { mode in
+                let selected = defaultAnswerMode == mode
+                Button { withAnimation(.snappy) { defaultAnswerMode = mode } } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: mode.symbolName).font(.system(size: 11, weight: .semibold))
+                        Text(mode.title).font(.system(size: 12, weight: .semibold, design: .rounded))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .foregroundStyle(selected ? Color.white : Color.primary)
+                    .background(selected ? Theme.accent : Color.primary.opacity(0.06), in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(selected ? 0 : 0.10)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
+            }
+        }
     }
 
     private var answerModeCaption: String {
@@ -212,24 +311,6 @@ struct DeckEditorView: View {
 
     private func fieldLabel(_ text: String) -> some View {
         Text(text).font(.system(.subheadline, weight: .medium)).foregroundStyle(.secondary)
-    }
-
-    /// Compact icon control: shows the current icon; tapping opens the full grid in a popover, so the
-    /// editor isn't dominated by the whole icon set.
-    private var iconButton: some View {
-        Button { showingIconPicker = true } label: {
-            HStack(spacing: 8) {
-                DeckIconChip(icon: icon, colorHex: colorHex, size: 30)
-                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .fieldBox()
-        }
-        .buttonStyle(.plain)
-        .popover(isPresented: $showingIconPicker, arrowEdge: .bottom) {
-            ScrollView { iconGrid.padding(16) }
-                .frame(width: 320, height: 360)
-        }
     }
 
     private var isThemedIcon: Bool { DeckIconPreset.isThemed(icon) }
@@ -307,28 +388,6 @@ struct DeckEditorView: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-    }
-
-    private var colorGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 12)], spacing: 12) {
-            ForEach(DeckPalette.colors, id: \.self) { hex in
-                Circle()
-                    .fill(Color(hex: hex))
-                    .frame(width: 32, height: 32)
-                    .overlay(
-                        Circle().strokeBorder(Color.primary.opacity(0.9), lineWidth: colorHex == hex ? 3 : 0)
-                    )
-                    .overlay(
-                        Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                    )
-                    .frame(width: 44, height: 44)          // ≥44pt hit target (visual stays 32pt)
-                    .contentShape(Circle())
-                    .onTapGesture { colorHex = hex }
-                    .accessibilityLabel(Text(DeckPalette.name(for: hex)))
-                    .accessibilityAddTraits(colorHex == hex ? [.isSelected] : [])
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     /// Builds + inserts a new deck from the current fields, for the AI flow (which then adds cards
