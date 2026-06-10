@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Sidebar selection: the cross-deck Today queue, or a specific deck.
 enum SidebarItem: Hashable {
@@ -72,6 +75,8 @@ struct RootView: View {
         let failure = persistenceMonitor.failure
         content
             .task {
+                // The termination flush (AppDelegate) persists through this context.
+                DeckStore.shared.registerLiveContext(context)
                 // Reflect external edits to the .deck files live; pause while studying or editing.
                 watcher.isPaused = isTakingOverWindow
                 watcher.start(folders: DeckStore.libraryURLs()) { reconcileAfterFlush() }
@@ -130,6 +135,17 @@ struct RootView: View {
                     if !isTakingOverWindow { reconcileAfterFlush() }
                 } else {
                     DeckStore.shared.persist(context)
+                    #if os(iOS)
+                    if phase == .background {
+                        // Suspension would freeze a queued write mid-flight — keep the process
+                        // alive until the pipeline is quiet, then hand the time back.
+                        let token = UIApplication.shared.beginBackgroundTask(withName: "FlushDeckWrites")
+                        Task { @MainActor in
+                            await DeckStore.shared.flush()
+                            UIApplication.shared.endBackgroundTask(token)
+                        }
+                    }
+                    #endif
                 }
             }
             .onChange(of: LibraryLocation.shared.folders) { _, _ in

@@ -51,6 +51,14 @@ final class DeckStore {
     private let worker = PersistenceWorker()
     private let gate = GenerationGate()
 
+    /// The app's live `ModelContext`, registered by `RootView` so app-lifecycle hooks (the macOS
+    /// termination flush) can run a final persist without plumbing a context through AppKit.
+    private(set) weak var liveContext: ModelContext?
+
+    func registerLiveContext(_ context: ModelContext) {
+        liveContext = context
+    }
+
     init(io: IOMode = .synchronous) {
         self.io = io
     }

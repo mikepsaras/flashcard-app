@@ -4,6 +4,10 @@ import SwiftData
 @main
 struct FlashcardsApp: App {
     @State private var container: ModelContainer
+    #if os(macOS)
+    // Guarantees queued background deck writes land before quit (see AppDelegate).
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
 
     init() {
         // No database on disk: an in-memory working copy is rebuilt from the `.deck`
