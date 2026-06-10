@@ -8,8 +8,10 @@ import SwiftData
 /// ⌘Q mid-study, whose grades otherwise persist only on session finish — and wait for the
 /// persist pipeline to go quiet.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Finder double-click / drag-onto-Dock-icon delivery (also fires on cold launch, possibly
-    /// before any SwiftUI scene exists — hence the buffer on AppActions).
+    /// Finder double-click / drag-onto-Dock-icon delivery. On macOS, `onOpenURL` does NOT fire
+    /// for document opens (verified live) — only this delegate hook sees them. The WindowGroup's
+    /// `handlesExternalEvents(matching: ["*"])` stops SwiftUI from ALSO spawning a fresh window
+    /// for the event. (iOS delivers through `onOpenURL`, which IS reliable there.)
     func application(_ application: NSApplication, open urls: [URL]) {
         guard !DeckStore.isHostingTests else { return }
         AppActions.shared.requestOpen(urls: urls.filter { DeckStore.isDeckFile($0) })

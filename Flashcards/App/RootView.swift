@@ -95,6 +95,8 @@ struct RootView: View {
             }
             .onChange(of: AppActions.shared.openFileTick) { _, _ in drainPendingOpens() }
             #if os(iOS)
+            // macOS document opens never reach onOpenURL (verified live) — they arrive via the
+            // AppDelegate and the AppActions buffer instead. iOS delivers here.
             .onOpenURL { url in
                 if DeckStore.isDeckFile(url) { handleOpenedFile(url) }
             }

@@ -52,6 +52,9 @@ struct FlashcardsApp: App {
             }
         }
         .modelContainer(container)
+        // Deck-file opens (Finder double-click / Dock drag) land in the EXISTING window via
+        // RootView's onOpenURL — without this, macOS spawns a fresh window per opened file.
+        .handlesExternalEvents(matching: ["*"])
         #if os(macOS)
         .defaultSize(width: 1100, height: 820)
         // Not `.contentMinSize`: that derived the window's min from the content, which used to be
@@ -59,12 +62,9 @@ struct FlashcardsApp: App {
         // sidebar reveal animation. The minimum size is now set via `window.minSize` in WindowConfigurator.
         .windowResizability(.automatic)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                // ⌘⇧N is the app-global New Deck. Plain ⌘N is reserved for New Card, bound
-                // window-scoped inside a deck (DeckDetailView) — distinct chords, so no collision.
-                Button("New Deck") { AppActions.shared.newDeckTick += 1 }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
-            }
+            // New Deck + the deck-file commands (Open/Open Recent/Save a Copy) live in ONE
+            // replacing group — a separate CommandGroup(after: .newItem) does not compose
+            // with a replacing group on the same anchor (the items never appear).
             DeckFileCommands()
             CommandGroup(replacing: .help) {
                 Button("Flashcards Formatting Guide") { AppActions.shared.showFormattingGuideTick += 1 }
@@ -108,7 +108,11 @@ struct DeckFileCommands: Commands {
     @FocusedValue(\.selectedDeck) private var selectedDeck
 
     var body: some Commands {
-        CommandGroup(after: .newItem) {
+        CommandGroup(replacing: .newItem) {
+            // ⌘⇧N is the app-global New Deck. Plain ⌘N is reserved for New Card, bound
+            // window-scoped inside a deck (DeckDetailView) — distinct chords, so no collision.
+            Button("New Deck") { AppActions.shared.newDeckTick += 1 }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
             Divider()
             Button("Open Deck File…") { openPanel() }
                 .keyboardShortcut("o", modifiers: .command)
