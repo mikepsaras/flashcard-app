@@ -26,6 +26,9 @@ struct PersistRequest: Sendable {
     /// Folders that hold our decks (+ the primary). The multi-folder safety invariant: never
     /// prune a folder we didn't write to.
     let pruneFolders: Set<URL>
+    /// Wall-clock time of the request — timestamps backups and gates the once-a-day snapshot.
+    /// Injectable so tests can exercise the day gate deterministically.
+    let now: Date
 }
 
 /// A deck the engine confirmed on disk (freshly written, byte-identical, or skip-gated).
@@ -87,10 +90,20 @@ enum PersistenceEngine {
                 continue
             }
             // Skip the write when the bytes are identical (don't wake the watcher); still live.
-            if let existing = try? Data(contentsOf: plan.fileURL), existing == data {
+            let existing = try? Data(contentsOf: plan.fileURL)
+            if let existing, existing == data {
                 liveKeys.insert(key)
                 outcome.written.append(PersistedDeck(id: plan.deckID, url: plan.fileURL, modifiedAt: plan.modifiedAt))
                 continue
+            }
+            // About to overwrite with different content — snapshot the pre-write bytes first
+            // (already in hand from the compare), at most once per day per deck. Best-effort:
+            // a failed backup never blocks the write.
+            if let existing {
+                let folder = plan.fileURL.deletingLastPathComponent()
+                if !DeckBackups.hasBackup(sameDayAs: request.now, deck: plan.deckID, in: folder) {
+                    DeckBackups.writeBackup(existing, forDeck: plan.deckID, in: folder, now: request.now)
+                }
             }
             // Only count "written" after the atomic write succeeds, so prune can't delete a good file.
             if (try? data.write(to: plan.fileURL, options: .atomic)) != nil {
@@ -117,6 +130,9 @@ enum PersistenceEngine {
                     outcome.aborted = true
                     return outcome
                 }
+                // A prune is the one place a deck's last copy can disappear — always snapshot
+                // the bytes (no day gate) before deleting.
+                DeckBackups.writeBackup(data, forDeck: dto.id, in: folder, now: request.now)
                 try? FileManager.default.removeItem(at: url)
             }
         }

@@ -306,7 +306,7 @@ final class DeckStore {
     /// Returns whether anything actually changed. Does **not** call `persist` (disk is
     /// already the source of truth here).
     @discardableResult
-    func reconcile(into context: ModelContext, from directory: URL = DeckStore.libraryURL()) -> Bool {
+    func reconcile(into context: ModelContext, from directory: URL = DeckStore.libraryURL(), now: Date = .now) -> Bool {
         var diskDTOs: [UUID: DeckCodec.DeckDTO] = [:]
         var order: [UUID] = []
         for url in Self.deckFiles(in: directory) {
@@ -327,8 +327,10 @@ final class DeckStore {
 
         // Decks whose file disappeared externally — but never one whose own write just
         // failed (its file is missing because we couldn't save it, not because it was
-        // deleted; removing it here would lose the user's unsaved deck).
+        // deleted; removing it here would lose the user's unsaved deck). The in-memory
+        // state is snapshotted into `.backups/` first: this is the last copy vanishing.
         for deck in existing where diskDTOs[deck.id] == nil && !unsavedDeckIDs.contains(deck.id) {
+            backUpBeforeDiskWins(deck, fallbackFolder: directory, now: now, dayGated: false)
             context.delete(deck)
             urlByDeckID[deck.id] = nil
             persistedModifiedAt[deck.id] = nil
@@ -346,6 +348,9 @@ final class DeckStore {
                 // content (including our own just-written files) compares equal.
                 let current = (try? DeckCodec.encode(deck)).flatMap { try? DeckCodec.decodeDTO($0) }
                 if current != dto {
+                    // Disk is about to win — snapshot what we're replacing (daily-gated),
+                    // so an external clobber (e.g. a sync service) is recoverable.
+                    backUpBeforeDiskWins(deck, fallbackFolder: directory, now: now, dayGated: true)
                     DeckCodec.update(deck, from: dto, in: context)
                     changed = true
                 }
@@ -363,12 +368,22 @@ final class DeckStore {
         return changed
     }
 
+    /// Snapshots a deck's current in-memory state into `.backups/` right before reconcile lets
+    /// the on-disk state win (an external overwrite or deletion). The backup lands in the deck's
+    /// own folder when known, else `fallbackFolder`. Best-effort.
+    private func backUpBeforeDiskWins(_ deck: Deck, fallbackFolder: URL, now: Date, dayGated: Bool) {
+        guard let data = try? DeckCodec.encode(deck) else { return }
+        let folder = urlByDeckID[deck.id]?.deletingLastPathComponent() ?? fallbackFolder
+        if dayGated && DeckBackups.hasBackup(sameDayAs: now, deck: deck.id, in: folder) { return }
+        DeckBackups.writeBackup(data, forDeck: deck.id, in: folder, now: now)
+    }
+
     /// Multi-folder reconcile (the app path): merges external edits across **all** library folders. A
     /// deck counts as removed only when its file is gone from *every* folder, so a deck living in a
     /// secondary folder is never deleted just because it isn't in the primary. Mirrors `reconcile`'s
     /// merge, collecting DTOs from the whole folder set.
     @discardableResult
-    func reconcileFolders(into context: ModelContext, from folders: [URL] = DeckStore.libraryURLs()) -> Bool {
+    func reconcileFolders(into context: ModelContext, from folders: [URL] = DeckStore.libraryURLs(), now: Date = .now) -> Bool {
         var diskDTOs: [UUID: DeckCodec.DeckDTO] = [:]
         var order: [UUID] = []
         for folder in folders {
@@ -388,8 +403,12 @@ final class DeckStore {
         for deck in existing { byID[deck.id] = deck }
         var changed = false
 
-        // Removed only when absent from EVERY folder (and not a deck whose own write just failed).
+        // Removed only when absent from EVERY folder (and not a deck whose own write just
+        // failed) — snapshotted into `.backups/` first: this is the last copy vanishing.
         for deck in existing where diskDTOs[deck.id] == nil && !unsavedDeckIDs.contains(deck.id) {
+            if let fallback = folders.first {
+                backUpBeforeDiskWins(deck, fallbackFolder: fallback, now: now, dayGated: false)
+            }
             context.delete(deck)
             urlByDeckID[deck.id] = nil
             persistedModifiedAt[deck.id] = nil
@@ -401,6 +420,10 @@ final class DeckStore {
                 if unsavedDeckIDs.contains(id) { continue }
                 let current = (try? DeckCodec.encode(deck)).flatMap { try? DeckCodec.decodeDTO($0) }
                 if current != dto {
+                    // Disk is about to win — snapshot what we're replacing (daily-gated).
+                    if let fallback = folders.first {
+                        backUpBeforeDiskWins(deck, fallbackFolder: fallback, now: now, dayGated: true)
+                    }
                     DeckCodec.update(deck, from: dto, in: context)
                     changed = true
                 }
@@ -422,8 +445,8 @@ final class DeckStore {
     /// so a multi-folder library round-trips in place. Returns which decks failed to write, surfaced
     /// via `PersistenceMonitor`.
     @discardableResult
-    func persist(_ context: ModelContext, to directory: URL = DeckStore.libraryURL()) -> PersistResult {
-        applyOutcome(PersistenceEngine.run(buildPersistRequest(context, primary: directory)))
+    func persist(_ context: ModelContext, to directory: URL = DeckStore.libraryURL(), now: Date = .now) -> PersistResult {
+        applyOutcome(PersistenceEngine.run(buildPersistRequest(context, primary: directory, now: now)))
     }
 
     /// The main-actor half of a persist: snapshots every live deck into a `PersistRequest` —
@@ -431,7 +454,7 @@ final class DeckStore {
     /// (avoids the O(cards) DTO snapshot for untouched decks; the URL check forces a rewrite when
     /// the canonical filename or folder shifts, so a rename/move still lands), and DTOs for the
     /// decks that need writing. The request is self-contained, so the engine can run it anywhere.
-    private func buildPersistRequest(_ context: ModelContext, primary: URL) -> PersistRequest {
+    private func buildPersistRequest(_ context: ModelContext, primary: URL, now: Date = .now) -> PersistRequest {
         let decks = (try? context.fetch(FetchDescriptor<Deck>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
         let primary = primary.standardizedFileURL
         // Filenames are unique *per folder* (two folders may each hold a "Spanish.cards").
@@ -459,7 +482,7 @@ final class DeckStore {
             ))
         }
         nextGeneration += 1
-        return PersistRequest(generation: nextGeneration, plans: plans, pruneFolders: pruneFolders)
+        return PersistRequest(generation: nextGeneration, plans: plans, pruneFolders: pruneFolders, now: now)
     }
 
     /// The main-actor tail of a persist: records what the engine confirmed on disk into the
@@ -493,14 +516,13 @@ final class DeckStore {
     }
 
     /// Deletes every deck from the context and removes all deck files in `directory` — the
-    /// "delete all data" reset. Destructive; the caller confirms first.
-    func deleteAllDecks(_ context: ModelContext, in directory: URL = DeckStore.libraryURL()) {
+    /// "delete all data" reset. Destructive; the caller confirms first. Every readable deck file
+    /// is snapshotted into `.backups/` before its delete (backups themselves survive the reset).
+    func deleteAllDecks(_ context: ModelContext, in directory: URL = DeckStore.libraryURL(), now: Date = .now) {
         let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
         for deck in existing { context.delete(deck) }
         try? context.save()
-        if let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
-            for url in urls where Self.isDeckFile(url) { try? FileManager.default.removeItem(at: url) }
-        }
+        Self.removeDeckFilesBackingUp(in: directory, now: now)
         urlByDeckID.removeAll()
         unsavedDeckIDs.removeAll()
         persistedModifiedAt.removeAll()
@@ -508,18 +530,30 @@ final class DeckStore {
 
     /// "Delete all decks" across **every** library folder (the app's reset). Tests use the single-folder
     /// `deleteAllDecks(_:in:)` to stay isolated from the real library.
-    func deleteAllDecksEverywhere(_ context: ModelContext) {
+    func deleteAllDecksEverywhere(_ context: ModelContext, now: Date = .now) {
         let existing = (try? context.fetch(FetchDescriptor<Deck>())) ?? []
         for deck in existing { context.delete(deck) }
         try? context.save()
         for folder in Self.libraryURLs() {
-            if let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) {
-                for url in urls where Self.isDeckFile(url) { try? FileManager.default.removeItem(at: url) }
-            }
+            Self.removeDeckFilesBackingUp(in: folder, now: now)
         }
         urlByDeckID.removeAll()
         unsavedDeckIDs.removeAll()
         persistedModifiedAt.removeAll()
+    }
+
+    /// Removes every deck file in `directory`, snapshotting each readable one into `.backups/`
+    /// first (no day gate — a delete is the last copy vanishing). Unreadable/legacy files are
+    /// deleted without a backup (their deck id is unknown), which the confirmed reset accepts.
+    private static func removeDeckFilesBackingUp(in directory: URL, now: Date) {
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        else { return }
+        for url in urls where isDeckFile(url) {
+            if let data = try? Data(contentsOf: url), let dto = try? DeckCodec.decodeDTO(data) {
+                DeckBackups.writeBackup(data, forDeck: dto.id, in: directory, now: now)
+            }
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     /// Restarts the spaced-repetition schedule of every card in every deck — the global version of a
