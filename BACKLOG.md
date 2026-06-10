@@ -74,6 +74,46 @@ foundations) · 3 (ambitious / optional)
 
 ---
 
+## Persistence rework + New Deck editor + sidebar (2026-06-10, on `main`, UNRELEASED)
+
+User ask: "rework how we save and load files, the new deck editor, and lightly touch the sidebar"
+(scoped via questions → save/load = backups + off-main I/O + document-style UX; editor = the New
+Deck form, NOT the gallery; sidebar = visual + row content + structure). Nine commits
+(`1a62811`…`29c5d7b`), 336 tests, all live-verified incl. on the user's real iCloud-Drive library:
+
+1. **PersistenceEngine extraction** (`1a62811`) — pure refactor; persist = buildRequest (main) →
+   engine → applyOutcome; DTOs Sendable; `DeckCodec.dto(from:)`/`encode(_ dto:)` split.
+2. **Versioned backups** (`e7e65a8`) — `.backups/<deckUUID>/<ts>Z.cards` per folder; daily-gated
+   pre-overwrite, always pre-prune/delete-all/reconcile-delete, daily-gated pre-external-merge;
+   keep 10 / 180d, never newest; best-effort. *Fired on real data day one: an iCloud sync landed a
+   5→20-card change and the pre-merge backup snapshotted the old state.*
+3. **Off-main persist** (`62173e4`) — `PersistenceWorker` actor + `GenerationGate` (latest-wins);
+   pendingWrite/pendingDeletion reconcile guards; RootView `reconcileAfterFlush()`; destructive ops
+   enqueue synchronously (`chainExclusive`) so the folder-change reconcile can't race a half-moved
+   library. Tests: `DeckStore()` defaults `.synchronous` (zero churn); `PersistenceWorkerTests`.
+4. **Quit/background flush** (`93d1bde`) — macOS `applicationShouldTerminate` → final persist +
+   flush (5s cap), fixes quit-mid-study; iOS background task. Test host early-outs.
+5. **Restore from Backup** (`e10d7d7`) — deck ••• sheet, newest-first, card counts decoded off-main,
+   in-place restore via `DeckCodec.update` with a pre-restore safety snapshot.
+6. **Document-style opens** (`94f3053` + fixes `47c0a08`) — Finder/Dock → select-don't-duplicate or
+   consent dialog (Import a Copy / Add Its Folder); File menu Open ⌘O / Open Recent / Save a Copy
+   ⌘⇧S. **GOTCHAS (live-found):** macOS document opens never reach `onOpenURL` (AppDelegate only);
+   `handlesExternalEvents(["*"])` needed or each open spawns a window; `CommandGroup(after:)`
+   doesn't compose with a `replacing:` group on the same anchor.
+7. **New Deck editor redesign** (`e66c7ba`) — "the preview is the editor": hero tile (gradient =
+   chosen color, 46pt icon chip → existing popover, name typed on the tile, live "Subject · N cards"
+   caption + real due badge), centered 8-swatch strip, "Answer with" capsule chips (NOT segmented),
+   toggles under "More options". Save/AI/validation unchanged. **Snapshot gotcha: ScrollView ALSO
+   renders blank under ImageRenderer** (not just NavigationStack) — snapshot `editorFields`.
+8. **Sidebar** (`29c5d7b`) — collapsible Subject sections (`Section(isExpanded:)`, collapsed-set in
+   `DefaultsKey.collapsedSubjects`, search force-expands, no tap gestures/FB7367473-safe; "Study N ▶"
+   still works collapsed); row caption "M due · N cards" (accent due, dropped when selected);
+   padding 4→3.
+
+**Still open from this session:** editor polish round 2 once the user reacts to the live look (the
+planned "commit 8" — nothing queued; current state shipped clean), and an eventual release cut
+(version.yml untouched this session).
+
 ## Post-1.8.2 — Comprehensive review + new items (2026-06-09)
 
 **✅ SHIPPED as v1.9.1 / build 24 (2026-06-09):** Gallery editor polish — full keyboard flow (⌘N adds +

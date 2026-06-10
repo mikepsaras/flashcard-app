@@ -110,12 +110,31 @@ its own width via `GeometryReader`, so a 402pt render reflects the real iPhone l
   `~/Documents/Flashcards` (the source of truth, **format v4**; legacy `.deck` files still
   load). `DeckStore` builds an *in-memory* `ModelContainer`, loads the deck files at launch,
   and rewrites them after every change (and on scene-background); `DeckCodec` maps `@Model`
-  ⇄ Codable DTOs. `persist` returns a `PersistResult` and reports failures via
+  ⇄ Codable DTOs (`dto(from:)` on main, pure `encode(_ dto:)` anywhere). **Since 2026-06-10
+  the write pass runs OFF the main thread**: `persist` snapshots Sendable DTOs on main, then a
+  `PersistenceWorker` actor runs `PersistenceEngine` (encode → byte-compare → atomic write →
+  folder-scoped prune); passes chain in order, a `GenerationGate` aborts superseded ones, and
+  `pendingWriteIDs`/`pendingDeletionIDs` + RootView's flush-before-reconcile keep reconcile from
+  reverting in-flight work. Destructive ops (`migrate`/`switchFolder`/`deleteAllDecksEverywhere`)
+  enqueue **synchronously** into the same pipeline (`chainExclusive`). Tests construct
+  `DeckStore()` = `.synchronous` (engine inline, deterministic); the app's `shared` is
+  `.background`; quit/background flush is guaranteed (macOS `AppDelegate.terminateLater`, iOS
+  background task). `persist` returns a `PersistResult` and reports failures via
   `PersistenceMonitor` (surfaced as an alert) — writes are never silently lost, and the
-  prune step never deletes a file it can't read+decode. `DeckFolderWatcher` +
-  `DeckStore.reconcile` reflect **external edits** to the deck files live (content
-  comparison suppresses the app's own writes). The library starts **empty** by default —
-  there's no auto-seeding and no legacy-store import (an empty folder stays an empty
+  prune step never deletes a file it can't read+decode. **Versioned backups** (`DeckBackups`):
+  each library folder keeps `.backups/<deckUUID>/<timestamp>Z.cards` — daily-gated on content
+  overwrite, always before prune/delete-all deletes and reconcile-deletes, daily-gated before an
+  external change wins (sync clobber), and before a restore; retention keeps 10 / 180 days,
+  never the newest; restore lives in the deck ••• menu (`RestoreFromBackupView`, in-place via
+  `DeckCodec.update`). `DeckFolderWatcher` + `DeckStore.reconcile` reflect **external edits**
+  to the deck files live (content comparison suppresses the app's own writes). **Opening
+  `.cards` files**: Finder/Dock opens arrive via `AppDelegate.application(_:open:)` (macOS —
+  `onOpenURL` does NOT fire for document opens there; iOS uses `onOpenURL`), buffered through
+  `AppActions.pendingOpenURLs`, routed by `DeckFileOpen` (in-library or known id → select, never
+  duplicate; outside → consent dialog: import a copy / add its folder); the WindowGroup has
+  `handlesExternalEvents(["*"])` so opens don't spawn extra windows. File menu: Open ⌘O, Open
+  Recent (`RecentDeckFiles`, bookmark-backed), Save a Copy ⌘⇧S. The library starts **empty** by
+  default — there's no auto-seeding and no legacy-store import (an empty folder stays an empty
   library; `SeedData` survives only for previews/snapshots). At launch `migrateLegacyExtension`
   renames any legacy `.deck` files to `.cards` in place (write-then-delete, never destructive).
 - `Flashcards/Features` — `DeckLibrary` (decks + a cross-deck **Today** review queue,
@@ -150,10 +169,15 @@ Each deck is a human-readable `.cards` JSON file. On **macOS** the library aggre
 folders (`LibraryLocation.folders`, primary first; managed in Settings → Storage); **iOS** uses a
 single folder (default `~/Documents/Flashcards`, Files-visible via `UIFileSharingEnabled` +
 `LSSupportsOpeningDocumentsInPlace`). There is **no on-disk database and no iCloud sync**. The app
-keeps an in-memory SwiftData working copy and persists to the files after each change; load / persist /
-reconcile span all folders, and `persist`'s prune is **folder-scoped** (a deck in one folder is never
-deleted because another folder is registered). External edits are picked up live by `DeckFolderWatcher`
-(one vnode source per folder) and merged via `DeckStore.reconcileFolders`. Share a deck's file from its
-**•••** menu. The file format is **v4** — a clean break: old `.cards` files (v1–v3) are **ignored**
-(rejected by the decoder, never read or deleted), and first launch resets history for a clean slate.
-(Models keep a CloudKit-safe shape, but CloudKit isn't wired.)
+keeps an in-memory SwiftData working copy and persists to the files after each change (writes run
+off-main via `PersistenceWorker`; see Persistence above); load / persist / reconcile span all folders,
+and `persist`'s prune is **folder-scoped** (a deck in one folder is never deleted because another
+folder is registered). Each folder keeps hidden **versioned backups** in `.backups/<deckUUID>/`
+(invisible to load/watch/prune by construction; survive Delete All; restore via the deck ••• menu).
+External edits are picked up live by `DeckFolderWatcher` (one vnode source per folder) and merged via
+`DeckStore.reconcileFolders` — with a pre-merge backup, so a sync service clobbering a file is
+recoverable. Share a deck's file from its **•••** menu; opening a `.cards` from Finder selects (never
+duplicates) a deck already in the library. The file format is **v4** — a clean break: old `.cards`
+files (v1–v3) are **ignored** (rejected by the decoder, never read or deleted), and first launch
+resets history for a clean slate. (Models keep a CloudKit-safe shape, but CloudKit isn't wired; the
+user currently points the library at an iCloud **Drive** folder, which syncs as plain files.)
